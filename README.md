@@ -17,8 +17,6 @@ Backend API for the **iBOM CV/Profile Management System**.
 - Mockito
 - MockMvc
 
-Not every part of the stack is necessarily implemented yet.
-Always inspect the current repository before making assumptions.
 
 ## Package Root
 
