@@ -1,46 +1,67 @@
 # Conventions
 
-## Structure
+These are stable coding rules for this repository.
 
-* Keep new code within the existing package/module structure.
-* Do not introduce a new architectural layer without task-level justification.
-* Reuse existing shared utilities, abstractions, and infrastructure before adding new ones.
+Task-specific implementation details belong in the active `plan.md`.
+
+## Existing Patterns
+
+Inspect the current repository before introducing a new pattern.
+
+When an established pattern exists:
+
+* follow it;
+* reuse existing shared components where practical;
+* avoid introducing competing abstractions without a task-level reason.
+
+Do not assume a pattern exists only because it is described in documentation.
 
 ## Layer Boundaries
 
-* Controllers must not access repositories directly.
-* Controllers handle HTTP concerns; business behavior belongs in Services.
-* Repositories handle persistence and queries, not business decisions.
-* Do not expose JPA entities directly through API boundaries.
-* Use existing DTO and mapping patterns instead of creating parallel approaches.
+Keep responsibilities separated:
 
-## Validation & Errors
+* Controllers handle HTTP concerns.
+* Services handle application and business behavior.
+* Repositories handle persistence and queries.
 
-* Request-shape validation belongs on request DTOs.
-* Validation requiring business or persistence context belongs in Services.
-* Errors must flow through the existing centralized exception-handling mechanism.
-* Do not build ad-hoc error responses inside controllers or services.
+Controllers must not access repositories directly.
+
+Business decisions should not be implemented inside repositories.
+
+## API Boundary
+
+Use DTOs at API boundaries.
+
+Do not expose JPA entities directly through API responses or requests.
+
+Follow the repository's existing mapping approach when one is established.
+
+## Validation and Errors
+
+Request-shape validation belongs on request DTOs.
+
+Validation that requires business or persistence context belongs in the Service layer.
+
+Use the repository's centralized exception-handling approach when one exists.
+
+Do not introduce ad-hoc error-response formats.
 
 ## Persistence
 
-* Database changes must use Flyway migrations.
-* Multi-write operations that must succeed or fail together use a transaction.
-* Respect existing aggregate state when modifying child entities; child CRUD is not always isolated.
+Database schema changes must use Flyway migrations.
 
-## Reuse
+Operations containing multiple writes that must succeed or fail together should use an appropriate transaction boundary.
 
-* Prefer extending an existing shared component over creating a duplicate helper.
-* Do not introduce a new dependency when the existing stack already solves the problem.
-
-## Tests
-
-* Service business logic is tested at the Service layer.
-* HTTP behavior is tested at the Controller/API layer.
-* Follow the existing test package and naming structure in the repository.
-* Add tests relevant to the active task; do not expand test scope without reason.
+Do not introduce persistence behavior that conflicts with the active task or current repository model.
 
 ## Security
 
-* Authorization is enforced on the backend.
-* Do not rely on controller routing or client behavior as the only authorization check.
-* Never log passwords, tokens, password hashes, or verification secrets.
+Backend authorization is authoritative.
+
+Do not rely on frontend behavior, hidden controls, or route protection as the only authorization mechanism.
+
+## Tests
+
+Follow the existing test structure and conventions when they exist.
+
+Detailed testing strategy belongs in `TESTING.md` and the active `plan.md`.

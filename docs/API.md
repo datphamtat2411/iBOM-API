@@ -8,11 +8,11 @@ Base path:
 /api
 ```
 
-APIs use request/response DTOs. JPA entities are not exposed directly.
+APIs use request/response DTOs.
+
+JPA entities are not exposed directly through APIs.
 
 Protected APIs use Bearer Access Tokens.
-
----
 
 ## Response Format
 
@@ -29,11 +29,9 @@ Success and error responses use the common wrapper:
 
 Use `code`, not `status`.
 
----
-
 ## HTTP Semantics
 
-Use the existing project semantics:
+Default HTTP semantics:
 
 ```text
 200 → successful request
@@ -45,9 +43,7 @@ Use the existing project semantics:
 409 → business or concurrency conflict
 ```
 
-Do not invent different status behavior for a task unless explicitly required.
-
----
+Follow established repository behavior when it exists.
 
 ## Resource Structure
 
@@ -62,38 +58,24 @@ Example:
 
 A nested resource ID does not replace Profile ownership validation.
 
----
-
 ## Authentication
 
-Access Token:
+Access Tokens are sent using:
 
 ```text
 Authorization: Bearer <access-token>
 ```
 
-Refresh Token is handled through the backend session mechanism and HttpOnly cookie.
+Refresh Tokens use the project-defined HttpOnly cookie flow.
 
-Do not design APIs around storing or manually passing Refresh Tokens from frontend code.
+Detailed authentication behavior is task-specific.
 
----
+## Context Boundary
 
-## API Changes
+This file contains only stable API conventions.
 
-The active task prompt defines the exact API contract when implementation detail is required.
+It does not define the full endpoint catalogue, request fields, validation rules, or feature-specific response models.
 
-When adding or changing an API:
+Exact API contracts should come from the active task, `plan.md`, and the relevant routed documentation.
 
-* follow existing resource structure,
-* reuse existing response conventions,
-* preserve compatibility with related APIs where practical,
-* update Swagger/OpenAPI when applicable,
-* do not create supporting endpoints unless the task requires them.
-
----
-
-## Boundary
-
-This file defines only stable API conventions.
-
-It does not maintain the full endpoint catalogue, request fields, validation rules, or feature-specific response models.
+Current source code remains the primary reference for implemented API behavior.

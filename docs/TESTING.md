@@ -22,7 +22,7 @@ Depending on the feature, consider:
 * concurrency,
 * persistence behavior.
 
-Exact test scenarios are defined by the active task prompt.
+Exact test scenarios are defined by the active task context.
 
 ## Service Tests
 
@@ -79,6 +79,4 @@ Prefer meaningful tests for business and security behavior over tests written on
 
 ## Boundary
 
-This file defines backend testing conventions only.
-
-It does not define the complete project test suite or feature-specific test cases.
+This file defines stable backend testing conventions, not feature-specific test cases.

@@ -22,8 +22,6 @@ Shared Master Data:
 * `Seniority`
 * `FileNameFormat`
 
----
-
 ## Relationships
 
 ```text
@@ -41,8 +39,6 @@ Skill 1:N ProfileSkill
 
 FileNameFormat 1:N Profile
 ```
-
----
 
 ## Ownership
 
@@ -68,48 +64,18 @@ Child Resource
 → User
 ```
 
----
+## Important State
 
-## Important Fields
+`Profile` carries cross-feature state such as:
 
-### User
+* selected file name format;
+* preview state;
+* soft-delete state;
+* optimistic-lock version.
 
-Important state includes:
+`ProfileSkill` stores Profile-specific Skill information such as experience and last-used data.
 
-* email
-* username
-* password hash
-* role
-* active status
-
-### Profile
-
-Important state includes:
-
-* profile name
-* About Me fields
-* selected file name format
-* preview state
-* last export time
-* soft-delete state
-* optimistic-lock version
-
-### ProfileSkill
-
-Contains Profile-specific Skill information:
-
-* Skill reference
-* experience years
-* last used
-
-### ProfileLanguage
-
-Contains:
-
-* Language reference
-* proficiency level
-
----
+`ProfileLanguage` stores Profile-specific language proficiency.
 
 ## Persistence Rules
 
@@ -118,19 +84,13 @@ Contains:
 * Profile changes participate in optimistic concurrency control.
 * CV-data mutations may update Profile-level state.
 * Shared Master Data should remain referenced rather than duplicated.
-* Schema changes must be introduced through Flyway.
-
----
 
 ## Important Constraints
 
 * Profile Name is unique per User, case-insensitive.
 * The same Language cannot appear twice in one Profile.
 * The same Skill cannot appear twice in one Profile.
-* Certificate identity is scoped to a Profile.
 * A User cannot delete their final active Profile.
 * Seniority is derived from `ProfileSkill.experienceYears`; it is not the persisted source of truth on `ProfileSkill`.
-
----
 
 Exact columns, SQL types, indexes, foreign keys, and migration details are defined by the active task when needed.

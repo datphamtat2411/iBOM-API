@@ -1,153 +1,68 @@
-# OpenCode Agent Instructions
+# Agent Rules
 
-Default rules for OpenCode agents.
+Work from the current repository state.
 
-Narrower task-specific instgructions override these defaults.
+Source code, tests, configuration, migrations, and Git history are the primary implementation context.
 
-## Core Principles
+Repository Markdown files provide lightweight supporting context only. Do not assume they contain the complete project specification.
 
-Work from the **current repository state**.
+## Context
 
-Never assume a dependency, component, convention, API, database structure, or feature exists before inspecting the repository.
+For task work, follow the context explicitly provided by the active prompt or `plan.md`.
 
-Use:
+Do not load unrelated documentation by default.
 
-```text
-Task       → required change
-Repository → implementation truth
-Docs       → supporting context
-```
-
-Repository state overrides documentation and prior assumptions.
-
-Load only context relevant to the current task.
-
-## Inspect Before Acting
-
-Before PLAN, BUILD, or REVIEW, inspect relevant source, existing patterns, tests, configuration, migrations, and Git state as needed.
-
-Follow established repository patterns unless the task requires changing them.
+Inspect the relevant source and Git state before making implementation assumptions.
 
 ## Scope
 
-Make only changes required for the current task.
+Keep changes focused on the active task.
 
-Avoid:
+Do not introduce:
 
-- unrelated refactoring or cleanup;
-- future-feature implementation;
-- speculative abstractions;
-- unnecessary architecture changes;
-- competing patterns without a requirement.
+* unrelated refactoring;
+* speculative abstractions;
+* future-feature work;
+* unnecessary dependencies;
+* new architectural patterns without a clear need.
 
-Small supporting changes are acceptable when required for correctness.
+Do not invent unresolved business, security, API, or persistence behavior.
 
-Keep the diff focused and explainable.
+## PLAN
 
-## Decisions
+Planning may inspect relevant source, Git history, and documentation.
 
-Make normal implementation-level decisions when repository evidence provides sufficient direction.
+The resulting `plan.md` should contain enough task-specific implementation context for a separate BUILD session and explicitly route BUILD to any additional documentation it needs.
 
-Do not invent unresolved:
+Do not modify production code during PLAN unless explicitly requested.
 
-- product behavior;
-- business rules;
-- major architecture;
-- security or ownership policy;
-- public API behavior;
-- persistence semantics with wider impact.
+## BUILD
 
-Report important unresolved decisions instead of guessing.
+Use `plan.md` and the current repository state as the primary context.
 
----
+Inspect the files affected by the plan before modifying them.
 
-# PLAN
+Follow existing repository patterns where they exist.
 
-1. Understand the task.
-2. Inspect relevant repository state.
-3. Determine existing behavior and patterns.
-4. Identify affected areas, risks, and test needs.
-5. Load additional context only when needed.
-6. Produce a focused implementation plan.
+Add or update tests relevant to the task and run applicable checks.
 
-Do not modify production code unless explicitly instructed.
+Do not expand the task beyond the approved plan.
 
-Do not plan from documentation or assumptions alone.
+If repository evidence conflicts with the plan, preserve the task intent and report the discrepancy rather than silently expanding scope.
 
----
+## REVIEW
 
-# BUILD
+Review the implementation against:
 
-1. Read the task and PLAN.
-2. Re-inspect relevant repository state and verify important assumptions.
-3. Implement the smallest correct change using existing patterns.
-4. Add or update relevant tests.
-5. Run applicable tests and checks.
-6. Fix failures caused by the change.
-7. Inspect the final diff.
+* the task;
+* `plan.md`;
+* the Git diff;
+* relevant source and tests.
 
-Repository evidence overrides PLAN assumptions.
+Prioritize correctness, security, data integrity, regressions, and missing tests.
 
-Do not expand scope or weaken existing behavior, validation, security, or tests merely to make checks pass.
-
-Before finishing, report:
-
-- what changed;
-- tests/checks executed;
-- important implementation decisions;
-- unresolved issues, if any.
-
-Leave the working tree ready for REVIEW.
-
----
-
-# REVIEW
-
-Independently evaluate:
-
-```text
-Original task
-+
-Git diff
-+
-Relevant surrounding source/tests
-```
-
-Prioritize:
-
-1. incorrect or missing behavior;
-2. security or data-integrity issues;
-3. regressions;
-4. incorrect assumptions;
-5. missing or insufficient tests;
-6. unnecessary scope;
-7. maintainability issues.
-
-Do not approve changes merely because they compile or tests pass.
-
-Report concrete findings and affected areas when possible.
-
-Do not modify code unless explicitly instructed to review and fix.
-
----
-
-# Git
-
-Git history is controlled by the human operator.
+## Git
 
 Read-only Git inspection is allowed.
 
-Unless explicitly instructed, do not:
-
-```text
-git add
-git commit
-git push
-git merge
-git rebase
-git reset
-```
-
-Do not create or switch branches or create Pull Requests.
-
-Leave the final working-tree diff for human inspection.
+Do not commit, push, merge, rebase, reset, create or switch branches, or create Pull Requests unless explicitly requested.

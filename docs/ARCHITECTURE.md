@@ -1,15 +1,15 @@
 # Architecture
 
-## High-Level Architecture
+## Backend Shape
 
-The backend is a modular Spring Boot application using layered architecture.
+iBOM API is a Spring Boot backend organized around business modules and layered application boundaries.
 
 ```text
 Client
   ↓
 Controller
   ↓
-Service
+Serviceg
   ↓
 Repository
   ↓
@@ -24,11 +24,9 @@ Cross-cutting concerns include:
 * Mapping
 * Configuration
 
----
+## Business Modules
 
-## Main Modules
-
-Backend functionality is organized around business areas such as:
+Main backend areas include:
 
 ```text
 Auth / Account
@@ -40,78 +38,13 @@ User Management
 Dashboard
 ```
 
-Each module should keep its own business logic while following the common backend layers.
+Modules should keep their business responsibilities separated.
 
----
+When modules need to collaborate, prefer service-level interaction instead of reaching directly into another module's persistence logic.
 
-## Layers
+## Layer Boundaries
 
-### Controller
-
-HTTP boundary of the application.
-
-Responsibilities:
-
-* receive requests,
-* validate request DTOs,
-* resolve authentication/context,
-* call Services,
-* return API responses.
-
-Controllers should not contain business logic or direct repository access.
-
-### Service
-
-Main business layer.
-
-Responsibilities:
-
-* business rules,
-* authorization and ownership checks,
-* transaction boundaries,
-* domain state changes,
-* coordination between repositories.
-
-### Repository
-
-Persistence boundary.
-
-Responsibilities:
-
-* database access,
-* queries,
-* existence checks,
-* filtering and aggregation.
-
-Repositories should not contain business decisions.
-
-### DTO / Mapper
-
-API models are separated from persistence entities.
-
-```text
-Request DTO
-   ↓
-Service / Domain
-   ↓
-Entity
-```
-
-```text
-Entity
-   ↓
-Mapper
-   ↓
-Response DTO
-```
-
-JPA entities should not be exposed directly through APIs.
-
----
-
-## Dependency Direction
-
-Dependencies flow inward through the application layers.
+The intended dependency direction is:
 
 ```text
 Controller
@@ -123,100 +56,37 @@ Repository
 Persistence
 ```
 
-Avoid:
+General boundaries:
+
+* Controllers define the HTTP boundary.
+* Services own application and business behavior.
+* Repositories define the persistence boundary.
+* DTOs define API input/output models.
+* JPA entities are persistence models and are not exposed directly through APIs.
+* Backend security is authoritative.
+
+Detailed coding rules belong in `CONVENTIONS.md`.
+
+## Profile Aggregate
+
+`Profile` is the central aggregate for CV-specific data.
+
+Profile-owned data includes areas such as:
 
 ```text
-Controller → Repository
-Repository → Service
-Entity → Controller
+Education
+Certificate
+Project
+ProfileLanguage
+ProfileSkill
 ```
 
-Business modules may collaborate through Services when required.
+Operations on Profile-owned data may also affect Profile-level state.
 
-Avoid bypassing module boundaries through direct repository access.
+Detailed ownership and relationships belong in `DATA.md`.
 
----
+## Persistence
 
-## Request Flow
+Database schema evolution is managed through Flyway.
 
-Typical request flow:
-
-```text
-HTTP Request
-    ↓
-Security / Authentication
-    ↓
-Controller
-    ↓
-Request Validation
-    ↓
-Service
-    ↓
-Authorization / Business Rules
-    ↓
-Repository
-    ↓
-Database
-    ↓
-Response Mapping
-    ↓
-HTTP Response
-```
-
----
-
-## Boundaries
-
-### API Boundary
-
-Controllers and DTOs define communication with clients.
-
-API concerns should not leak into persistence logic.
-
-### Business Boundary
-
-Services own business behavior and application decisions.
-
-### Persistence Boundary
-
-Repositories and Entities handle database interaction.
-
-Persistence structure should not dictate API design directly.
-
-### Security Boundary
-
-Backend security is authoritative.
-
-Authorization may depend on:
-
-```text
-Authentication
-+ Role
-+ Ownership
-+ Business Rules
-```
-
-### Module Boundary
-
-Business modules should interact through clear service-level contracts rather than reaching into each other's persistence implementation.
-
----
-
-## Important Architectural Decisions
-
-* Backend uses layered architecture.
-* Business logic belongs in Services.
-* Controllers remain thin.
-* JPA Entities are not exposed directly through APIs.
-* DTOs are used at API boundaries.
-* Repository access is performed through Services.
-* Authorization is enforced in the backend.
-* Profile is the main aggregate for CV-specific data.
-* Profile-owned child operations may affect Profile-level state.
-* Multi-record business operations should use transactional boundaries.
-* Database schema changes are managed through Flyway.
-* Existing architecture should be extended rather than introducing new patterns without task-level justification.
-
----
-
-Detailed implementation choices are defined by the active task prompt.
+Detailed persistence design belongs in the relevant task context and `DATA.md`.
