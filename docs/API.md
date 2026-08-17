@@ -12,8 +12,6 @@ APIs use request/response DTOs.
 
 JPA entities are not exposed directly through APIs.
 
-Protected APIs use Bearer Access Tokens.
-
 ## Response Format
 
 Success and error responses use the common wrapper:
@@ -27,7 +25,7 @@ Success and error responses use the common wrapper:
 }
 ```
 
-Use `code`, not `status`.
+The wrapper fields are `code`, `message`, `data`, and `timestamp`; use `code`, not `status`. Validation failures and handled API exceptions follow this shape.
 
 ## HTTP Semantics
 
@@ -43,8 +41,6 @@ Default HTTP semantics:
 409 → business or concurrency conflict
 ```
 
-Follow established repository behavior when it exists.
-
 ## Resource Structure
 
 Profile-owned resources normally use Profile-scoped routes.
@@ -56,7 +52,7 @@ Example:
 /api/profiles/{profileId}/educations/{educationId}
 ```
 
-A nested resource ID does not replace Profile ownership validation.
+A nested resource ID does not replace ownership validation through its Profile.
 
 ## Authentication
 
@@ -70,12 +66,12 @@ Refresh Tokens use the project-defined HttpOnly cookie flow.
 
 Detailed authentication behavior is task-specific.
 
-## Context Boundary
+## Validation
 
-This file contains only stable API conventions.
+Request-shape validation belongs on request DTOs at the API boundary. Validation requiring business or persistence context belongs in the Service layer.
 
-It does not define the full endpoint catalogue, request fields, validation rules, or feature-specific response models.
+Use the repository's centralized exception handling rather than introducing ad hoc error formats.
 
-Exact API contracts should come from the active task, `plan.md`, and the relevant routed documentation.
+## Boundary
 
-Current source code remains the primary reference for implemented API behavior.
+This file defines stable API conventions, not a full endpoint catalogue. Exact contracts and feature-specific models come from the active task and implemented source.

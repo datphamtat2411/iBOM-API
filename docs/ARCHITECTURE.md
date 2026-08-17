@@ -9,11 +9,11 @@ Client
   ↓
 Controller
   ↓
-Serviceg
+Service
   ↓
 Repository
   ↓
-Database
+Persistence
 ```
 
 Cross-cutting concerns include:
@@ -44,49 +44,17 @@ When modules need to collaborate, prefer service-level interaction instead of re
 
 ## Layer Boundaries
 
-The intended dependency direction is:
-
-```text
-Controller
-   ↓
-Service
-   ↓
-Repository
-   ↓
-Persistence
-```
-
-General boundaries:
+Layer responsibilities:
 
 * Controllers define the HTTP boundary.
 * Services own application and business behavior.
 * Repositories define the persistence boundary.
-* DTOs define API input/output models.
-* JPA entities are persistence models and are not exposed directly through APIs.
-* Backend security is authoritative.
+* Controllers do not access repositories directly.
+* Repositories do not implement business decisions.
+* Multiple writes that must succeed or fail together use an appropriate transaction boundary.
 
-Detailed coding rules belong in `CONVENTIONS.md`.
-
-## Profile Aggregate
-
-`Profile` is the central aggregate for CV-specific data.
-
-Profile-owned data includes areas such as:
-
-```text
-Education
-Certificate
-Project
-ProfileLanguage
-ProfileSkill
-```
-
-Operations on Profile-owned data may also affect Profile-level state.
-
-Detailed ownership and relationships belong in `DATA.md`.
+Backend authorization is the final authority; frontend controls and route protection are not sufficient authorization mechanisms.
 
 ## Persistence
 
-Database schema evolution is managed through Flyway.
-
-Detailed persistence design belongs in the relevant task context and `DATA.md`.
+Database schema evolution is managed through Flyway migrations. Exact persistence design remains task-specific unless documented as a stable invariant in `DATA.md`.

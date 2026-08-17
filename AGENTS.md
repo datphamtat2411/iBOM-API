@@ -2,67 +2,30 @@
 
 Work from the current repository state.
 
-Source code, tests, configuration, migrations, and Git history are the primary implementation context.
-
-Repository Markdown files provide lightweight supporting context only. Do not assume they contain the complete project specification.
+Source code, tests, configuration, migrations, and Git history are the primary implementation context. Documentation is lightweight supporting context, not a complete specification.
 
 ## Context
 
-For task work, follow the context explicitly provided by the active prompt or `plan.md`.
-
-Do not load unrelated documentation by default.
-
-Inspect the relevant source and Git state before making implementation assumptions.
+Follow the active prompt or `plan.md`. Read only documentation relevant to the active task, and inspect the affected source and Git state before making implementation assumptions.
 
 ## Scope
 
 Keep changes focused on the active task.
 
-Do not introduce:
-
-* unrelated refactoring;
-* speculative abstractions;
-* future-feature work;
-* unnecessary dependencies;
-* new architectural patterns without a clear need.
-
-Do not invent unresolved business, security, API, or persistence behavior.
+Avoid unrelated refactoring, speculative abstractions, future-feature work, unnecessary dependencies, and new architectural patterns without a clear need. Do not invent unresolved business, security, API, or persistence behavior.
 
 ## PLAN
 
-Planning may inspect relevant source, Git history, and documentation.
-
-The resulting `plan.md` should contain enough task-specific implementation context for a separate BUILD session and explicitly route BUILD to any additional documentation it needs.
-
-Do not modify production code during PLAN unless explicitly requested.
+Inspect relevant source, Git history, and documentation. Make `plan.md` sufficient for a separate BUILD session and route it to any additional documentation it needs. Do not modify production code unless explicitly requested.
 
 ## BUILD
 
-Use `plan.md` and the current repository state as the primary context.
-
-Inspect the files affected by the plan before modifying them.
-
-Follow existing repository patterns where they exist.
-
-Add or update tests relevant to the task and run applicable checks.
-
-Do not expand the task beyond the approved plan.
-
-If repository evidence conflicts with the plan, preserve the task intent and report the discrepancy rather than silently expanding scope.
+Use `plan.md` and the current repository state as primary context. Inspect affected files, follow established patterns, add or update relevant tests, and run applicable checks. Do not expand the approved scope; report repository evidence that conflicts with the plan.
 
 ## REVIEW
 
-Review the implementation against:
-
-* the task;
-* `plan.md`;
-* the Git diff;
-* relevant source and tests.
-
-Prioritize correctness, security, data integrity, regressions, and missing tests.
+Review against the task, `plan.md`, Git diff, and relevant source and tests. Prioritize correctness, security, data integrity, regressions, and missing tests.
 
 ## Git
 
-Read-only Git inspection is allowed.
-
-Do not commit, push, merge, rebase, reset, create or switch branches, or create Pull Requests unless explicitly requested.
+Read-only Git inspection is allowed. Git write operations, including commits, pushes, merges, rebases, resets, branch changes, and pull requests, require explicit instruction.

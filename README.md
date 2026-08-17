@@ -19,7 +19,6 @@ Backend API for the **iBOM CV/Profile Management System**.
 
 ## Local Database Setup
 
-
 ```sql
 CREATE DATABASE ibom;
 ```
@@ -35,9 +34,7 @@ control.
 | `DB_USERNAME` | `root` |
 | `DB_PASSWORD` | empty |
 
-Hibernate runs in `validate` mode and Flyway is enabled. Flyway owns schema
-evolution; no business migration is included until a task defines the first
-business schema.
+Hibernate runs in `validate` mode and Flyway is enabled.
 
 ## Verification
 
@@ -49,8 +46,12 @@ With MySQL running and the environment variables configured, run:
 ./mvnw spring-boot:run
 ```
 
+OpenAPI documentation is available at `/v3/api-docs` and Swagger UI at
+`/swagger-ui.html`. The infrastructure health check is available at `/health`.
 
 ## Package Root
 
 ```text
 com.fpt.ibom
+```
+

@@ -56,6 +56,8 @@ Profile-owned records are independent between Profiles.
 
 `Skill`, `Language`, `Seniority`, and `FileNameFormat` are shared data and are not copied as independent master records.
 
+Copying a Profile deep-copies its Profile-owned data while continuing to reference shared Master Data.
+
 Nested resource ownership is resolved through:
 
 ```text
@@ -83,7 +85,6 @@ Child Resource
 * Soft-deleted Profiles are excluded from normal application behavior.
 * Profile changes participate in optimistic concurrency control.
 * CV-data mutations may update Profile-level state.
-* Shared Master Data should remain referenced rather than duplicated.
 
 ## Important Constraints
 
@@ -93,4 +94,4 @@ Child Resource
 * A User cannot delete their final active Profile.
 * Seniority is derived from `ProfileSkill.experienceYears`; it is not the persisted source of truth on `ProfileSkill`.
 
-Exact columns, SQL types, indexes, foreign keys, and migration details are defined by the active task when needed.
+Exact columns, SQL types, indexes, foreign keys, and migration details remain task-specific unless established as stable repository behavior.

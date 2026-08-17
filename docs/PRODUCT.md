@@ -8,11 +8,11 @@ iBOM is an internal CV Management System for managing employee professional prof
 - `MANAGER`
 - `ADMIN`
 
-Currently, `ADMIN` has the same permissions as `MANAGER`.
+`MEMBER` users manage their own Profile data. `MANAGER` and `ADMIN` users can manage their own Profiles and have full management access to Member Profile data. Currently, `ADMIN` has the same application permissions as `MANAGER`.
 
 ## Core Concept
 
-A User can have multiple independent Profiles.
+A User can have multiple independent Profiles, each representing a separate CV version.
 
 ```text
 User
@@ -25,8 +25,6 @@ User
       └── Skills
 ```
 
-Each Profile represents one independent CV version.
-
 ## Main Areas
 
 - Authentication & Account
@@ -38,15 +36,13 @@ Each Profile represents one independent CV version.
 - User Management
 - Dashboard
 
-## CV
+## Stable Behavior
 
-Supported outputs:
+- A Profile must be previewed before export, and any CV-data change invalidates the previous preview.
+- CV export supports PDF and DOCX, and empty CV sections are not rendered.
+- Account email is immutable after account creation.
+- Self-registration creates a `MEMBER` account.
+- Inactive accounts cannot continue authenticated usage.
+- Account inactivity does not delete User or Profile data and is not a global visibility filter.
 
-- PDF
-- DOCX
-
-## Scope of This File
-
-This file provides only high-level product context.
-
-Detailed requirements and implementation behavior are defined by the active task, `plan.md`, and relevant routed documentation.
+Feature-specific requirements and acceptance criteria belong to the active task context.

@@ -7,6 +7,8 @@ Backend testing uses:
 * MockMvc
 * JaCoCo
 
+Follow the repository's established test structure and conventions where they exist.
+
 ## Test Scope
 
 Test behavior relevant to the active task.
