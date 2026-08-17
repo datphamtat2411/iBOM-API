@@ -13,8 +13,9 @@ unnecessary dependencies, and invented behavior.
 Do not read repository docs by default.
 
 Read docs only when:
-- the prompt or `plan.md` routes to them; or
-- implementation cannot proceed safely without them.
+
+* the active prompt or `plan.md` routes to them; or
+* work cannot proceed safely without them.
 
 Do not copy large documentation sections into `plan.md`.
 
@@ -25,16 +26,16 @@ Route to docs when broader context is genuinely needed.
 
 PLAN owns discovery and task-specific decisions.
 
-Inspect only what the task needs.
-Do not inspect Git history unless materially required.
+Inspect only task-relevant source, tests, configuration, migrations, and documentation.
 
 Keep `plan.md` concise.
 
 Prefer:
-- Repository Findings
-- Relevant Code
-- Proposed Changes
-- Docs BUILD May Need
+
+* Repository Findings
+* Relevant Code
+* Proposed Changes
+* Docs BUILD May Need
 
 Add Risks or Verification only when useful.
 
@@ -45,57 +46,81 @@ Do not modify implementation files unless explicitly requested.
 
 BUILD owns implementation, not discovery or review.
 
-Read `plan.md` and affected files.
-Read additional source only when implementation requires it.
+Read `plan.md` and the files directly affected by it before editing.
+Do not repeat PLAN discovery.
+
+Expand context only when:
+
+* additional source is required to implement the change; or
+* affected source directly contradicts `plan.md`.
+
 Read docs only when routed by `plan.md` or required to proceed safely.
 
-Do not repeat PLAN discovery or expand scope.
+Implement only the approved scope.
+Add or update tests relevant to the changed behavior.
 
-Implement the approved changes and add/update relevant tests.
+After implementation, run one focused test command covering the changed behavior.
 
-Use one focused test command as the default verification.
+Do not run tests before implementation unless reproducing a reported failure is required.
 
-If it passes:
-- run no additional verification;
-- perform one final Git status/diff safety check;
-- report and stop.
+If the focused test passes:
 
-If it fails:
-- investigate only the task-related failure;
-- fix it;
-- rerun only the relevant focused test.
+* run no additional verification;
+* run one final `git status --short`;
+* report and stop.
+
+If the focused test fails:
+
+* investigate only the task-related failure;
+* make one corrective pass;
+* rerun the same focused test command once;
+* if it still fails, report the blocker and stop.
 
 Do not by default:
-- scan the repository/module;
-- inspect Git history;
-- repeatedly inspect Git status/diff;
-- run the full test suite or full build/package;
-- run startup, Swagger, curl, or manual API checks;
-- inspect test reports when command output is sufficient;
-- investigate unrelated environment failures;
-- inspect dependency/JAR internals;
-- perform REVIEW work.
 
-Broader verification requires explicit task/plan instruction
-or a task-related failure that focused checks cannot resolve.
+* scan or rediscover the repository/module;
+* run the full test suite or full build/package;
+* run startup, Swagger, curl, or manual checks;
+* inspect test reports when command output is sufficient;
+* investigate unrelated environment failures;
+* inspect dependency/JAR internals;
+* perform REVIEW work.
+
+Broader verification requires explicit justification in the active prompt
+or a task-specific reason recorded in `plan.md`.
 
 BUILD reports only:
-- changes made;
-- focused test result;
-- blockers or deviations.
+
+* changes made;
+* focused test result;
+* blockers or deviations.
 
 ## REVIEW
 
-REVIEW is separate from BUILD.
+REVIEW owns verification, not implementation.
 
-Review `plan.md`, the relevant diff, affected source, and tests.
-Prioritize correctness, security, data integrity, regressions,
-scope deviations, and missing meaningful tests.
+Review `plan.md`, the relevant Git diff, affected source, and tests.
+
+Prioritize:
+
+* correctness;
+* security;
+* data integrity;
+* regressions;
+* scope deviations;
+* missing meaningful tests.
 
 Do not modify implementation unless explicitly requested.
 
 ## Git
 
-Read-only Git inspection is allowed when relevant.
+Git inspection is phase-specific.
+
+PLAN may inspect Git history only when materially required for discovery.
+
+BUILD may run the final `git status --short` defined above.
+Do not otherwise inspect Git history or diffs unless explicitly required by the active prompt or `plan.md`.
+
+REVIEW may inspect the relevant Git diff and related read-only Git state.
 
 Do not perform Git write operations unless explicitly requested.
