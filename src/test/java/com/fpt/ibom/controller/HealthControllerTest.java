@@ -4,7 +4,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 
+import com.fpt.ibom.config.SecurityConfig;
 import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.exception.GlobalExceptionHandler;
 import jakarta.validation.Valid;
@@ -17,7 +20,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
-@Import({GlobalExceptionHandler.class, HealthControllerTest.ApiTestController.class})
+@Import({GlobalExceptionHandler.class, SecurityConfig.class, HealthControllerTest.ApiTestController.class})
 class HealthControllerTest extends AbstractControllerTest {
 
 	@Test
@@ -32,7 +35,8 @@ class HealthControllerTest extends AbstractControllerTest {
 
 	@Test
 	void validationFailureUsesCommonErrorResponse() throws Exception {
-		mockMvc.perform(post("/test/validation").contentType("application/json").content("{\"name\":\"\"}"))
+		mockMvc.perform(post("/test/validation").with(user("test-user")).with(csrf())
+				.contentType("application/json").content("{\"name\":\"\"}"))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value(400))
 				.andExpect(jsonPath("$.message").value("Validation failed"))
@@ -43,7 +47,7 @@ class HealthControllerTest extends AbstractControllerTest {
 
 	@Test
 	void apiExceptionUsesItsHttpStatusAndCommonErrorResponse() throws Exception {
-		mockMvc.perform(get("/test/conflict"))
+		mockMvc.perform(get("/test/conflict").with(user("test-user")))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value(409))
 				.andExpect(jsonPath("$.message").value("Conflict"))
@@ -53,7 +57,7 @@ class HealthControllerTest extends AbstractControllerTest {
 
 	@Test
 	void unexpectedExceptionUsesInternalServerErrorResponse() throws Exception {
-		mockMvc.perform(get("/test/error"))
+		mockMvc.perform(get("/test/error").with(user("test-user")))
 				.andExpect(status().isInternalServerError())
 				.andExpect(jsonPath("$.code").value(500))
 				.andExpect(jsonPath("$.message").value("Internal server error"))

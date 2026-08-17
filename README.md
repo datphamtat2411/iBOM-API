@@ -32,7 +32,7 @@ control.
 | --- | --- |
 | `DB_URL` | `jdbc:mysql://localhost:3306/ibom?serverTimezone=UTC` |
 | `DB_USERNAME` | `ibom_user` |
-| `DB_PASSWORD` ${DB_PASSWORD}
+| `DB_PASSWORD` |${DB_PASSWORD}|
 
 Hibernate runs in `validate` mode and Flyway is enabled.
 
