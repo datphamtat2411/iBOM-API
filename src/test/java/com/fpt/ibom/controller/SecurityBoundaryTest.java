@@ -39,13 +39,9 @@ class SecurityBoundaryTest extends AbstractControllerTest {
 	}
 
 	@Test
-	void authenticatedRequestWithoutCsrfTokenUsesCommonForbiddenResponse() throws Exception {
+	void authenticatedRequestWithoutCsrfTokenIsAllowedForBearerApiFlow() throws Exception {
 		mockMvc.perform(post("/test/protected").with(user("test-user")))
-				.andExpect(status().isForbidden())
-				.andExpect(jsonPath("$.code").value(403))
-				.andExpect(jsonPath("$.message").value("Forbidden"))
-				.andExpect(jsonPath("$.data").doesNotExist())
-				.andExpect(jsonPath("$.timestamp").isNotEmpty());
+				.andExpect(status().isOk());
 	}
 
 	@RestController

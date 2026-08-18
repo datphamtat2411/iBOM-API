@@ -38,7 +38,7 @@ public class SecurityConfig {
 	SecurityFilterChain securityFilterChain(HttpSecurity http, ObjectMapper objectMapper,
 			UserAccountJwtAuthenticationConverter jwtAuthenticationConverter) throws Exception {
 		return http
-				.csrf(csrf -> csrf.ignoringRequestMatchers("/api/auth/login"))
+				.csrf(csrf -> csrf.disable())
 				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 				.oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)))
 				.authorizeHttpRequests(authorize -> authorize
