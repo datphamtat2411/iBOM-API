@@ -19,9 +19,13 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+import com.fpt.ibom.auth.security.UserAccountJwtAuthenticationConverter;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @Import({GlobalExceptionHandler.class, SecurityConfig.class, HealthControllerTest.ApiTestController.class})
 class HealthControllerTest extends AbstractControllerTest {
+	@MockitoBean
+	private UserAccountJwtAuthenticationConverter jwtAuthenticationConverter;
 
 	@Test
 	void healthReturnsCommonSuccessResponse() throws Exception {
@@ -35,7 +39,7 @@ class HealthControllerTest extends AbstractControllerTest {
 
 	@Test
 	void validationFailureUsesCommonErrorResponse() throws Exception {
-		mockMvc.perform(post("/test/validation").with(user("test-user")).with(csrf())
+		mockMvc.perform(post("/test/validation").with(user("test-user"))
 				.contentType("application/json").content("{\"name\":\"\"}"))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value(400))

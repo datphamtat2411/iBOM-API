@@ -5,6 +5,7 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.Locale;
 
 import com.fpt.ibom.auth.dto.AuthenticatedUser;
 import com.fpt.ibom.auth.dto.LoginRequest;
@@ -23,6 +24,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class LoginService {
+
+	private static final String DUMMY_PASSWORD_HASH = "$2a$12$C6UzMDM.H6dfI/f/IKcEeOeGxM1M8fM6mR8Xk1o9q0fPq8L9Qv7yW";
 
 	private final UserAccountRepository userAccountRepository;
 	private final RefreshTokenRepository refreshTokenRepository;
@@ -43,8 +46,12 @@ public class LoginService {
 
 	@Transactional
 	public AuthenticationResult authenticate(LoginRequest request) {
-		UserAccount user = userAccountRepository.findByEmail(request.email())
-				.orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "Invalid credentials"));
+		var userOptional = userAccountRepository.findByEmailIgnoreCase(normalizeEmail(request.email()));
+		if (userOptional.isEmpty()) {
+			passwordEncoder.matches(request.password(), DUMMY_PASSWORD_HASH);
+			throw new ApiException(HttpStatus.UNAUTHORIZED, "Invalid credentials");
+		}
+		UserAccount user = userOptional.get();
 		if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
 			throw new ApiException(HttpStatus.UNAUTHORIZED, "Invalid credentials");
 		}
@@ -62,6 +69,10 @@ public class LoginService {
 		byte[] bytes = new byte[32];
 		secureRandom.nextBytes(bytes);
 		return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+	}
+
+	private String normalizeEmail(String email) {
+		return email.trim().toLowerCase(Locale.ROOT);
 	}
 
 	private String sha256(String value) {

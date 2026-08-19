@@ -13,12 +13,15 @@ import java.util.Optional;
 import com.fpt.ibom.auth.controller.AuthController;
 import com.fpt.ibom.auth.dto.AuthenticatedUser;
 import com.fpt.ibom.auth.dto.LoginRequest;
+import com.fpt.ibom.auth.dto.RegistrationCodeRequest;
+import com.fpt.ibom.auth.dto.RegistrationRequest;
 import com.fpt.ibom.auth.entity.UserAccount;
 import com.fpt.ibom.auth.entity.UserRole;
 import com.fpt.ibom.auth.entity.UserStatus;
 import com.fpt.ibom.auth.repository.UserAccountRepository;
 import com.fpt.ibom.auth.security.UserAccountJwtAuthenticationConverter;
 import com.fpt.ibom.auth.service.LoginService;
+import com.fpt.ibom.auth.service.RegistrationService;
 import com.fpt.ibom.config.SecurityConfig;
 import com.fpt.ibom.exception.ApiException;
 import org.junit.jupiter.api.Test;
@@ -42,6 +45,9 @@ class AuthControllerTest {
 
 	@MockitoBean
 	private LoginService loginService;
+
+	@MockitoBean
+	private RegistrationService registrationService;
 
 	@MockitoBean
 	private JwtDecoder jwtDecoder;
@@ -93,6 +99,38 @@ class AuthControllerTest {
 					.content("{\"email\":\"user@example.com\",\"password\":\"correct-password\"}"))
 				.andExpect(status().isForbidden())
 				.andExpect(jsonPath("$.message").value("Account is inactive"));
+	}
+
+	@Test
+	void permitsRegistrationEndpointsWithoutAuthentication() throws Exception {
+		mockMvc.perform(post("/api/auth/registration-code")
+					.contentType("application/json")
+					.content("{\"email\":\"user@gmail.com\"}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data").doesNotExist());
+
+		mockMvc.perform(post("/api/auth/register")
+					.contentType("application/json")
+					.content("{\"email\":\"user@gmail.com\",\"username\":\"member\",\"password\":\"password1\",\"verificationCode\":\"123456\"}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.accessToken").doesNotExist())
+				.andExpect(header().doesNotExist("Set-Cookie"));
+	}
+
+	@Test
+	void validatesRegistrationCodeRequest() throws Exception {
+		mockMvc.perform(post("/api/auth/registration-code")
+					.contentType("application/json")
+					.content("{\"email\":\"not-an-email\"}"))
+				.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void rejectsRegistrationPasswordOutsidePolicy() throws Exception {
+		mockMvc.perform(post("/api/auth/register")
+					.contentType("application/json")
+					.content("{\"email\":\"user@gmail.com\",\"username\":\"member\",\"password\":\"short\",\"verificationCode\":\"123456\"}"))
+				.andExpect(status().isBadRequest());
 	}
 
 	@Test

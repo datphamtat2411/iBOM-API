@@ -42,7 +42,8 @@ public class SecurityConfig {
 				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 				.oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)))
 				.authorizeHttpRequests(authorize -> authorize
-						.requestMatchers("/health", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/api/auth/login").permitAll()
+						.requestMatchers("/health", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/api/auth/login",
+								"/api/auth/registration-code", "/api/auth/register").permitAll()
 						.anyRequest().authenticated())
 				.exceptionHandling(exceptions -> exceptions
 						.authenticationEntryPoint((request, response, exception) ->
