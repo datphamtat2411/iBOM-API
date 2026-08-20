@@ -3,7 +3,6 @@ package com.fpt.ibom.auth;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -18,8 +17,6 @@ import jakarta.servlet.http.Cookie;
 import com.fpt.ibom.auth.controller.AuthController;
 import com.fpt.ibom.auth.dto.AuthenticatedUser;
 import com.fpt.ibom.auth.dto.LoginRequest;
-import com.fpt.ibom.auth.dto.RegistrationCodeRequest;
-import com.fpt.ibom.auth.dto.RegistrationRequest;
 import com.fpt.ibom.auth.entity.UserAccount;
 import com.fpt.ibom.auth.entity.UserRole;
 import com.fpt.ibom.auth.entity.UserStatus;
@@ -42,8 +39,6 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.bind.annotation.RequestMethod;
-import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 
 @WebMvcTest(controllers = AuthControllerTest.ProtectedController.class)
 @Import({AuthController.class, SecurityConfig.class, UserAccountJwtAuthenticationConverter.class, AuthControllerTest.ProtectedController.class})
@@ -51,9 +46,6 @@ class AuthControllerTest {
 
 	@Autowired
 	private MockMvc mockMvc;
-
-	@Autowired
-	private RequestMappingHandlerMapping requestMappingHandlerMapping;
 
 	@MockitoBean
 	private LoginService loginService;

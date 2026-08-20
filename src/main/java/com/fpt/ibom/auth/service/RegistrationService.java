@@ -30,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class RegistrationService {
 
 	private static final int MAX_SENDS_PER_HOUR = 5;
+	private static final int MAX_FAILED_ATTEMPTS = 5;
 	private final UserAccountRepository userAccountRepository;
 	private final VerificationCodeRepository verificationCodeRepository;
 	private final PasswordEncoder passwordEncoder;
@@ -66,7 +67,7 @@ public class RegistrationService {
 		mailService.sendRegistrationVerificationCode(email, code);
 	}
 
-	@Transactional
+	@Transactional(noRollbackFor = InvalidRegistrationVerificationCodeException.class)
 	public void register(RegistrationRequest request) {
 		String email = normalizeEmail(request.email());
 		String username = request.username().trim();
@@ -79,19 +80,36 @@ public class RegistrationService {
 		}
 
 		VerificationCode verificationCode = verificationCodeRepository
-				.findFirstByEmailAndPurposeAndUsedAtIsNullOrderByCreatedAtDesc(email, VerificationPurpose.REGISTRATION)
-				.filter(code -> code.getExpiresAt().isAfter(Instant.now()))
-				.filter(code -> MessageDigest.isEqual(code.getCodeHash().getBytes(StandardCharsets.UTF_8),
-						sha256(request.verificationCode()).getBytes(StandardCharsets.UTF_8)))
-				.orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "Invalid or expired verification code"));
+				.findTopByEmailAndPurposeAndUsedAtIsNullOrderByCreatedAtDesc(email, VerificationPurpose.REGISTRATION)
+				.orElseThrow(this::invalidVerificationCode);
+		if (!isValidVerificationCode(verificationCode, request.verificationCode())) {
+			throw invalidVerificationCode();
+		}
 
-		verificationCode.use(Instant.now());
 		try {
 			userAccountRepository.saveAndFlush(new UserAccount(email, username, passwordEncoder.encode(request.password()),
 					UserRole.MEMBER, UserStatus.ACTIVE));
 		} catch (DataIntegrityViolationException exception) {
 			throw new ApiException(HttpStatus.CONFLICT, "Email or username is already registered");
 		}
+		verificationCode.use(Instant.now());
+	}
+
+	private boolean isValidVerificationCode(VerificationCode verificationCode, String submittedCode) {
+		if (verificationCode.getFailedAttempts() >= MAX_FAILED_ATTEMPTS) {
+			return false;
+		}
+		if (verificationCode.getExpiresAt().isAfter(Instant.now()) && MessageDigest.isEqual(
+				verificationCode.getCodeHash().getBytes(StandardCharsets.UTF_8),
+				sha256(submittedCode).getBytes(StandardCharsets.UTF_8))) {
+			return true;
+		}
+		verificationCode.incrementFailedAttempts();
+		return false;
+	}
+
+	private InvalidRegistrationVerificationCodeException invalidVerificationCode() {
+		return new InvalidRegistrationVerificationCodeException();
 	}
 
 	private void ensureAllowedDomain(String email) {
@@ -111,6 +129,14 @@ public class RegistrationService {
 					.digest(value.getBytes(StandardCharsets.UTF_8)));
 		} catch (java.security.NoSuchAlgorithmException exception) {
 			throw new IllegalStateException("SHA-256 is unavailable", exception);
+		}
+	}
+
+	private static final class InvalidRegistrationVerificationCodeException extends ApiException {
+		private static final long serialVersionUID = 1L;
+
+		private InvalidRegistrationVerificationCodeException() {
+			super(HttpStatus.BAD_REQUEST, "Invalid or expired verification code");
 		}
 	}
 }

@@ -1,6 +1,7 @@
 package com.fpt.ibom.auth;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -27,6 +28,7 @@ import com.fpt.ibom.auth.service.RegistrationService;
 import com.fpt.ibom.exception.ApiException;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import com.fpt.ibom.auth.service.MailService;
@@ -50,6 +52,7 @@ class RegistrationServiceTest {
 		ArgumentCaptor<VerificationCode> code = ArgumentCaptor.forClass(VerificationCode.class);
 		verify(codes).save(code.capture());
 		assertEquals(64, code.getValue().getCodeHash().length());
+		assertEquals(0, code.getValue().getFailedAttempts());
 		verify(mailService).sendRegistrationVerificationCode(eq("user@gmail.com"), any());
 	}
 
@@ -75,24 +78,46 @@ class RegistrationServiceTest {
 	@Test
 	void rejectsExpiredOrUsedVerificationCode() {
 		VerificationCode expired = verificationCode("user@gmail.com", "123456", Instant.now().minusSeconds(1));
-		when(codes.findFirstByEmailAndPurposeAndUsedAtIsNullOrderByCreatedAtDesc("user@gmail.com", VerificationPurpose.REGISTRATION))
+		when(codes.findTopByEmailAndPurposeAndUsedAtIsNullOrderByCreatedAtDesc("user@gmail.com", VerificationPurpose.REGISTRATION))
 				.thenReturn(Optional.of(expired));
 
 		assertInvalidCode();
 
 		VerificationCode used = verificationCode("user@gmail.com", "123456", Instant.now().plusSeconds(300));
 		used.use(Instant.now());
-		when(codes.findFirstByEmailAndPurposeAndUsedAtIsNullOrderByCreatedAtDesc("user@gmail.com", VerificationPurpose.REGISTRATION))
+		when(codes.findTopByEmailAndPurposeAndUsedAtIsNullOrderByCreatedAtDesc("user@gmail.com", VerificationPurpose.REGISTRATION))
 				.thenReturn(Optional.empty());
 		assertInvalidCode();
 	}
 
 	@Test
-	void rejectsInvalidVerificationCode() {
-		when(codes.findFirstByEmailAndPurposeAndUsedAtIsNullOrderByCreatedAtDesc("user@gmail.com", VerificationPurpose.REGISTRATION))
-				.thenReturn(Optional.of(verificationCode("user@gmail.com", "654321", Instant.now().plusSeconds(300))));
+	void incrementsFailedAttemptsForInvalidVerificationCode() {
+		VerificationCode code = verificationCode("user@gmail.com", "654321", Instant.now().plusSeconds(300));
+		when(codes.findTopByEmailAndPurposeAndUsedAtIsNullOrderByCreatedAtDesc("user@gmail.com", VerificationPurpose.REGISTRATION))
+				.thenReturn(Optional.of(code));
 
 		assertInvalidCode();
+		assertEquals(1, code.getFailedAttempts());
+	}
+
+	@Test
+	void capsFailedAttemptsAtFiveAndRejectsCorrectCodeAfterExhaustion() {
+		VerificationCode code = verificationCode("user@gmail.com", "654321", Instant.now().plusSeconds(300));
+		when(codes.findTopByEmailAndPurposeAndUsedAtIsNullOrderByCreatedAtDesc("user@gmail.com", VerificationPurpose.REGISTRATION))
+				.thenReturn(Optional.of(code));
+
+		for (int attempt = 1; attempt <= 5; attempt++) {
+			assertInvalidCode();
+			assertEquals(attempt, code.getFailedAttempts());
+		}
+		assertInvalidCode();
+		assertEquals(5, code.getFailedAttempts());
+
+		ApiException exception = assertThrows(ApiException.class,
+				() -> registrationService.register(request("654321")));
+		assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
+		assertEquals(5, code.getFailedAttempts());
+		verify(users, never()).saveAndFlush(any());
 	}
 
 	@Test
@@ -110,7 +135,10 @@ class RegistrationServiceTest {
 	@Test
 	void createsActiveMemberWithEncodedPasswordAndConsumesCode() {
 		VerificationCode code = verificationCode("user@gmail.com", "123456", Instant.now().plusSeconds(300));
-		when(codes.findFirstByEmailAndPurposeAndUsedAtIsNullOrderByCreatedAtDesc("user@gmail.com", VerificationPurpose.REGISTRATION))
+		for (int attempt = 0; attempt < 4; attempt++) {
+			code.incrementFailedAttempts();
+		}
+		when(codes.findTopByEmailAndPurposeAndUsedAtIsNullOrderByCreatedAtDesc("user@gmail.com", VerificationPurpose.REGISTRATION))
 				.thenReturn(Optional.of(code));
 		when(passwordEncoder.encode("Password1!")).thenReturn("bcrypt-hash");
 
@@ -122,7 +150,22 @@ class RegistrationServiceTest {
 		assertEquals("bcrypt-hash", user.getValue().getPasswordHash());
 		assertEquals(UserRole.MEMBER, user.getValue().getRole());
 		assertEquals(UserStatus.ACTIVE, user.getValue().getStatus());
+		assertEquals(4, code.getFailedAttempts());
 		assertEquals(false, code.getUsedAt() == null);
+	}
+
+	@Test
+	void doesNotConsumeCodeWhenAccountCreationFails() {
+		VerificationCode code = verificationCode("user@gmail.com", "123456", Instant.now().plusSeconds(300));
+		when(codes.findTopByEmailAndPurposeAndUsedAtIsNullOrderByCreatedAtDesc("user@gmail.com", VerificationPurpose.REGISTRATION))
+				.thenReturn(Optional.of(code));
+		when(passwordEncoder.encode("Password1!")).thenReturn("bcrypt-hash");
+		when(users.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("duplicate"));
+
+		ApiException exception = assertThrows(ApiException.class, () -> registrationService.register(request()));
+
+		assertEquals(HttpStatus.CONFLICT, exception.getStatus());
+		assertNull(code.getUsedAt());
 	}
 
 	private void assertInvalidCode() {
@@ -131,7 +174,11 @@ class RegistrationServiceTest {
 	}
 
 	private RegistrationRequest request() {
-		return new RegistrationRequest("User@GMAIL.COM", "member", "Password1!", "123456");
+		return request("123456");
+	}
+
+	private RegistrationRequest request(String verificationCode) {
+		return new RegistrationRequest("User@GMAIL.COM", "member", "Password1!", verificationCode);
 	}
 
 	private VerificationCode verificationCode(String email, String code, Instant expiresAt) {
