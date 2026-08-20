@@ -1,9 +1,9 @@
 package com.fpt.ibom.auth.dto;
 
+import com.fpt.ibom.validation.StrongPassword;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
 
 public record ChangePasswordRequest(
 		@NotBlank String currentPassword,
-		@NotBlank @Size(min = 8, max = 72) String newPassword) {
+		@NotBlank @StrongPassword String newPassword) {
 }

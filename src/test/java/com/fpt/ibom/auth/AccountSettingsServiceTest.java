@@ -33,16 +33,16 @@ class AccountSettingsServiceTest {
 		UserAccount user = user();
 		when(users.findById(1L)).thenReturn(Optional.of(user));
 		when(passwordEncoder.matches("current-password", "old-bcrypt-hash")).thenReturn(true);
-		when(passwordEncoder.encode("new-password")).thenReturn("new-bcrypt-hash");
+		when(passwordEncoder.encode("Password1!")).thenReturn("new-bcrypt-hash");
 
-		accountSettingsService.changePassword(1L, new ChangePasswordRequest("current-password", "new-password"));
+		accountSettingsService.changePassword(1L, new ChangePasswordRequest("current-password", "Password1!"));
 
 		assertEquals("new-bcrypt-hash", user.getPasswordHash());
 		assertEquals("user@example.com", user.getEmail());
 		assertEquals("Member", user.getUsername());
 		assertEquals(UserRole.MEMBER, user.getRole());
 		assertEquals(UserStatus.ACTIVE, user.getStatus());
-		verify(passwordEncoder).encode("new-password");
+		verify(passwordEncoder).encode("Password1!");
 	}
 
 	@Test
@@ -52,12 +52,12 @@ class AccountSettingsServiceTest {
 		when(passwordEncoder.matches("incorrect-password", "old-bcrypt-hash")).thenReturn(false);
 
 		ApiException exception = assertThrows(ApiException.class, () -> accountSettingsService.changePassword(1L,
-				new ChangePasswordRequest("incorrect-password", "new-password")));
+				new ChangePasswordRequest("incorrect-password", "Password1!")));
 
 		assertEquals(HttpStatus.UNAUTHORIZED, exception.getStatus());
 		assertEquals("Invalid credentials", exception.getMessage());
 		assertEquals("old-bcrypt-hash", user.getPasswordHash());
-		verify(passwordEncoder, never()).encode("new-password");
+		verify(passwordEncoder, never()).encode("Password1!");
 	}
 
 	@Test

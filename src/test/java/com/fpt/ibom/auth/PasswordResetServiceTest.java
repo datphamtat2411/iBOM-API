@@ -120,9 +120,9 @@ class PasswordResetServiceTest {
 		when(users.findByEmailIgnoreCaseForUpdate("user@example.com")).thenReturn(Optional.of(user));
 		when(codes.findFirstByEmailAndPurposeAndUsedAtIsNullOrderByCreatedAtDescForUpdate("user@example.com",
 				VerificationPurpose.PASSWORD_RESET)).thenReturn(Optional.of(code));
-		when(passwordEncoder.encode("new-password")).thenReturn("new-bcrypt-hash");
+		when(passwordEncoder.encode("Password1!")).thenReturn("new-bcrypt-hash");
 
-		passwordResetService.resetPassword(new PasswordResetRequest("User@EXAMPLE.COM", "123456", "new-password"));
+		passwordResetService.resetPassword(new PasswordResetRequest("User@EXAMPLE.COM", "123456", "Password1!"));
 
 		assertEquals("new-bcrypt-hash", user.getPasswordHash());
 		assertEquals("user@example.com", user.getEmail());
@@ -140,7 +140,7 @@ class PasswordResetServiceTest {
 				VerificationPurpose.PASSWORD_RESET)).thenReturn(Optional.of(code("123456", Instant.now().minusSeconds(1))));
 
 		ApiException exception = assertThrows(ApiException.class, () -> passwordResetService.resetPassword(
-				new PasswordResetRequest("user@example.com", "123456", "new-password")));
+				new PasswordResetRequest("user@example.com", "123456", "Password1!")));
 
 		assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
 		verify(passwordEncoder, never()).encode(any());

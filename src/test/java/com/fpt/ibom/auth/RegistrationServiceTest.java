@@ -113,7 +113,7 @@ class RegistrationServiceTest {
 		VerificationCode code = verificationCode("user@gmail.com", "123456", Instant.now().plusSeconds(300));
 		when(codes.findFirstByEmailAndPurposeAndUsedAtIsNullOrderByCreatedAtDesc("user@gmail.com", VerificationPurpose.REGISTRATION))
 				.thenReturn(Optional.of(code));
-		when(passwordEncoder.encode("password1")).thenReturn("bcrypt-hash");
+		when(passwordEncoder.encode("Password1!")).thenReturn("bcrypt-hash");
 
 		registrationService.register(request());
 
@@ -132,7 +132,7 @@ class RegistrationServiceTest {
 	}
 
 	private RegistrationRequest request() {
-		return new RegistrationRequest("User@GMAIL.COM", "member", "password1", "123456");
+		return new RegistrationRequest("User@GMAIL.COM", "member", "Password1!", "123456");
 	}
 
 	private VerificationCode verificationCode(String email, String code, Instant expiresAt) {

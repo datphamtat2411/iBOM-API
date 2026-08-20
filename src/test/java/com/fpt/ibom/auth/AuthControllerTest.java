@@ -170,7 +170,7 @@ class AuthControllerTest {
 
 		mockMvc.perform(post("/api/auth/register")
 					.contentType("application/json")
-					.content("{\"email\":\"user@gmail.com\",\"username\":\"member\",\"password\":\"password1\",\"verificationCode\":\"123456\"}"))
+					.content("{\"email\":\"user@gmail.com\",\"username\":\"member\",\"password\":\"Password1!\",\"verificationCode\":\"123456\"}"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.data.accessToken").doesNotExist())
 				.andExpect(header().doesNotExist("Set-Cookie"));
@@ -185,11 +185,14 @@ class AuthControllerTest {
 	}
 
 	@Test
-	void rejectsRegistrationPasswordOutsidePolicy() throws Exception {
-		mockMvc.perform(post("/api/auth/register")
-					.contentType("application/json")
-					.content("{\"email\":\"user@gmail.com\",\"username\":\"member\",\"password\":\"short\",\"verificationCode\":\"123456\"}"))
-				.andExpect(status().isBadRequest());
+	void rejectsRegistrationPasswordsMissingRequiredPolicyElements() throws Exception {
+		for (String password : new String[] {"Aa1!abc", "password1!", "PASSWORD1!", "Password!", "Password1"}) {
+			mockMvc.perform(post("/api/auth/register")
+						.contentType("application/json")
+						.content("{\"email\":\"user@gmail.com\",\"username\":\"member\",\"password\":\"" + password
+								+ "\",\"verificationCode\":\"123456\"}"))
+					.andExpect(status().isBadRequest());
+		}
 	}
 
 	@Test
@@ -208,7 +211,7 @@ class AuthControllerTest {
 
 		mockMvc.perform(post("/api/auth/password-reset")
 					.contentType("application/json")
-					.content("{\"email\":\"user@example.com\",\"verificationCode\":\"123456\",\"password\":\"password1\"}"))
+					.content("{\"email\":\"user@example.com\",\"verificationCode\":\"123456\",\"password\":\"Password1!\"}"))
 				.andExpect(status().isOk())
 				.andExpect(header().doesNotExist("Set-Cookie"));
 	}
@@ -229,7 +232,7 @@ class AuthControllerTest {
 	@Test
 	void requiresBearerTokenForAccountSettings() throws Exception {
 		mockMvc.perform(post("/api/auth/change-password").contentType("application/json")
-					.content("{\"currentPassword\":\"current-password\",\"newPassword\":\"new-password\"}"))
+					.content("{\"currentPassword\":\"current-password\",\"newPassword\":\"Password1!\"}"))
 				.andExpect(status().isUnauthorized());
 
 		mockMvc.perform(patch("/api/auth/username").contentType("application/json")
@@ -243,13 +246,13 @@ class AuthControllerTest {
 
 		mockMvc.perform(post("/api/auth/change-password").header("Authorization", "Bearer valid-token")
 					.contentType("application/json")
-					.content("{\"currentPassword\":\"current-password\",\"newPassword\":\"new-password\"}"))
+					.content("{\"currentPassword\":\"current-password\",\"newPassword\":\"Password1!\"}"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.data").doesNotExist())
 				.andExpect(header().doesNotExist("Set-Cookie"));
 
 		verify(accountSettingsService).changePassword(1L,
-				new com.fpt.ibom.auth.dto.ChangePasswordRequest("current-password", "new-password"));
+				new com.fpt.ibom.auth.dto.ChangePasswordRequest("current-password", "Password1!"));
 		verifyNoInteractions(loginService);
 	}
 
