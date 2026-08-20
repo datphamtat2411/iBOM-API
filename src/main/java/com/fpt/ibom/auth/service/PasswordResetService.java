@@ -25,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class PasswordResetService {
 
 	private static final int MAX_SENDS_PER_HOUR = 5;
+	private static final int MAX_FAILED_ATTEMPTS = 5;
 	private final UserAccountRepository userAccountRepository;
 	private final VerificationCodeRepository verificationCodeRepository;
 	private final RefreshTokenRepository refreshTokenRepository;
@@ -58,16 +59,20 @@ public class PasswordResetService {
 		mailService.sendPasswordResetCode(email, code, eligibleForDelivery);
 	}
 
-	@Transactional(readOnly = true)
+	@Transactional(noRollbackFor = ApiException.class)
 	public void verifyCode(PasswordResetCodeVerificationRequest request) {
 		String email = normalizeEmail(request.email());
-		if (userAccountRepository.findByEmailIgnoreCase(email).isEmpty()
-				|| !isValidLatestCode(email, request.verificationCode())) {
+		if (userAccountRepository.findByEmailIgnoreCase(email).isEmpty()) {
+			throw invalidCode();
+		}
+		VerificationCode code = verificationCodeRepository.findTopByEmailAndPurposeAndUsedAtIsNullOrderByCreatedAtDesc(email,
+				VerificationPurpose.PASSWORD_RESET).orElseThrow(this::invalidCode);
+		if (!isValidCode(code, request.verificationCode())) {
 			throw invalidCode();
 		}
 	}
 
-	@Transactional
+	@Transactional(noRollbackFor = ApiException.class)
 	public void resetPassword(PasswordResetRequest request) {
 		String email = normalizeEmail(request.email());
 		UserAccount user = userAccountRepository.findByEmailIgnoreCaseForUpdate(email).orElseThrow(this::invalidCode);
@@ -83,14 +88,16 @@ public class PasswordResetService {
 		refreshTokenRepository.revokeAllByUserId(user.getId(), now);
 	}
 
-	private boolean isValidLatestCode(String email, String submittedCode) {
-		return verificationCodeRepository.findFirstByEmailAndPurposeAndUsedAtIsNullOrderByCreatedAtDesc(email,
-				VerificationPurpose.PASSWORD_RESET).map(code -> isValidCode(code, submittedCode)).orElse(false);
-	}
-
 	private boolean isValidCode(VerificationCode code, String submittedCode) {
-		return code.getExpiresAt().isAfter(Instant.now()) && MessageDigest.isEqual(
-				code.getCodeHash().getBytes(StandardCharsets.UTF_8), sha256(submittedCode).getBytes(StandardCharsets.UTF_8));
+		if (code.getFailedAttempts() >= MAX_FAILED_ATTEMPTS) {
+			return false;
+		}
+		if (code.getExpiresAt().isAfter(Instant.now()) && MessageDigest.isEqual(
+				code.getCodeHash().getBytes(StandardCharsets.UTF_8), sha256(submittedCode).getBytes(StandardCharsets.UTF_8))) {
+			return true;
+		}
+		code.incrementFailedAttempts();
+		return false;
 	}
 
 	private ApiException invalidCode() {
