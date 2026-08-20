@@ -59,10 +59,43 @@ public class LoginService {
 			throw new ApiException(HttpStatus.FORBIDDEN, "Account is inactive");
 		}
 
+		return createAuthenticationResult(user);
+	}
+
+	@Transactional
+	public AuthenticationResult refresh(String refreshToken) {
+		if (refreshToken == null || refreshToken.isBlank()) {
+			throw invalidRefreshToken();
+		}
+		RefreshToken session = refreshTokenRepository.findByTokenHashForUpdate(sha256(refreshToken))
+				.orElseThrow(this::invalidRefreshToken);
+		if (session.getExpiresAt().isBefore(Instant.now()) || session.getRevokedAt() != null
+				|| session.getUser().getStatus() != UserStatus.ACTIVE) {
+			throw invalidRefreshToken();
+		}
+		session.revoke();
+		return createAuthenticationResult(session.getUser());
+	}
+
+	@Transactional
+	public void logout(String refreshToken) {
+		if (refreshToken == null || refreshToken.isBlank()) {
+			return;
+		}
+		refreshTokenRepository.findByTokenHashForUpdate(sha256(refreshToken))
+				.filter(session -> session.getRevokedAt() == null)
+				.ifPresent(RefreshToken::revoke);
+	}
+
+	private AuthenticationResult createAuthenticationResult(UserAccount user) {
 		String refreshToken = generateRefreshToken();
 		refreshTokenRepository.save(new RefreshToken(user, sha256(refreshToken), Instant.now().plusSeconds(refreshTokenTtlSeconds)));
 		return new AuthenticationResult(jwtService.createAccessToken(user), refreshToken, refreshTokenTtlSeconds,
 				new AuthenticatedUser(user.getId(), user.getEmail(), user.getUsername(), user.getRole()));
+	}
+
+	private ApiException invalidRefreshToken() {
+		return new ApiException(HttpStatus.UNAUTHORIZED, "Invalid refresh token");
 	}
 
 	private String generateRefreshToken() {

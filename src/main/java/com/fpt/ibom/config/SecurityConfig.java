@@ -30,6 +30,9 @@ import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
+import org.springframework.security.web.util.matcher.OrRequestMatcher;
 
 @Configuration
 public class SecurityConfig {
@@ -38,7 +41,10 @@ public class SecurityConfig {
 	SecurityFilterChain securityFilterChain(HttpSecurity http, ObjectMapper objectMapper,
 			UserAccountJwtAuthenticationConverter jwtAuthenticationConverter) throws Exception {
 		return http
-				.csrf(csrf -> csrf.disable())
+				.csrf(csrf -> csrf.csrfTokenRepository(csrfTokenRepository())
+						.requireCsrfProtectionMatcher(new OrRequestMatcher(
+								new AntPathRequestMatcher("/api/auth/refresh", "POST"),
+								new AntPathRequestMatcher("/api/auth/logout", "POST"))))
 				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 				.oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)))
 				.authorizeHttpRequests(authorize -> authorize
@@ -51,6 +57,14 @@ public class SecurityConfig {
 						.accessDeniedHandler((request, response, exception) ->
 								writeError(response, objectMapper, HttpStatus.FORBIDDEN)))
 				.build();
+	}
+
+	private CookieCsrfTokenRepository csrfTokenRepository() {
+		CookieCsrfTokenRepository repository = CookieCsrfTokenRepository.withHttpOnlyFalse();
+		repository.setCookieName("XSRF-TOKEN");
+		repository.setHeaderName("X-XSRF-TOKEN");
+		repository.setCookieCustomizer(cookie -> cookie.path("/api/auth").secure(true).sameSite("Strict"));
+		return repository;
 	}
 
 	@Bean

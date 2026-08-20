@@ -33,6 +33,9 @@ public class RefreshToken {
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private Instant createdAt;
 
+	@Column(name = "revoked_at")
+	private Instant revokedAt;
+
 	protected RefreshToken() {
 	}
 
@@ -41,5 +44,13 @@ public class RefreshToken {
 		this.tokenHash = tokenHash;
 		this.expiresAt = expiresAt;
 		this.createdAt = Instant.now();
+	}
+
+	public UserAccount getUser() { return user; }
+	public Instant getExpiresAt() { return expiresAt; }
+	public Instant getRevokedAt() { return revokedAt; }
+
+	public void revoke() {
+		revokedAt = Instant.now();
 	}
 }

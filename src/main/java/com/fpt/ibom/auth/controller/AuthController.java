@@ -1,5 +1,8 @@
 package com.fpt.ibom.auth.controller;
 
+import java.security.SecureRandom;
+import java.util.Base64;
+
 import com.fpt.ibom.auth.dto.LoginRequest;
 import com.fpt.ibom.auth.dto.LoginResponse;
 import com.fpt.ibom.auth.dto.RegistrationCodeRequest;
@@ -12,6 +15,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -22,6 +26,7 @@ public class AuthController {
 
 	private final LoginService loginService;
 	private final RegistrationService registrationService;
+	private final SecureRandom secureRandom = new SecureRandom();
 
 	public AuthController(LoginService loginService, RegistrationService registrationService) {
 		this.loginService = loginService;
@@ -31,16 +36,46 @@ public class AuthController {
 	@PostMapping("/login")
 	public org.springframework.http.ResponseEntity<ApiResponse<LoginResponse>> login(@Valid @RequestBody LoginRequest request) {
 		LoginService.AuthenticationResult result = loginService.authenticate(request);
-		ResponseCookie cookie = ResponseCookie.from("refresh_token", result.refreshToken())
-				.httpOnly(true)
-				.secure(true)
-				.path("/api/auth")
-				.maxAge(result.refreshTokenTtlSeconds())
-				.sameSite("Strict")
-				.build();
+		return authenticationResponse(result);
+	}
+
+	@PostMapping("/refresh")
+	public org.springframework.http.ResponseEntity<ApiResponse<LoginResponse>> refresh(
+			@CookieValue(value = "refresh_token", required = false) String refreshToken) {
+		return authenticationResponse(loginService.refresh(refreshToken));
+	}
+
+	@PostMapping("/logout")
+	public org.springframework.http.ResponseEntity<ApiResponse<Void>> logout(
+			@CookieValue(value = "refresh_token", required = false) String refreshToken) {
+		loginService.logout(refreshToken);
 		return org.springframework.http.ResponseEntity.ok()
-				.header(HttpHeaders.SET_COOKIE, cookie.toString())
+				.header(HttpHeaders.SET_COOKIE, refreshCookie("", 0).toString())
+				.header(HttpHeaders.SET_COOKIE, csrfCookie("", 0).toString())
+				.body(new ApiResponse<>(200, "Success", null));
+	}
+
+	private org.springframework.http.ResponseEntity<ApiResponse<LoginResponse>> authenticationResponse(AuthenticationResult result) {
+		return org.springframework.http.ResponseEntity.ok()
+				.header(HttpHeaders.SET_COOKIE, refreshCookie(result.refreshToken(), result.refreshTokenTtlSeconds()).toString())
+				.header(HttpHeaders.SET_COOKIE, csrfCookie(generateCsrfToken(), result.refreshTokenTtlSeconds()).toString())
 				.body(new ApiResponse<>(200, "Success", new LoginResponse(result.accessToken(), result.user())));
+	}
+
+	private ResponseCookie refreshCookie(String value, long maxAge) {
+		return ResponseCookie.from("refresh_token", value).httpOnly(true).secure(true).path("/api/auth")
+				.maxAge(maxAge).sameSite("Strict").build();
+	}
+
+	private ResponseCookie csrfCookie(String value, long maxAge) {
+		return ResponseCookie.from("XSRF-TOKEN", value).httpOnly(false).secure(true).path("/api/auth")
+				.maxAge(maxAge).sameSite("Strict").build();
+	}
+
+	private String generateCsrfToken() {
+		byte[] bytes = new byte[32];
+		secureRandom.nextBytes(bytes);
+		return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
 	}
 
 	@PostMapping("/registration-code")
