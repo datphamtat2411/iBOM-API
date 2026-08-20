@@ -33,29 +33,57 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import org.springframework.security.web.util.matcher.OrRequestMatcher;
+import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 
 @Configuration
 public class SecurityConfig {
 
 	@Bean
-	SecurityFilterChain securityFilterChain(HttpSecurity http, ObjectMapper objectMapper,
-			UserAccountJwtAuthenticationConverter jwtAuthenticationConverter) throws Exception {
+	SecurityFilterChain securityFilterChain(
+			HttpSecurity http,
+			ObjectMapper objectMapper,
+			UserAccountJwtAuthenticationConverter jwtAuthenticationConverter
+	) throws Exception {
+
+		CsrfTokenRequestAttributeHandler csrfRequestHandler =
+				new CsrfTokenRequestAttributeHandler();
+
 		return http
-				.csrf(csrf -> csrf.csrfTokenRepository(csrfTokenRepository())
-						.requireCsrfProtectionMatcher(new OrRequestMatcher(
-								new AntPathRequestMatcher("/api/auth/refresh", "POST"),
-								new AntPathRequestMatcher("/api/auth/logout", "POST"))))
-				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-				.oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)))
+				.csrf(csrf -> csrf
+						.csrfTokenRepository(csrfTokenRepository())
+						.csrfTokenRequestHandler(csrfRequestHandler)
+						.requireCsrfProtectionMatcher(
+								new OrRequestMatcher(
+										new AntPathRequestMatcher("/api/auth/refresh", "POST"),
+										new AntPathRequestMatcher("/api/auth/logout", "POST")
+								)
+						)
+				)
+				.sessionManagement(session ->
+						session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+				.oauth2ResourceServer(oauth2 ->
+						oauth2.jwt(jwt ->
+								jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)))
 				.authorizeHttpRequests(authorize -> authorize
-						.requestMatchers("/health", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/api/auth/login",
-								"/api/auth/registration-code", "/api/auth/register").permitAll()
-						.anyRequest().authenticated())
+						.requestMatchers(
+								"/health",
+								"/v3/api-docs/**",
+								"/swagger-ui/**",
+								"/swagger-ui.html",
+								"/api/auth/login",
+								"/api/auth/registration-code",
+								"/api/auth/register",
+								"/api/auth/refresh",
+								"/api/auth/logout"
+						).permitAll()
+						.anyRequest().authenticated()
+				)
 				.exceptionHandling(exceptions -> exceptions
 						.authenticationEntryPoint((request, response, exception) ->
 								writeError(response, objectMapper, HttpStatus.UNAUTHORIZED))
 						.accessDeniedHandler((request, response, exception) ->
-								writeError(response, objectMapper, HttpStatus.FORBIDDEN)))
+								writeError(response, objectMapper, HttpStatus.FORBIDDEN))
+				)
 				.build();
 	}
 

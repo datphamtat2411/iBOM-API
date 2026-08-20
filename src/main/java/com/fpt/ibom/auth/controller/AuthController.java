@@ -75,7 +75,9 @@ public class AuthController {
 	private String generateCsrfToken() {
 		byte[] bytes = new byte[32];
 		secureRandom.nextBytes(bytes);
-		return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+		return Base64.getUrlEncoder()
+				.withoutPadding()
+				.encodeToString(bytes);
 	}
 
 	@PostMapping("/registration-code")
