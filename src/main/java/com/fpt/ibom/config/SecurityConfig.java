@@ -73,6 +73,9 @@ public class SecurityConfig {
 								"/api/auth/login",
 								"/api/auth/registration-code",
 								"/api/auth/register",
+								"/api/auth/password-reset-code",
+								"/api/auth/password-reset-code/verify",
+								"/api/auth/password-reset",
 								"/api/auth/refresh",
 								"/api/auth/logout"
 						).permitAll()

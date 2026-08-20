@@ -5,11 +5,15 @@ import java.util.Base64;
 
 import com.fpt.ibom.auth.dto.LoginRequest;
 import com.fpt.ibom.auth.dto.LoginResponse;
+import com.fpt.ibom.auth.dto.PasswordResetCodeRequest;
+import com.fpt.ibom.auth.dto.PasswordResetCodeVerificationRequest;
+import com.fpt.ibom.auth.dto.PasswordResetRequest;
 import com.fpt.ibom.auth.dto.RegistrationCodeRequest;
 import com.fpt.ibom.auth.dto.RegistrationRequest;
 import com.fpt.ibom.auth.service.LoginService;
 import com.fpt.ibom.auth.service.LoginService.AuthenticationResult;
 import com.fpt.ibom.auth.service.RegistrationService;
+import com.fpt.ibom.auth.service.PasswordResetService;
 import com.fpt.ibom.common.ApiResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
@@ -26,11 +30,14 @@ public class AuthController {
 
 	private final LoginService loginService;
 	private final RegistrationService registrationService;
+	private final PasswordResetService passwordResetService;
 	private final SecureRandom secureRandom = new SecureRandom();
 
-	public AuthController(LoginService loginService, RegistrationService registrationService) {
+	public AuthController(LoginService loginService, RegistrationService registrationService,
+			PasswordResetService passwordResetService) {
 		this.loginService = loginService;
 		this.registrationService = registrationService;
+		this.passwordResetService = passwordResetService;
 	}
 
 	@PostMapping("/login")
@@ -90,6 +97,27 @@ public class AuthController {
 	@PostMapping("/register")
 	public org.springframework.http.ResponseEntity<ApiResponse<Void>> register(@Valid @RequestBody RegistrationRequest request) {
 		registrationService.register(request);
+		return org.springframework.http.ResponseEntity.ok(new ApiResponse<>(200, "Success", null));
+	}
+
+	@PostMapping("/password-reset-code")
+	public org.springframework.http.ResponseEntity<ApiResponse<Void>> requestPasswordResetCode(
+			@Valid @RequestBody PasswordResetCodeRequest request) {
+		passwordResetService.requestCode(request);
+		return org.springframework.http.ResponseEntity.ok(new ApiResponse<>(200, "Success", null));
+	}
+
+	@PostMapping("/password-reset-code/verify")
+	public org.springframework.http.ResponseEntity<ApiResponse<Void>> verifyPasswordResetCode(
+			@Valid @RequestBody PasswordResetCodeVerificationRequest request) {
+		passwordResetService.verifyCode(request);
+		return org.springframework.http.ResponseEntity.ok(new ApiResponse<>(200, "Success", null));
+	}
+
+	@PostMapping("/password-reset")
+	public org.springframework.http.ResponseEntity<ApiResponse<Void>> resetPassword(
+			@Valid @RequestBody PasswordResetRequest request) {
+		passwordResetService.resetPassword(request);
 		return org.springframework.http.ResponseEntity.ok(new ApiResponse<>(200, "Success", null));
 	}
 }

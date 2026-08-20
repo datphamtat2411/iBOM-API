@@ -24,6 +24,7 @@ import com.fpt.ibom.auth.repository.UserAccountRepository;
 import com.fpt.ibom.auth.security.UserAccountJwtAuthenticationConverter;
 import com.fpt.ibom.auth.service.LoginService;
 import com.fpt.ibom.auth.service.RegistrationService;
+import com.fpt.ibom.auth.service.PasswordResetService;
 import com.fpt.ibom.config.SecurityConfig;
 import com.fpt.ibom.exception.ApiException;
 import org.junit.jupiter.api.Test;
@@ -50,6 +51,9 @@ class AuthControllerTest {
 
 	@MockitoBean
 	private RegistrationService registrationService;
+
+	@MockitoBean
+	private PasswordResetService passwordResetService;
 
 	@MockitoBean
 	private JwtDecoder jwtDecoder;
@@ -179,6 +183,40 @@ class AuthControllerTest {
 		mockMvc.perform(post("/api/auth/register")
 					.contentType("application/json")
 					.content("{\"email\":\"user@gmail.com\",\"username\":\"member\",\"password\":\"short\",\"verificationCode\":\"123456\"}"))
+				.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void permitsPasswordResetEndpointsWithoutCsrfOrCookies() throws Exception {
+		mockMvc.perform(post("/api/auth/password-reset-code")
+					.contentType("application/json")
+					.content("{\"email\":\"user@example.com\"}"))
+				.andExpect(status().isOk())
+				.andExpect(header().doesNotExist("Set-Cookie"));
+
+		mockMvc.perform(post("/api/auth/password-reset-code/verify")
+					.contentType("application/json")
+					.content("{\"email\":\"user@example.com\",\"verificationCode\":\"123456\"}"))
+				.andExpect(status().isOk())
+				.andExpect(header().doesNotExist("Set-Cookie"));
+
+		mockMvc.perform(post("/api/auth/password-reset")
+					.contentType("application/json")
+					.content("{\"email\":\"user@example.com\",\"verificationCode\":\"123456\",\"password\":\"password1\"}"))
+				.andExpect(status().isOk())
+				.andExpect(header().doesNotExist("Set-Cookie"));
+	}
+
+	@Test
+	void validatesPasswordResetRequestShapeAndPolicy() throws Exception {
+		mockMvc.perform(post("/api/auth/password-reset-code/verify")
+					.contentType("application/json")
+					.content("{\"email\":\"user@example.com\",\"verificationCode\":\"invalid\"}"))
+				.andExpect(status().isBadRequest());
+
+		mockMvc.perform(post("/api/auth/password-reset")
+					.contentType("application/json")
+					.content("{\"email\":\"user@example.com\",\"verificationCode\":\"123456\",\"password\":\"short\"}"))
 				.andExpect(status().isBadRequest());
 	}
 
