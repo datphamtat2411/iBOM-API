@@ -64,6 +64,17 @@ Authorization: Bearer <access-token>
 
 Refresh Tokens use the project-defined HttpOnly cookie flow.
 
+Authentication routes:
+
+```text
+POST /api/auth/refresh-token
+POST /api/auth/forgot-password
+POST /api/auth/forgot-password/verify
+POST /api/auth/reset-password
+PUT /api/auth/change-password
+PUT /api/auth/change-username
+```
+
 Detailed authentication behavior is task-specific.
 
 ## Validation

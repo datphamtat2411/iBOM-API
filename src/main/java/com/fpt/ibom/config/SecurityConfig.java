@@ -54,7 +54,7 @@ public class SecurityConfig {
 						.csrfTokenRequestHandler(csrfRequestHandler)
 						.requireCsrfProtectionMatcher(
 								new OrRequestMatcher(
-										new AntPathRequestMatcher("/api/auth/refresh", "POST"),
+										new AntPathRequestMatcher("/api/auth/refresh-token", "POST"),
 										new AntPathRequestMatcher("/api/auth/logout", "POST")
 								)
 						)
@@ -73,10 +73,10 @@ public class SecurityConfig {
 								"/api/auth/login",
 								"/api/auth/registration-code",
 								"/api/auth/register",
-								"/api/auth/password-reset-code",
-								"/api/auth/password-reset-code/verify",
-								"/api/auth/password-reset",
-								"/api/auth/refresh",
+								"/api/auth/forgot-password",
+								"/api/auth/forgot-password/verify",
+								"/api/auth/reset-password",
+								"/api/auth/refresh-token",
 								"/api/auth/logout"
 						).permitAll()
 						.anyRequest().authenticated()

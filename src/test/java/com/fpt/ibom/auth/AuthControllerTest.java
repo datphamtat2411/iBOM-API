@@ -3,9 +3,10 @@ package com.fpt.ibom.auth;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -41,6 +42,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 
 @WebMvcTest(controllers = AuthControllerTest.ProtectedController.class)
 @Import({AuthController.class, SecurityConfig.class, UserAccountJwtAuthenticationConverter.class, AuthControllerTest.ProtectedController.class})
@@ -48,6 +51,9 @@ class AuthControllerTest {
 
 	@Autowired
 	private MockMvc mockMvc;
+
+	@Autowired
+	private RequestMappingHandlerMapping requestMappingHandlerMapping;
 
 	@MockitoBean
 	private LoginService loginService;
@@ -106,8 +112,8 @@ class AuthControllerTest {
 	}
 
 	@Test
-	void requiresCsrfHeaderForRefresh() throws Exception {
-		mockMvc.perform(post("/api/auth/refresh").cookie(new Cookie("refresh_token", "refresh-token")))
+	void requiresCsrfHeaderForRefreshToken() throws Exception {
+		mockMvc.perform(post("/api/auth/refresh-token").cookie(new Cookie("refresh_token", "refresh-token")))
 				.andExpect(status().isForbidden());
 	}
 
@@ -115,7 +121,7 @@ class AuthControllerTest {
 	void refreshRotatesCookiesWithValidCsrfState() throws Exception {
 		when(loginService.refresh("refresh-token")).thenReturn(authenticationResult());
 
-		mockMvc.perform(post("/api/auth/refresh")
+		mockMvc.perform(post("/api/auth/refresh-token")
 					.cookie(new Cookie("refresh_token", "refresh-token"), new Cookie("XSRF-TOKEN", "csrf-token"))
 					.header("X-XSRF-TOKEN", "csrf-token"))
 				.andExpect(status().isOk())
@@ -210,34 +216,39 @@ class AuthControllerTest {
 	}
 
 	@Test
-	void permitsPasswordResetEndpointsWithoutCsrfOrCookies() throws Exception {
-		mockMvc.perform(post("/api/auth/password-reset-code")
+	void performsPasswordResetEndpointsWithoutCsrfOrCookies() throws Exception {
+		mockMvc.perform(post("/api/auth/forgot-password")
 					.contentType("application/json")
 					.content("{\"email\":\"user@example.com\"}"))
 				.andExpect(status().isOk())
 				.andExpect(header().doesNotExist("Set-Cookie"));
+		verify(passwordResetService).requestCode(new com.fpt.ibom.auth.dto.PasswordResetCodeRequest("user@example.com"));
 
-		mockMvc.perform(post("/api/auth/password-reset-code/verify")
+		mockMvc.perform(post("/api/auth/forgot-password/verify")
 					.contentType("application/json")
 					.content("{\"email\":\"user@example.com\",\"verificationCode\":\"123456\"}"))
 				.andExpect(status().isOk())
 				.andExpect(header().doesNotExist("Set-Cookie"));
+		verify(passwordResetService).verifyCode(
+				new com.fpt.ibom.auth.dto.PasswordResetCodeVerificationRequest("user@example.com", "123456"));
 
-		mockMvc.perform(post("/api/auth/password-reset")
+		mockMvc.perform(post("/api/auth/reset-password")
 					.contentType("application/json")
 					.content("{\"email\":\"user@example.com\",\"verificationCode\":\"123456\",\"password\":\"Password1!\"}"))
 				.andExpect(status().isOk())
 				.andExpect(header().doesNotExist("Set-Cookie"));
+		verify(passwordResetService).resetPassword(
+				new com.fpt.ibom.auth.dto.PasswordResetRequest("user@example.com", "123456", "Password1!"));
 	}
 
 	@Test
 	void validatesPasswordResetRequestShapeAndPolicy() throws Exception {
-		mockMvc.perform(post("/api/auth/password-reset-code/verify")
+		mockMvc.perform(post("/api/auth/forgot-password/verify")
 					.contentType("application/json")
 					.content("{\"email\":\"user@example.com\",\"verificationCode\":\"invalid\"}"))
 				.andExpect(status().isBadRequest());
 
-		mockMvc.perform(post("/api/auth/password-reset")
+		mockMvc.perform(post("/api/auth/reset-password")
 					.contentType("application/json")
 					.content("{\"email\":\"user@example.com\",\"verificationCode\":\"123456\",\"password\":\"short\"}"))
 				.andExpect(status().isBadRequest());
@@ -245,11 +256,11 @@ class AuthControllerTest {
 
 	@Test
 	void requiresBearerTokenForAccountSettings() throws Exception {
-		mockMvc.perform(post("/api/auth/change-password").contentType("application/json")
+		mockMvc.perform(put("/api/auth/change-password").contentType("application/json")
 					.content("{\"currentPassword\":\"current-password\",\"newPassword\":\"Password1!\"}"))
 				.andExpect(status().isUnauthorized());
 
-		mockMvc.perform(patch("/api/auth/username").contentType("application/json")
+		mockMvc.perform(put("/api/auth/change-username").contentType("application/json")
 					.content("{\"username\":\"new-member\"}"))
 				.andExpect(status().isUnauthorized());
 	}
@@ -258,7 +269,7 @@ class AuthControllerTest {
 	void changesPasswordForAuthenticatedPrincipalWithoutCsrfOrTokenChanges() throws Exception {
 		activeAccountFor("valid-token");
 
-		mockMvc.perform(post("/api/auth/change-password").header("Authorization", "Bearer valid-token")
+		mockMvc.perform(put("/api/auth/change-password").header("Authorization", "Bearer valid-token")
 					.contentType("application/json")
 					.content("{\"currentPassword\":\"current-password\",\"newPassword\":\"Password1!\"}"))
 				.andExpect(status().isOk())
@@ -274,7 +285,7 @@ class AuthControllerTest {
 	void validatesNewPasswordPolicyForAuthenticatedPrincipal() throws Exception {
 		activeAccountFor("valid-token");
 
-		mockMvc.perform(post("/api/auth/change-password").header("Authorization", "Bearer valid-token")
+		mockMvc.perform(put("/api/auth/change-password").header("Authorization", "Bearer valid-token")
 					.contentType("application/json")
 					.content("{\"currentPassword\":\"current-password\",\"newPassword\":\"short\"}"))
 				.andExpect(status().isBadRequest());
@@ -288,7 +299,7 @@ class AuthControllerTest {
 		when(accountSettingsService.changeUsername(1L, new com.fpt.ibom.auth.dto.ChangeUsernameRequest("NewMember")))
 				.thenReturn(new AuthenticatedUser(1L, "user@example.com", "NewMember", UserRole.MEMBER));
 
-		mockMvc.perform(patch("/api/auth/username").header("Authorization", "Bearer valid-token")
+		mockMvc.perform(put("/api/auth/change-username").header("Authorization", "Bearer valid-token")
 					.contentType("application/json").content("{\"username\":\"NewMember\"}"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.data.id").value(1))

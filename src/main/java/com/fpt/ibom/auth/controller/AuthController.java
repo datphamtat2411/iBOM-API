@@ -24,8 +24,8 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.CookieValue;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -55,7 +55,7 @@ public class AuthController {
 		return authenticationResponse(result);
 	}
 
-	@PostMapping("/refresh")
+	@PostMapping("/refresh-token")
 	public org.springframework.http.ResponseEntity<ApiResponse<LoginResponse>> refresh(
 			@CookieValue(value = "refresh_token", required = false) String refreshToken) {
 		return authenticationResponse(loginService.refresh(refreshToken));
@@ -109,35 +109,35 @@ public class AuthController {
 		return org.springframework.http.ResponseEntity.ok(new ApiResponse<>(200, "Success", null));
 	}
 
-	@PostMapping("/password-reset-code")
+	@PostMapping("/forgot-password")
 	public org.springframework.http.ResponseEntity<ApiResponse<Void>> requestPasswordResetCode(
 			@Valid @RequestBody PasswordResetCodeRequest request) {
 		passwordResetService.requestCode(request);
 		return org.springframework.http.ResponseEntity.ok(new ApiResponse<>(200, "Success", null));
 	}
 
-	@PostMapping("/password-reset-code/verify")
+	@PostMapping("/forgot-password/verify")
 	public org.springframework.http.ResponseEntity<ApiResponse<Void>> verifyPasswordResetCode(
 			@Valid @RequestBody PasswordResetCodeVerificationRequest request) {
 		passwordResetService.verifyCode(request);
 		return org.springframework.http.ResponseEntity.ok(new ApiResponse<>(200, "Success", null));
 	}
 
-	@PostMapping("/password-reset")
+	@PostMapping("/reset-password")
 	public org.springframework.http.ResponseEntity<ApiResponse<Void>> resetPassword(
 			@Valid @RequestBody PasswordResetRequest request) {
 		passwordResetService.resetPassword(request);
 		return org.springframework.http.ResponseEntity.ok(new ApiResponse<>(200, "Success", null));
 	}
 
-	@PostMapping("/change-password")
+	@PutMapping("/change-password")
 	public org.springframework.http.ResponseEntity<ApiResponse<Void>> changePassword(
 			@AuthenticationPrincipal UserPrincipal principal, @Valid @RequestBody ChangePasswordRequest request) {
 		accountSettingsService.changePassword(principal.userId(), request);
 		return org.springframework.http.ResponseEntity.ok(new ApiResponse<>(200, "Success", null));
 	}
 
-	@PatchMapping("/username")
+	@PutMapping("/change-username")
 	public org.springframework.http.ResponseEntity<ApiResponse<AuthenticatedUser>> changeUsername(
 			@AuthenticationPrincipal UserPrincipal principal, @Valid @RequestBody ChangeUsernameRequest request) {
 		AuthenticatedUser user = accountSettingsService.changeUsername(principal.userId(), request);
