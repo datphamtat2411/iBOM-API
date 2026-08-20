@@ -28,21 +28,20 @@ import com.fpt.ibom.exception.ApiException;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import com.fpt.ibom.auth.service.MailService;
 
 class RegistrationServiceTest {
 
 	private final UserAccountRepository users = mock(UserAccountRepository.class);
 	private final VerificationCodeRepository codes = mock(VerificationCodeRepository.class);
 	private final PasswordEncoder passwordEncoder = mock(PasswordEncoder.class);
-	private final JavaMailSender mailSender = mock(JavaMailSender.class);
-	private final RegistrationService registrationService = new RegistrationService(users, codes, passwordEncoder, mailSender,
+	private final MailService mailService = mock(MailService.class);
+	private final RegistrationService registrationService = new RegistrationService(users, codes, passwordEncoder, mailService,
 			"fsoft.com.vn,fpt.com.vn,fpt.com,gmail.com");
 
 	@Test
-	void requestsCodeForAllowedNormalizedEmailAndSendsMail() {
+	void requestsCodeForAllowedNormalizedEmailAndRoutesMailThroughMailService() {
 		when(codes.countByEmailAndPurposeAndCreatedAtAfter(eq("user@gmail.com"), eq(VerificationPurpose.REGISTRATION), any()))
 				.thenReturn(0L);
 
@@ -51,7 +50,7 @@ class RegistrationServiceTest {
 		ArgumentCaptor<VerificationCode> code = ArgumentCaptor.forClass(VerificationCode.class);
 		verify(codes).save(code.capture());
 		assertEquals(64, code.getValue().getCodeHash().length());
-		verify(mailSender).send(any(SimpleMailMessage.class));
+		verify(mailService).sendRegistrationVerificationCode(eq("user@gmail.com"), any());
 	}
 
 	@Test
@@ -60,7 +59,7 @@ class RegistrationServiceTest {
 				() -> registrationService.requestVerificationCode(new RegistrationCodeRequest("user@example.com")));
 
 		assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
-		verify(mailSender, never()).send(any(SimpleMailMessage.class));
+		verify(mailService, never()).sendRegistrationVerificationCode(any(), any());
 	}
 
 	@Test

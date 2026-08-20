@@ -221,6 +221,7 @@ class AuthControllerTest {
 					.contentType("application/json")
 					.content("{\"email\":\"user@example.com\"}"))
 				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.message").value("Success"))
 				.andExpect(header().doesNotExist("Set-Cookie"));
 		verify(passwordResetService).requestCode(new com.fpt.ibom.auth.dto.PasswordResetCodeRequest("user@example.com"));
 

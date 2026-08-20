@@ -32,9 +32,8 @@ import com.fpt.ibom.exception.ApiException;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import com.fpt.ibom.auth.service.MailService;
 
 class PasswordResetServiceTest {
 
@@ -42,12 +41,12 @@ class PasswordResetServiceTest {
 	private final VerificationCodeRepository codes = mock(VerificationCodeRepository.class);
 	private final RefreshTokenRepository refreshTokens = mock(RefreshTokenRepository.class);
 	private final PasswordEncoder passwordEncoder = mock(PasswordEncoder.class);
-	private final JavaMailSender mailSender = mock(JavaMailSender.class);
+	private final MailService mailService = mock(MailService.class);
 	private final PasswordResetService passwordResetService = new PasswordResetService(users, codes, refreshTokens,
-			passwordEncoder, mailSender);
+			passwordEncoder, mailService);
 
 	@Test
-	void requestsCodeForNormalizedExistingEmailWithoutDomainRestriction() {
+	void requestsCodeForNormalizedExistingEmailAndSubmitsEligibleMailDelivery() {
 		when(codes.countByEmailAndPurposeAndCreatedAtAfter(eq("user@example.com"), eq(VerificationPurpose.PASSWORD_RESET), any()))
 				.thenReturn(0L);
 		when(users.findByEmailIgnoreCase("user@example.com")).thenReturn(Optional.of(user(UserStatus.ACTIVE)));
@@ -58,11 +57,11 @@ class PasswordResetServiceTest {
 		verify(codes).save(code.capture());
 		assertEquals(64, code.getValue().getCodeHash().length());
 		assertNotNull(code.getValue().getExpiresAt());
-		verify(mailSender).send(any(SimpleMailMessage.class));
+		verify(mailService).sendPasswordResetCode(eq("user@example.com"), any(), eq(true));
 	}
 
 	@Test
-	void treatsUnknownEmailLikeExistingEmailAndDoesNotSendMail() {
+	void treatsUnknownEmailLikeExistingEmailAndSubmitsIneligibleMailDelivery() {
 		when(codes.countByEmailAndPurposeAndCreatedAtAfter(eq("unknown@example.com"), eq(VerificationPurpose.PASSWORD_RESET), any()))
 				.thenReturn(0L);
 		when(users.findByEmailIgnoreCase("unknown@example.com")).thenReturn(Optional.empty());
@@ -70,7 +69,7 @@ class PasswordResetServiceTest {
 		passwordResetService.requestCode(new PasswordResetCodeRequest("unknown@example.com"));
 
 		verify(codes).save(any(VerificationCode.class));
-		verify(mailSender, never()).send(any(SimpleMailMessage.class));
+		verify(mailService).sendPasswordResetCode(eq("unknown@example.com"), any(), eq(false));
 	}
 
 	@Test

@@ -17,8 +17,6 @@ import com.fpt.ibom.auth.repository.UserAccountRepository;
 import com.fpt.ibom.auth.repository.VerificationCodeRepository;
 import com.fpt.ibom.exception.ApiException;
 import org.springframework.http.HttpStatus;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,17 +29,17 @@ public class PasswordResetService {
 	private final VerificationCodeRepository verificationCodeRepository;
 	private final RefreshTokenRepository refreshTokenRepository;
 	private final PasswordEncoder passwordEncoder;
-	private final JavaMailSender mailSender;
+	private final MailService mailService;
 	private final SecureRandom secureRandom = new SecureRandom();
 
 	public PasswordResetService(UserAccountRepository userAccountRepository,
 			VerificationCodeRepository verificationCodeRepository, RefreshTokenRepository refreshTokenRepository,
-			PasswordEncoder passwordEncoder, JavaMailSender mailSender) {
+			PasswordEncoder passwordEncoder, MailService mailService) {
 		this.userAccountRepository = userAccountRepository;
 		this.verificationCodeRepository = verificationCodeRepository;
 		this.refreshTokenRepository = refreshTokenRepository;
 		this.passwordEncoder = passwordEncoder;
-		this.mailSender = mailSender;
+		this.mailService = mailService;
 	}
 
 	@Transactional
@@ -56,13 +54,8 @@ public class PasswordResetService {
 		String code = "%06d".formatted(secureRandom.nextInt(1_000_000));
 		verificationCodeRepository.save(new VerificationCode(email, sha256(code), VerificationPurpose.PASSWORD_RESET,
 				now.plusSeconds(300), now));
-		if (userAccountRepository.findByEmailIgnoreCase(email).isPresent()) {
-			SimpleMailMessage message = new SimpleMailMessage();
-			message.setTo(email);
-			message.setSubject("iBOM password reset verification code");
-			message.setText("Your password reset verification code is: " + code + ". It expires in 5 minutes.");
-			mailSender.send(message);
-		}
+		boolean eligibleForDelivery = userAccountRepository.findByEmailIgnoreCase(email).isPresent();
+		mailService.sendPasswordResetCode(email, code, eligibleForDelivery);
 	}
 
 	@Transactional(readOnly = true)

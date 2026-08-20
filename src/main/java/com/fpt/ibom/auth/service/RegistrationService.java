@@ -22,8 +22,6 @@ import com.fpt.ibom.exception.ApiException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,17 +33,17 @@ public class RegistrationService {
 	private final UserAccountRepository userAccountRepository;
 	private final VerificationCodeRepository verificationCodeRepository;
 	private final PasswordEncoder passwordEncoder;
-	private final JavaMailSender mailSender;
+	private final MailService mailService;
 	private final Set<String> allowedDomains;
 	private final SecureRandom secureRandom = new SecureRandom();
 
 	public RegistrationService(UserAccountRepository userAccountRepository,
-			VerificationCodeRepository verificationCodeRepository, PasswordEncoder passwordEncoder, JavaMailSender mailSender,
+			VerificationCodeRepository verificationCodeRepository, PasswordEncoder passwordEncoder, MailService mailService,
 			@Value("${app.auth.registration.allowed-domains}") String allowedDomains) {
 		this.userAccountRepository = userAccountRepository;
 		this.verificationCodeRepository = verificationCodeRepository;
 		this.passwordEncoder = passwordEncoder;
-		this.mailSender = mailSender;
+		this.mailService = mailService;
 		this.allowedDomains = Arrays.stream(allowedDomains.split(","))
 				.map(domain -> domain.trim().toLowerCase(Locale.ROOT))
 				.filter(domain -> !domain.isEmpty())
@@ -65,11 +63,7 @@ public class RegistrationService {
 		String code = "%06d".formatted(secureRandom.nextInt(1_000_000));
 		verificationCodeRepository.save(new VerificationCode(email, sha256(code), VerificationPurpose.REGISTRATION,
 				now.plusSeconds(300), now));
-		SimpleMailMessage message = new SimpleMailMessage();
-		message.setTo(email);
-		message.setSubject("iBOM registration verification code");
-		message.setText("Your registration verification code is: " + code + ". It expires in 5 minutes.");
-		mailSender.send(message);
+		mailService.sendRegistrationVerificationCode(email, code);
 	}
 
 	@Transactional
