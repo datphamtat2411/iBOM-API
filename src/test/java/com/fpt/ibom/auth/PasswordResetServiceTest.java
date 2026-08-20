@@ -118,7 +118,7 @@ class PasswordResetServiceTest {
 		UserAccount user = user(UserStatus.INACTIVE);
 		VerificationCode code = code("123456", Instant.now().plusSeconds(300));
 		when(users.findByEmailIgnoreCaseForUpdate("user@example.com")).thenReturn(Optional.of(user));
-		when(codes.findFirstByEmailAndPurposeAndUsedAtIsNullOrderByCreatedAtDescForUpdate("user@example.com",
+		when(codes.findTopByEmailAndPurposeAndUsedAtIsNullOrderByCreatedAtDesc("user@example.com",
 				VerificationPurpose.PASSWORD_RESET)).thenReturn(Optional.of(code));
 		when(passwordEncoder.encode("Password1!")).thenReturn("new-bcrypt-hash");
 
@@ -136,7 +136,7 @@ class PasswordResetServiceTest {
 	@Test
 	void rejectsInvalidResetCodesBeforeChangingPassword() {
 		when(users.findByEmailIgnoreCaseForUpdate("user@example.com")).thenReturn(Optional.of(user(UserStatus.ACTIVE)));
-		when(codes.findFirstByEmailAndPurposeAndUsedAtIsNullOrderByCreatedAtDescForUpdate("user@example.com",
+		when(codes.findTopByEmailAndPurposeAndUsedAtIsNullOrderByCreatedAtDesc("user@example.com",
 				VerificationPurpose.PASSWORD_RESET)).thenReturn(Optional.of(code("123456", Instant.now().minusSeconds(1))));
 
 		ApiException exception = assertThrows(ApiException.class, () -> passwordResetService.resetPassword(

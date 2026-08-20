@@ -78,7 +78,7 @@ public class PasswordResetService {
 	public void resetPassword(PasswordResetRequest request) {
 		String email = normalizeEmail(request.email());
 		UserAccount user = userAccountRepository.findByEmailIgnoreCaseForUpdate(email).orElseThrow(this::invalidCode);
-		VerificationCode code = verificationCodeRepository.findFirstByEmailAndPurposeAndUsedAtIsNullOrderByCreatedAtDescForUpdate(
+		VerificationCode code = verificationCodeRepository.findTopByEmailAndPurposeAndUsedAtIsNullOrderByCreatedAtDesc(
 				email, VerificationPurpose.PASSWORD_RESET).orElseThrow(this::invalidCode);
 		if (!isValidCode(code, request.verificationCode())) {
 			throw invalidCode();
