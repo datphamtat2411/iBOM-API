@@ -62,6 +62,7 @@ public class UserAccount {
 	public String getUsername() { return username; }
 	public String getPasswordHash() { return passwordHash; }
 	public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
+	public void setUsername(String username) { this.username = username; }
 	public UserRole getRole() { return role; }
 	public UserStatus getStatus() { return status; }
 }

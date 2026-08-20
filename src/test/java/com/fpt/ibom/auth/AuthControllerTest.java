@@ -2,7 +2,9 @@ package com.fpt.ibom.auth;
 
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -25,6 +27,7 @@ import com.fpt.ibom.auth.security.UserAccountJwtAuthenticationConverter;
 import com.fpt.ibom.auth.service.LoginService;
 import com.fpt.ibom.auth.service.RegistrationService;
 import com.fpt.ibom.auth.service.PasswordResetService;
+import com.fpt.ibom.auth.service.AccountSettingsService;
 import com.fpt.ibom.config.SecurityConfig;
 import com.fpt.ibom.exception.ApiException;
 import org.junit.jupiter.api.Test;
@@ -54,6 +57,9 @@ class AuthControllerTest {
 
 	@MockitoBean
 	private PasswordResetService passwordResetService;
+
+	@MockitoBean
+	private AccountSettingsService accountSettingsService;
 
 	@MockitoBean
 	private JwtDecoder jwtDecoder;
@@ -221,6 +227,63 @@ class AuthControllerTest {
 	}
 
 	@Test
+	void requiresBearerTokenForAccountSettings() throws Exception {
+		mockMvc.perform(post("/api/auth/change-password").contentType("application/json")
+					.content("{\"currentPassword\":\"current-password\",\"newPassword\":\"new-password\"}"))
+				.andExpect(status().isUnauthorized());
+
+		mockMvc.perform(patch("/api/auth/username").contentType("application/json")
+					.content("{\"username\":\"new-member\"}"))
+				.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void changesPasswordForAuthenticatedPrincipalWithoutCsrfOrTokenChanges() throws Exception {
+		activeAccountFor("valid-token");
+
+		mockMvc.perform(post("/api/auth/change-password").header("Authorization", "Bearer valid-token")
+					.contentType("application/json")
+					.content("{\"currentPassword\":\"current-password\",\"newPassword\":\"new-password\"}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data").doesNotExist())
+				.andExpect(header().doesNotExist("Set-Cookie"));
+
+		verify(accountSettingsService).changePassword(1L,
+				new com.fpt.ibom.auth.dto.ChangePasswordRequest("current-password", "new-password"));
+		verifyNoInteractions(loginService);
+	}
+
+	@Test
+	void validatesNewPasswordPolicyForAuthenticatedPrincipal() throws Exception {
+		activeAccountFor("valid-token");
+
+		mockMvc.perform(post("/api/auth/change-password").header("Authorization", "Bearer valid-token")
+					.contentType("application/json")
+					.content("{\"currentPassword\":\"current-password\",\"newPassword\":\"short\"}"))
+				.andExpect(status().isBadRequest());
+
+		verifyNoInteractions(accountSettingsService);
+	}
+
+	@Test
+	void changesUsernameForAuthenticatedPrincipalWithoutCsrfOrTokenChanges() throws Exception {
+		activeAccountFor("valid-token");
+		when(accountSettingsService.changeUsername(1L, new com.fpt.ibom.auth.dto.ChangeUsernameRequest("NewMember")))
+				.thenReturn(new AuthenticatedUser(1L, "user@example.com", "NewMember", UserRole.MEMBER));
+
+		mockMvc.perform(patch("/api/auth/username").header("Authorization", "Bearer valid-token")
+					.contentType("application/json").content("{\"username\":\"NewMember\"}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.id").value(1))
+				.andExpect(jsonPath("$.data.email").value("user@example.com"))
+				.andExpect(jsonPath("$.data.username").value("NewMember"))
+				.andExpect(jsonPath("$.data.role").value("MEMBER"))
+				.andExpect(header().doesNotExist("Set-Cookie"));
+
+		verifyNoInteractions(loginService);
+	}
+
+	@Test
 	void permitsProtectedAccessWithValidJwt() throws Exception {
 		when(userAccountRepository.findById(1L)).thenReturn(Optional.of(new UserAccount("user@example.com", "member",
 				"hash", UserRole.MEMBER, UserStatus.ACTIVE)));
@@ -251,6 +314,12 @@ class AuthControllerTest {
 				.claim("username", "member")
 				.claim("role", role.name())
 				.build();
+	}
+
+	private void activeAccountFor(String token) {
+		when(userAccountRepository.findById(1L)).thenReturn(Optional.of(new UserAccount("user@example.com", "member",
+				"hash", UserRole.MEMBER, UserStatus.ACTIVE)));
+		when(jwtDecoder.decode(token)).thenReturn(accessToken(token, UserRole.MEMBER));
 	}
 
 	private LoginService.AuthenticationResult authenticationResult() {

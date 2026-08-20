@@ -5,6 +5,9 @@ import java.util.Base64;
 
 import com.fpt.ibom.auth.dto.LoginRequest;
 import com.fpt.ibom.auth.dto.LoginResponse;
+import com.fpt.ibom.auth.dto.ChangePasswordRequest;
+import com.fpt.ibom.auth.dto.ChangeUsernameRequest;
+import com.fpt.ibom.auth.dto.AuthenticatedUser;
 import com.fpt.ibom.auth.dto.PasswordResetCodeRequest;
 import com.fpt.ibom.auth.dto.PasswordResetCodeVerificationRequest;
 import com.fpt.ibom.auth.dto.PasswordResetRequest;
@@ -14,15 +17,19 @@ import com.fpt.ibom.auth.service.LoginService;
 import com.fpt.ibom.auth.service.LoginService.AuthenticationResult;
 import com.fpt.ibom.auth.service.RegistrationService;
 import com.fpt.ibom.auth.service.PasswordResetService;
+import com.fpt.ibom.auth.service.AccountSettingsService;
+import com.fpt.ibom.auth.security.UserPrincipal;
 import com.fpt.ibom.common.ApiResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -31,13 +38,15 @@ public class AuthController {
 	private final LoginService loginService;
 	private final RegistrationService registrationService;
 	private final PasswordResetService passwordResetService;
+	private final AccountSettingsService accountSettingsService;
 	private final SecureRandom secureRandom = new SecureRandom();
 
 	public AuthController(LoginService loginService, RegistrationService registrationService,
-			PasswordResetService passwordResetService) {
+			PasswordResetService passwordResetService, AccountSettingsService accountSettingsService) {
 		this.loginService = loginService;
 		this.registrationService = registrationService;
 		this.passwordResetService = passwordResetService;
+		this.accountSettingsService = accountSettingsService;
 	}
 
 	@PostMapping("/login")
@@ -119,5 +128,19 @@ public class AuthController {
 			@Valid @RequestBody PasswordResetRequest request) {
 		passwordResetService.resetPassword(request);
 		return org.springframework.http.ResponseEntity.ok(new ApiResponse<>(200, "Success", null));
+	}
+
+	@PostMapping("/change-password")
+	public org.springframework.http.ResponseEntity<ApiResponse<Void>> changePassword(
+			@AuthenticationPrincipal UserPrincipal principal, @Valid @RequestBody ChangePasswordRequest request) {
+		accountSettingsService.changePassword(principal.userId(), request);
+		return org.springframework.http.ResponseEntity.ok(new ApiResponse<>(200, "Success", null));
+	}
+
+	@PatchMapping("/username")
+	public org.springframework.http.ResponseEntity<ApiResponse<AuthenticatedUser>> changeUsername(
+			@AuthenticationPrincipal UserPrincipal principal, @Valid @RequestBody ChangeUsernameRequest request) {
+		AuthenticatedUser user = accountSettingsService.changeUsername(principal.userId(), request);
+		return org.springframework.http.ResponseEntity.ok(new ApiResponse<>(200, "Success", user));
 	}
 }
