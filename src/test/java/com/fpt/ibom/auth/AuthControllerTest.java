@@ -86,7 +86,8 @@ class AuthControllerTest {
 				.andExpect(header().string("Set-Cookie", org.hamcrest.Matchers.allOf(
 						org.hamcrest.Matchers.containsString("refresh_token=refresh-token"),
 						org.hamcrest.Matchers.containsString("HttpOnly"),
-						org.hamcrest.Matchers.containsString("Secure"))));
+						org.hamcrest.Matchers.containsString("Secure"),
+						org.hamcrest.Matchers.containsString("Path=/api/auth"))));
 	}
 
 	@Test
@@ -100,7 +101,8 @@ class AuthControllerTest {
 				.andExpect(header().stringValues("Set-Cookie", org.hamcrest.Matchers.hasItem(
 						org.hamcrest.Matchers.allOf(org.hamcrest.Matchers.containsString("XSRF-TOKEN="),
 								org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("HttpOnly")),
-								org.hamcrest.Matchers.containsString("Secure")))));
+								org.hamcrest.Matchers.containsString("Secure"),
+								org.hamcrest.Matchers.containsString("Path=/")))));
 	}
 
 	@Test
@@ -119,20 +121,32 @@ class AuthControllerTest {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.data.accessToken").value("access-token"))
 				.andExpect(header().stringValues("Set-Cookie", org.hamcrest.Matchers.hasItem(
-						org.hamcrest.Matchers.containsString("XSRF-TOKEN="))));
+						org.hamcrest.Matchers.allOf(org.hamcrest.Matchers.containsString("XSRF-TOKEN="),
+								org.hamcrest.Matchers.containsString("Path=/")))))
+				.andExpect(header().stringValues("Set-Cookie", org.hamcrest.Matchers.hasItem(
+						org.hamcrest.Matchers.allOf(org.hamcrest.Matchers.containsString("refresh_token=refresh-token"),
+								org.hamcrest.Matchers.containsString("Path=/api/auth")))));
 	}
 
 	@Test
-	void logoutIsCsrfProtectedAndClearsBothCookies() throws Exception {
+	void requiresCsrfHeaderForLogout() throws Exception {
+		mockMvc.perform(post("/api/auth/logout").cookie(new Cookie("refresh_token", "refresh-token")))
+				.andExpect(status().isForbidden());
+	}
+
+	@Test
+	void logoutClearsBothCookiesWithMatchingPaths() throws Exception {
 		mockMvc.perform(post("/api/auth/logout")
 					.cookie(new Cookie("XSRF-TOKEN", "csrf-token"))
 					.header("X-XSRF-TOKEN", "csrf-token"))
 				.andExpect(status().isOk())
 				.andExpect(header().stringValues("Set-Cookie", org.hamcrest.Matchers.hasItems(
 						org.hamcrest.Matchers.allOf(org.hamcrest.Matchers.containsString("refresh_token="),
-								org.hamcrest.Matchers.containsString("Max-Age=0")),
+								org.hamcrest.Matchers.containsString("Max-Age=0"),
+								org.hamcrest.Matchers.containsString("Path=/api/auth")),
 						org.hamcrest.Matchers.allOf(org.hamcrest.Matchers.containsString("XSRF-TOKEN="),
-								org.hamcrest.Matchers.containsString("Max-Age=0")))));
+								org.hamcrest.Matchers.containsString("Max-Age=0"),
+								org.hamcrest.Matchers.containsString("Path=/")))));
 		verify(loginService).logout(null);
 	}
 

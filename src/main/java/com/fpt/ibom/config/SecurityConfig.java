@@ -94,7 +94,7 @@ public class SecurityConfig {
 		CookieCsrfTokenRepository repository = CookieCsrfTokenRepository.withHttpOnlyFalse();
 		repository.setCookieName("XSRF-TOKEN");
 		repository.setHeaderName("X-XSRF-TOKEN");
-		repository.setCookieCustomizer(cookie -> cookie.path("/api/auth").secure(true).sameSite("Strict"));
+		repository.setCookieCustomizer(cookie -> cookie.path("/").secure(true).sameSite("Strict"));
 		return repository;
 	}
 

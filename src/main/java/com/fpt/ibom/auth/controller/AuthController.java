@@ -84,7 +84,7 @@ public class AuthController {
 	}
 
 	private ResponseCookie csrfCookie(String value, long maxAge) {
-		return ResponseCookie.from("XSRF-TOKEN", value).httpOnly(false).secure(true).path("/api/auth")
+		return ResponseCookie.from("XSRF-TOKEN", value).httpOnly(false).secure(true).path("/")
 				.maxAge(maxAge).sameSite("Strict").build();
 	}
 
