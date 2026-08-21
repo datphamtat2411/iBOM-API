@@ -23,6 +23,7 @@ import com.fpt.ibom.auth.repository.UserAccountRepository;
 import com.fpt.ibom.auth.repository.VerificationCodeRepository;
 import com.fpt.ibom.auth.service.RegistrationService;
 import com.fpt.ibom.exception.ApiException;
+import com.fpt.ibom.MySqlIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -30,7 +31,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest(properties = "app.auth.registration.allowed-domains=gmail.com")
-class VerificationCodeRepositoryIntegrationTest {
+class VerificationCodeRepositoryIntegrationTest extends MySqlIntegrationTest {
 
 	@Autowired
 	private VerificationCodeRepository verificationCodeRepository;

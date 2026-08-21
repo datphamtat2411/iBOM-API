@@ -35,6 +35,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -42,6 +43,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @WebMvcTest(controllers = AuthControllerTest.ProtectedController.class)
 @Import({AuthController.class, SecurityConfig.class, UserAccountJwtAuthenticationConverter.class, AuthControllerTest.ProtectedController.class})
+@ActiveProfiles("test")
 class AuthControllerTest {
 
 	@Autowired
