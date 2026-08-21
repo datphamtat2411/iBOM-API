@@ -17,6 +17,7 @@ import com.fpt.ibom.auth.entity.UserStatus;
 import com.fpt.ibom.auth.repository.UserAccountRepository;
 import com.fpt.ibom.auth.service.AccountSettingsService;
 import com.fpt.ibom.exception.ApiException;
+import com.fpt.ibom.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -55,6 +56,7 @@ class AccountSettingsServiceTest {
 				new ChangePasswordRequest("incorrect-password", "Password1!")));
 
 		assertEquals(HttpStatus.UNAUTHORIZED, exception.getStatus());
+		assertEquals(ErrorCode.AUTH_INCORRECT_CURRENT_PASSWORD, exception.getErrorCode());
 		assertEquals("Invalid credentials", exception.getMessage());
 		assertEquals("old-bcrypt-hash", user.getPasswordHash());
 		verify(passwordEncoder, never()).encode("Password1!");
@@ -97,6 +99,7 @@ class AccountSettingsServiceTest {
 				new ChangeUsernameRequest("OtherMember")));
 
 		assertEquals(HttpStatus.CONFLICT, exception.getStatus());
+		assertEquals(ErrorCode.AUTH_USERNAME_CONFLICT, exception.getErrorCode());
 		assertEquals("Username is already registered", exception.getMessage());
 		verify(users, never()).flush();
 	}
@@ -111,6 +114,7 @@ class AccountSettingsServiceTest {
 				new ChangeUsernameRequest("NewName")));
 
 		assertEquals(HttpStatus.CONFLICT, exception.getStatus());
+		assertEquals(ErrorCode.AUTH_USERNAME_CONFLICT, exception.getErrorCode());
 	}
 
 	private UserAccount user() {

@@ -19,6 +19,7 @@ import com.fpt.ibom.auth.entity.VerificationPurpose;
 import com.fpt.ibom.auth.repository.UserAccountRepository;
 import com.fpt.ibom.auth.repository.VerificationCodeRepository;
 import com.fpt.ibom.exception.ApiException;
+import com.fpt.ibom.exception.ErrorCode;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -58,7 +59,8 @@ public class RegistrationService {
 		Instant now = Instant.now();
 		if (verificationCodeRepository.countByEmailAndPurposeAndCreatedAtAfter(email, VerificationPurpose.REGISTRATION,
 				now.minusSeconds(3600)) >= MAX_SENDS_PER_HOUR) {
-			throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "Verification code request limit reached");
+			throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, ErrorCode.AUTH_VERIFICATION_CODE_REQUEST_LIMIT_REACHED,
+					"Verification code request limit reached");
 		}
 
 		String code = "%06d".formatted(secureRandom.nextInt(1_000_000));
@@ -73,10 +75,12 @@ public class RegistrationService {
 		String username = request.username().trim();
 		ensureAllowedDomain(email);
 		if (userAccountRepository.existsByEmailIgnoreCase(email)) {
-			throw new ApiException(HttpStatus.CONFLICT, "Email is already registered");
+			throw new ApiException(HttpStatus.CONFLICT, ErrorCode.AUTH_EMAIL_ALREADY_REGISTERED,
+					"Email is already registered");
 		}
 		if (userAccountRepository.existsByUsernameIgnoreCase(username)) {
-			throw new ApiException(HttpStatus.CONFLICT, "Username is already registered");
+			throw new ApiException(HttpStatus.CONFLICT, ErrorCode.AUTH_USERNAME_ALREADY_REGISTERED,
+					"Username is already registered");
 		}
 
 		VerificationCode verificationCode = verificationCodeRepository
@@ -90,7 +94,8 @@ public class RegistrationService {
 			userAccountRepository.saveAndFlush(new UserAccount(email, username, passwordEncoder.encode(request.password()),
 					UserRole.MEMBER, UserStatus.ACTIVE));
 		} catch (DataIntegrityViolationException exception) {
-			throw new ApiException(HttpStatus.CONFLICT, "Email or username is already registered");
+			throw new ApiException(HttpStatus.CONFLICT, ErrorCode.AUTH_EMAIL_OR_USERNAME_ALREADY_REGISTERED,
+					"Email or username is already registered");
 		}
 		verificationCode.use(Instant.now());
 	}
@@ -115,7 +120,8 @@ public class RegistrationService {
 	private void ensureAllowedDomain(String email) {
 		int at = email.lastIndexOf('@');
 		if (at < 1 || !allowedDomains.contains(email.substring(at + 1))) {
-			throw new ApiException(HttpStatus.BAD_REQUEST, "Email domain is not allowed");
+			throw new ApiException(HttpStatus.BAD_REQUEST, ErrorCode.AUTH_EMAIL_DOMAIN_NOT_ALLOWED,
+					"Email domain is not allowed");
 		}
 	}
 
@@ -136,7 +142,8 @@ public class RegistrationService {
 		private static final long serialVersionUID = 1L;
 
 		private InvalidRegistrationVerificationCodeException() {
-			super(HttpStatus.BAD_REQUEST, "Invalid or expired verification code");
+			super(HttpStatus.BAD_REQUEST, ErrorCode.AUTH_INVALID_OR_EXPIRED_VERIFICATION_CODE,
+					"Invalid or expired verification code");
 		}
 	}
 }

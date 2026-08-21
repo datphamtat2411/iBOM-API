@@ -16,6 +16,7 @@ import com.fpt.ibom.auth.repository.RefreshTokenRepository;
 import com.fpt.ibom.auth.repository.UserAccountRepository;
 import com.fpt.ibom.auth.repository.VerificationCodeRepository;
 import com.fpt.ibom.exception.ApiException;
+import com.fpt.ibom.exception.ErrorCode;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -49,7 +50,8 @@ public class PasswordResetService {
 		Instant now = Instant.now();
 		if (verificationCodeRepository.countByEmailAndPurposeAndCreatedAtAfter(email, VerificationPurpose.PASSWORD_RESET,
 				now.minusSeconds(3600)) >= MAX_SENDS_PER_HOUR) {
-			throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "Verification code request limit reached");
+			throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, ErrorCode.AUTH_VERIFICATION_CODE_REQUEST_LIMIT_REACHED,
+					"Verification code request limit reached");
 		}
 
 		String code = "%06d".formatted(secureRandom.nextInt(1_000_000));
@@ -101,7 +103,8 @@ public class PasswordResetService {
 	}
 
 	private ApiException invalidCode() {
-		return new ApiException(HttpStatus.BAD_REQUEST, "Invalid or expired verification code");
+		return new ApiException(HttpStatus.BAD_REQUEST, ErrorCode.AUTH_INVALID_OR_EXPIRED_VERIFICATION_CODE,
+				"Invalid or expired verification code");
 	}
 
 	private String normalizeEmail(String email) {

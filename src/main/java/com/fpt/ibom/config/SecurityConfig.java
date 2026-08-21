@@ -14,6 +14,7 @@ import com.nimbusds.jose.proc.SecurityContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fpt.ibom.auth.security.UserAccountJwtAuthenticationConverter;
 import com.fpt.ibom.common.ApiResponse;
+import com.fpt.ibom.exception.ErrorCode;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -123,6 +124,7 @@ public class SecurityConfig {
 	private void writeError(HttpServletResponse response, ObjectMapper objectMapper, HttpStatus status) throws IOException {
 		response.setStatus(status.value());
 		response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-		objectMapper.writeValue(response.getOutputStream(), new ApiResponse<>(status.value(), status.getReasonPhrase(), null));
+		objectMapper.writeValue(response.getOutputStream(),
+				new ApiResponse<>(status.value(), ErrorCode.REQUEST_FAILED, status.getReasonPhrase(), null));
 	}
 }

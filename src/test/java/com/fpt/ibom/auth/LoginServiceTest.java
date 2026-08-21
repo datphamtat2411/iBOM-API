@@ -21,6 +21,7 @@ import com.fpt.ibom.auth.repository.UserAccountRepository;
 import com.fpt.ibom.auth.security.JwtService;
 import com.fpt.ibom.auth.service.LoginService;
 import com.fpt.ibom.exception.ApiException;
+import com.fpt.ibom.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -59,6 +60,7 @@ class LoginServiceTest {
 				() -> loginService.authenticate(new LoginRequest("user@example.com", "incorrect-password")));
 
 		assertEquals(HttpStatus.UNAUTHORIZED, exception.getStatus());
+		assertEquals(ErrorCode.AUTH_INVALID_CREDENTIALS, exception.getErrorCode());
 		assertEquals("Invalid credentials", exception.getMessage());
 		verify(passwordEncoder).matches("incorrect-password", "$2a$12$C6UzMDM.H6dfI/f/IKcEeOeGxM1M8fM6mR8Xk1o9q0fPq8L9Qv7yW");
 	}
@@ -75,6 +77,7 @@ class LoginServiceTest {
 				() -> loginService.authenticate(new LoginRequest("user@example.com", "incorrect-password")));
 
 		assertEquals(HttpStatus.UNAUTHORIZED, exception.getStatus());
+		assertEquals(ErrorCode.AUTH_INVALID_CREDENTIALS, exception.getErrorCode());
 		assertEquals("Invalid credentials", exception.getMessage());
 		verify(passwordEncoder).matches("incorrect-password", passwordHash);
 	}
@@ -91,6 +94,7 @@ class LoginServiceTest {
 				() -> loginService.authenticate(new LoginRequest("user@example.com", "correct-password")));
 
 		assertEquals(HttpStatus.FORBIDDEN, exception.getStatus());
+		assertEquals(ErrorCode.AUTH_ACCOUNT_INACTIVE, exception.getErrorCode());
 	}
 
 	@Test
@@ -145,6 +149,7 @@ class LoginServiceTest {
 		ApiException exception = assertThrows(ApiException.class, () -> loginService.refresh("refresh-token"));
 
 		assertEquals(HttpStatus.UNAUTHORIZED, exception.getStatus());
+		assertEquals(ErrorCode.AUTH_INVALID_REFRESH_TOKEN, exception.getErrorCode());
 		assertEquals("Invalid refresh token", exception.getMessage());
 	}
 
@@ -163,6 +168,7 @@ class LoginServiceTest {
 	private void assertInvalidRefresh(String refreshToken) {
 		ApiException exception = assertThrows(ApiException.class, () -> loginService.refresh(refreshToken));
 		assertEquals(HttpStatus.UNAUTHORIZED, exception.getStatus());
+		assertEquals(ErrorCode.AUTH_INVALID_REFRESH_TOKEN, exception.getErrorCode());
 		assertEquals("Invalid refresh token", exception.getMessage());
 	}
 }

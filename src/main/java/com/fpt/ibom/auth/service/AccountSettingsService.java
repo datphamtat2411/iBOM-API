@@ -6,6 +6,7 @@ import com.fpt.ibom.auth.dto.ChangeUsernameRequest;
 import com.fpt.ibom.auth.entity.UserAccount;
 import com.fpt.ibom.auth.repository.UserAccountRepository;
 import com.fpt.ibom.exception.ApiException;
+import com.fpt.ibom.exception.ErrorCode;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -27,7 +28,8 @@ public class AccountSettingsService {
 	public void changePassword(Long userId, ChangePasswordRequest request) {
 		UserAccount user = account(userId);
 		if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
-			throw invalidCredentials();
+			throw new ApiException(HttpStatus.UNAUTHORIZED, ErrorCode.AUTH_INCORRECT_CURRENT_PASSWORD,
+					"Invalid credentials");
 		}
 		user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
 	}
@@ -54,10 +56,11 @@ public class AccountSettingsService {
 	}
 
 	private ApiException invalidCredentials() {
-		return new ApiException(HttpStatus.UNAUTHORIZED, "Invalid credentials");
+		return new ApiException(HttpStatus.UNAUTHORIZED, ErrorCode.AUTH_INVALID_CREDENTIALS, "Invalid credentials");
 	}
 
 	private ApiException usernameConflict() {
-		return new ApiException(HttpStatus.CONFLICT, "Username is already registered");
+		return new ApiException(HttpStatus.CONFLICT, ErrorCode.AUTH_USERNAME_CONFLICT,
+				"Username is already registered");
 	}
 }

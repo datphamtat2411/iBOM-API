@@ -28,6 +28,7 @@ import com.fpt.ibom.auth.service.PasswordResetService;
 import com.fpt.ibom.auth.service.AccountSettingsService;
 import com.fpt.ibom.config.SecurityConfig;
 import com.fpt.ibom.exception.ApiException;
+import com.fpt.ibom.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -153,25 +154,45 @@ class AuthControllerTest {
 	@Test
 	void returnsUnauthorizedForInvalidCredentials() throws Exception {
 		when(loginService.authenticate(new LoginRequest("user@example.com", "wrong-password")))
-				.thenThrow(new ApiException(HttpStatus.UNAUTHORIZED, "Invalid credentials"));
+				.thenThrow(new ApiException(HttpStatus.UNAUTHORIZED, ErrorCode.AUTH_INVALID_CREDENTIALS,
+						"Invalid credentials"));
 
 		mockMvc.perform(post("/api/auth/login")
 					.contentType("application/json")
 					.content("{\"email\":\"user@example.com\",\"password\":\"wrong-password\"}"))
 				.andExpect(status().isUnauthorized())
+				.andExpect(jsonPath("$.code").value(401))
+				.andExpect(jsonPath("$.errorCode").value("AUTH_INVALID_CREDENTIALS"))
 				.andExpect(jsonPath("$.message").value("Invalid credentials"));
 	}
 
 	@Test
 	void returnsForbiddenForInactiveAccount() throws Exception {
 		when(loginService.authenticate(new LoginRequest("user@example.com", "correct-password")))
-				.thenThrow(new ApiException(HttpStatus.FORBIDDEN, "Account is inactive"));
+				.thenThrow(new ApiException(HttpStatus.FORBIDDEN, ErrorCode.AUTH_ACCOUNT_INACTIVE,
+						"Account is inactive"));
 
 		mockMvc.perform(post("/api/auth/login")
 					.contentType("application/json")
 					.content("{\"email\":\"user@example.com\",\"password\":\"correct-password\"}"))
 				.andExpect(status().isForbidden())
+				.andExpect(jsonPath("$.errorCode").value("AUTH_ACCOUNT_INACTIVE"))
 				.andExpect(jsonPath("$.message").value("Account is inactive"));
+	}
+
+	@Test
+	void returnsDistinctUnauthorizedCodeForInvalidRefreshToken() throws Exception {
+		when(loginService.refresh("invalid-refresh-token"))
+				.thenThrow(new ApiException(HttpStatus.UNAUTHORIZED, ErrorCode.AUTH_INVALID_REFRESH_TOKEN,
+						"Invalid refresh token"));
+
+		mockMvc.perform(post("/api/auth/refresh-token")
+					.cookie(new Cookie("refresh_token", "invalid-refresh-token"), new Cookie("XSRF-TOKEN", "csrf-token"))
+					.header("X-XSRF-TOKEN", "csrf-token"))
+				.andExpect(status().isUnauthorized())
+				.andExpect(jsonPath("$.code").value(401))
+				.andExpect(jsonPath("$.errorCode").value("AUTH_INVALID_REFRESH_TOKEN"))
+				.andExpect(jsonPath("$.message").value("Invalid refresh token"));
 	}
 
 	@Test

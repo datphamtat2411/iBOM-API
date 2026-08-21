@@ -21,7 +21,7 @@ public class GlobalExceptionHandler {
 	public ResponseEntity<ApiResponse<Object>> handleApiException(ApiException exception) {
 		HttpStatus status = exception.getStatus();
 		return ResponseEntity.status(status)
-				.body(new ApiResponse<>(status.value(), exception.getMessage(), null));
+				.body(new ApiResponse<>(status.value(), exception.getErrorCode(), exception.getMessage(), null));
 	}
 
 	@ExceptionHandler(MethodArgumentNotValidException.class)
@@ -31,20 +31,22 @@ public class GlobalExceptionHandler {
 				.toList();
 		ValidationErrorResponse validationErrors = new ValidationErrorResponse(errors);
 		return ResponseEntity.badRequest()
-				.body(new ApiResponse<>(HttpStatus.BAD_REQUEST.value(), "Validation failed", validationErrors));
+				.body(new ApiResponse<>(HttpStatus.BAD_REQUEST.value(), ErrorCode.VALIDATION_ERROR, "Validation failed",
+						validationErrors));
 	}
 
 	@ExceptionHandler(ErrorResponseException.class)
 	public ResponseEntity<ApiResponse<Object>> handleErrorResponseException(ErrorResponseException exception) {
 		HttpStatusCode status = exception.getStatusCode();
 		return ResponseEntity.status(status)
-				.body(new ApiResponse<>(status.value(), messageFor(status), null));
+				.body(new ApiResponse<>(status.value(), ErrorCode.REQUEST_FAILED, messageFor(status), null));
 	}
 
 	@ExceptionHandler(Exception.class)
 	public ResponseEntity<ApiResponse<Object>> handleUnexpectedException(Exception exception) {
 		return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-				.body(new ApiResponse<>(HttpStatus.INTERNAL_SERVER_ERROR.value(), "Internal server error", null));
+				.body(new ApiResponse<>(HttpStatus.INTERNAL_SERVER_ERROR.value(), ErrorCode.INTERNAL_SERVER_ERROR,
+						"Internal server error", null));
 	}
 
 	private FieldViolation toFieldViolation(FieldError error) {

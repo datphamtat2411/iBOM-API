@@ -33,6 +33,7 @@ class SecurityBoundaryTest extends AbstractControllerTest {
 		mockMvc.perform(get("/test/protected"))
 				.andExpect(status().isUnauthorized())
 				.andExpect(jsonPath("$.code").value(401))
+				.andExpect(jsonPath("$.errorCode").value("REQUEST_FAILED"))
 				.andExpect(jsonPath("$.message").value("Unauthorized"))
 				.andExpect(jsonPath("$.data").doesNotExist())
 				.andExpect(jsonPath("$.timestamp").isNotEmpty());

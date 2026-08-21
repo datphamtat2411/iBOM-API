@@ -29,6 +29,7 @@ import com.fpt.ibom.auth.repository.UserAccountRepository;
 import com.fpt.ibom.auth.repository.VerificationCodeRepository;
 import com.fpt.ibom.auth.service.PasswordResetService;
 import com.fpt.ibom.exception.ApiException;
+import com.fpt.ibom.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
@@ -83,6 +84,8 @@ class PasswordResetServiceTest {
 				() -> passwordResetService.requestCode(new PasswordResetCodeRequest("unknown@example.com")));
 
 		assertEquals(HttpStatus.TOO_MANY_REQUESTS, existing.getStatus());
+		assertEquals(ErrorCode.AUTH_VERIFICATION_CODE_REQUEST_LIMIT_REACHED, existing.getErrorCode());
+		assertEquals(existing.getErrorCode(), unknown.getErrorCode());
 		assertEquals(existing.getMessage(), unknown.getMessage());
 	}
 
@@ -201,6 +204,7 @@ class PasswordResetServiceTest {
 				new PasswordResetRequest("user@example.com", "654321", "Password1!")));
 
 		assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
+		assertEquals(ErrorCode.AUTH_INVALID_OR_EXPIRED_VERIFICATION_CODE, exception.getErrorCode());
 		assertEquals(1, code.getFailedAttempts());
 		verify(passwordEncoder, never()).encode(any());
 		verify(refreshTokens, never()).revokeAllByUserId(any(), any());
@@ -216,6 +220,7 @@ class PasswordResetServiceTest {
 		ApiException exception = assertThrows(ApiException.class, () -> passwordResetService.verifyCode(
 				new PasswordResetCodeVerificationRequest(email, verificationCode)));
 		assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
+		assertEquals(ErrorCode.AUTH_INVALID_OR_EXPIRED_VERIFICATION_CODE, exception.getErrorCode());
 	}
 
 	private UserAccount user(UserStatus status) {

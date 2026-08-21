@@ -26,6 +26,7 @@ import com.fpt.ibom.auth.repository.UserAccountRepository;
 import com.fpt.ibom.auth.repository.VerificationCodeRepository;
 import com.fpt.ibom.auth.service.RegistrationService;
 import com.fpt.ibom.exception.ApiException;
+import com.fpt.ibom.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -62,6 +63,7 @@ class RegistrationServiceTest {
 				() -> registrationService.requestVerificationCode(new RegistrationCodeRequest("user@example.com")));
 
 		assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
+		assertEquals(ErrorCode.AUTH_EMAIL_DOMAIN_NOT_ALLOWED, exception.getErrorCode());
 		verify(mailService, never()).sendRegistrationVerificationCode(any(), any());
 	}
 
@@ -73,6 +75,7 @@ class RegistrationServiceTest {
 				() -> registrationService.requestVerificationCode(new RegistrationCodeRequest("user@gmail.com")));
 
 		assertEquals(HttpStatus.TOO_MANY_REQUESTS, exception.getStatus());
+		assertEquals(ErrorCode.AUTH_VERIFICATION_CODE_REQUEST_LIMIT_REACHED, exception.getErrorCode());
 	}
 
 	@Test
@@ -116,6 +119,7 @@ class RegistrationServiceTest {
 		ApiException exception = assertThrows(ApiException.class,
 				() -> registrationService.register(request("654321")));
 		assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
+		assertEquals(ErrorCode.AUTH_INVALID_OR_EXPIRED_VERIFICATION_CODE, exception.getErrorCode());
 		assertEquals(5, code.getFailedAttempts());
 		verify(users, never()).saveAndFlush(any());
 	}
@@ -125,11 +129,13 @@ class RegistrationServiceTest {
 		when(users.existsByEmailIgnoreCase("user@gmail.com")).thenReturn(true);
 		ApiException emailException = assertThrows(ApiException.class, () -> registrationService.register(request()));
 		assertEquals(HttpStatus.CONFLICT, emailException.getStatus());
+		assertEquals(ErrorCode.AUTH_EMAIL_ALREADY_REGISTERED, emailException.getErrorCode());
 
 		when(users.existsByEmailIgnoreCase("user@gmail.com")).thenReturn(false);
 		when(users.existsByUsernameIgnoreCase("member")).thenReturn(true);
 		ApiException usernameException = assertThrows(ApiException.class, () -> registrationService.register(request()));
 		assertEquals(HttpStatus.CONFLICT, usernameException.getStatus());
+		assertEquals(ErrorCode.AUTH_USERNAME_ALREADY_REGISTERED, usernameException.getErrorCode());
 	}
 
 	@Test
@@ -165,12 +171,14 @@ class RegistrationServiceTest {
 		ApiException exception = assertThrows(ApiException.class, () -> registrationService.register(request()));
 
 		assertEquals(HttpStatus.CONFLICT, exception.getStatus());
+		assertEquals(ErrorCode.AUTH_EMAIL_OR_USERNAME_ALREADY_REGISTERED, exception.getErrorCode());
 		assertNull(code.getUsedAt());
 	}
 
 	private void assertInvalidCode() {
 		ApiException exception = assertThrows(ApiException.class, () -> registrationService.register(request()));
 		assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
+		assertEquals(ErrorCode.AUTH_INVALID_OR_EXPIRED_VERIFICATION_CODE, exception.getErrorCode());
 	}
 
 	private RegistrationRequest request() {

@@ -25,7 +25,19 @@ Success and error responses use the common wrapper:
 }
 ```
 
-The wrapper fields are `code`, `message`, `data`, and `timestamp`; use `code`, not `status`. Validation failures and handled API exceptions follow this shape.
+Error responses additionally include a stable machine-readable `errorCode`:
+
+```json
+{
+  "code": 409,
+  "errorCode": "AUTH_EMAIL_ALREADY_REGISTERED",
+  "message": "Email is already registered",
+  "data": null,
+  "timestamp": "..."
+}
+```
+
+Use `code`, not `status`, for the HTTP status code. Frontend logic should use `errorCode` as the programmatic error identifier; `message` is human-readable and its wording may change. Error codes are added incrementally when new business behavior is implemented.
 
 ## HTTP Semantics
 

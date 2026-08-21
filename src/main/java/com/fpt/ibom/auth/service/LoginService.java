@@ -16,6 +16,7 @@ import com.fpt.ibom.auth.repository.RefreshTokenRepository;
 import com.fpt.ibom.auth.repository.UserAccountRepository;
 import com.fpt.ibom.auth.security.JwtService;
 import com.fpt.ibom.exception.ApiException;
+import com.fpt.ibom.exception.ErrorCode;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -49,14 +50,14 @@ public class LoginService {
 		var userOptional = userAccountRepository.findByEmailIgnoreCase(normalizeEmail(request.email()));
 		if (userOptional.isEmpty()) {
 			passwordEncoder.matches(request.password(), DUMMY_PASSWORD_HASH);
-			throw new ApiException(HttpStatus.UNAUTHORIZED, "Invalid credentials");
+			throw new ApiException(HttpStatus.UNAUTHORIZED, ErrorCode.AUTH_INVALID_CREDENTIALS, "Invalid credentials");
 		}
 		UserAccount user = userOptional.get();
 		if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
-			throw new ApiException(HttpStatus.UNAUTHORIZED, "Invalid credentials");
+			throw new ApiException(HttpStatus.UNAUTHORIZED, ErrorCode.AUTH_INVALID_CREDENTIALS, "Invalid credentials");
 		}
 		if (user.getStatus() != UserStatus.ACTIVE) {
-			throw new ApiException(HttpStatus.FORBIDDEN, "Account is inactive");
+			throw new ApiException(HttpStatus.FORBIDDEN, ErrorCode.AUTH_ACCOUNT_INACTIVE, "Account is inactive");
 		}
 
 		return createAuthenticationResult(user);
@@ -95,7 +96,7 @@ public class LoginService {
 	}
 
 	private ApiException invalidRefreshToken() {
-		return new ApiException(HttpStatus.UNAUTHORIZED, "Invalid refresh token");
+		return new ApiException(HttpStatus.UNAUTHORIZED, ErrorCode.AUTH_INVALID_REFRESH_TOKEN, "Invalid refresh token");
 	}
 
 	private String generateRefreshToken() {
