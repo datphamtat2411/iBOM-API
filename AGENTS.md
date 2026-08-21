@@ -59,7 +59,11 @@ Read docs only when routed by `plan.md` or required to proceed safely.
 Implement only the approved scope.
 Add or update tests relevant to the changed behavior.
 
-After implementation, run one focused test command covering the changed behavior.
+After implementation, run only the tests directly relevant to the task and changed behavior.
+
+Do not run the full repository test suite, full module test suite, or unrelated tests unless explicitly required by the active prompt or justified in `plan.md`.
+
+Prefer the narrowest test command that provides meaningful coverage of the change.
 
 Do not run tests before implementation unless reproducing a reported failure is required.
 
