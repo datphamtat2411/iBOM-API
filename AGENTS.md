@@ -69,7 +69,8 @@ Do not run tests before implementation unless reproducing a reported failure is 
 
 If the focused test passes:
 
-* run no additional verification;
+* do not run any additional or broader tests;
+* do not perform any other verification;
 * run one final `git status --short`;
 * report and stop.
 
