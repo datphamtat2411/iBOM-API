@@ -1,10 +1,10 @@
 name: CI
 
 on:
-  pull_request:
-    branches:
-      - develop
   push:
+    branches:
+      - '**'
+  pull_request:
     branches:
       - develop
   workflow_dispatch:
@@ -31,4 +31,4 @@ jobs:
         run: chmod +x mvnw
 
       - name: Run tests
-        run: ./mvnw test
+        run: ./mvnw --batch-mode clean verify
