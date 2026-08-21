@@ -17,7 +17,7 @@ public abstract class MySqlIntegrationTest {
 		@Bean
 		@ServiceConnection
 		MySQLContainer<?> mysqlContainer() {
-			return new MySQLContainer<>("mysql:8.4")
+			return new MySQLContainer<>("mysql:8.0.46")
 					.withDatabaseName("ibom_test")
 					.withUsername("ibom_test")
 					.withPassword("ibom_test_password");
