@@ -28,7 +28,7 @@ PLAN owns discovery and task-specific decisions.
 
 Inspect only task-relevant source, tests, configuration, migrations, and documentation.
 
-Keep `plan.md` concise.
+Keep `plan` concise.
 
 Prefer:
 
@@ -99,23 +99,6 @@ BUILD reports only:
 * changes made;
 * focused test result;
 * blockers or deviations.
-
-## REVIEW
-
-REVIEW owns verification, not implementation.
-
-Review `plan.md`, the relevant Git diff, affected source, and tests.
-
-Prioritize:
-
-* correctness;
-* security;
-* data integrity;
-* regressions;
-* scope deviations;
-* missing meaningful tests.
-
-Do not modify implementation unless explicitly requested.
 
 ## Git
 
