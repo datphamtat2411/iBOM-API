@@ -2,6 +2,7 @@ package com.fpt.ibom.auth;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -68,15 +69,11 @@ class RegistrationServiceTest {
 	}
 
 	@Test
-	void rejectsCaseInsensitiveExistingEmailBeforeCreatingOrSendingCode() {
+	void silentlyCompletesForCaseInsensitiveExistingEmailWithoutCreatingOrSendingCode() {
 		when(users.existsByEmailIgnoreCase("user@gmail.com")).thenReturn(true);
 
-		ApiException exception = assertThrows(ApiException.class,
+		assertDoesNotThrow(
 				() -> registrationService.requestVerificationCode(new RegistrationCodeRequest(" User@GMAIL.COM ")));
-
-		assertEquals(HttpStatus.CONFLICT, exception.getStatus());
-		assertEquals(ErrorCode.AUTH_EMAIL_ALREADY_REGISTERED, exception.getErrorCode());
-		assertEquals("Email is already registered", exception.getMessage());
 		verify(codes, never()).save(any());
 		verify(mailService, never()).sendRegistrationVerificationCode(any(), any());
 	}
