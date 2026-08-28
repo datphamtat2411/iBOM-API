@@ -56,6 +56,10 @@ public class RegistrationService {
 	public void requestVerificationCode(RegistrationCodeRequest request) {
 		String email = normalizeEmail(request.email());
 		ensureAllowedDomain(email);
+		if (userAccountRepository.existsByEmailIgnoreCase(email)) {
+			throw new ApiException(HttpStatus.CONFLICT, ErrorCode.AUTH_EMAIL_ALREADY_REGISTERED,
+					"Email is already registered");
+		}
 		Instant now = Instant.now();
 		if (verificationCodeRepository.countByEmailAndPurposeAndCreatedAtAfter(email, VerificationPurpose.REGISTRATION,
 				now.minusSeconds(3600)) >= MAX_SENDS_PER_HOUR) {

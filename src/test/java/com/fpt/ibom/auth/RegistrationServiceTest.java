@@ -68,6 +68,20 @@ class RegistrationServiceTest {
 	}
 
 	@Test
+	void rejectsCaseInsensitiveExistingEmailBeforeCreatingOrSendingCode() {
+		when(users.existsByEmailIgnoreCase("user@gmail.com")).thenReturn(true);
+
+		ApiException exception = assertThrows(ApiException.class,
+				() -> registrationService.requestVerificationCode(new RegistrationCodeRequest(" User@GMAIL.COM ")));
+
+		assertEquals(HttpStatus.CONFLICT, exception.getStatus());
+		assertEquals(ErrorCode.AUTH_EMAIL_ALREADY_REGISTERED, exception.getErrorCode());
+		assertEquals("Email is already registered", exception.getMessage());
+		verify(codes, never()).save(any());
+		verify(mailService, never()).sendRegistrationVerificationCode(any(), any());
+	}
+
+	@Test
 	void limitsCodeRequestsToFivePerHour() {
 		when(codes.countByEmailAndPurposeAndCreatedAtAfter(any(), eq(VerificationPurpose.REGISTRATION), any())).thenReturn(5L);
 
