@@ -6,7 +6,10 @@ import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.exception.ErrorCode;
 import com.fpt.ibom.profile.dto.ProfileRequest;
 import com.fpt.ibom.profile.dto.ProfileResponse;
+import com.fpt.ibom.profile.dto.ProfileDetailResponse;
+import com.fpt.ibom.profile.dto.ProfileSummaryResponse;
 import com.fpt.ibom.profile.entity.Profile;
+import java.util.List;
 import com.fpt.ibom.profile.repository.ProfileRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -39,6 +42,18 @@ public class ProfileService {
 		}
 	}
 
+	@Transactional(readOnly = true)
+	public List<ProfileSummaryResponse> list(Long userId) {
+		return profileRepository.findByUserIdAndDeletedAtIsNullOrderByUpdatedAtDescIdDesc(userId).stream()
+				.map(ProfileSummaryResponse::from).toList();
+	}
+
+	@Transactional(readOnly = true)
+	public ProfileDetailResponse get(Long userId, Long profileId) {
+		return profileRepository.findByIdAndUserIdAndDeletedAtIsNull(profileId, userId)
+				.map(ProfileDetailResponse::from).orElseThrow(this::profileNotFound);
+	}
+
 	private ApiException duplicateName() {
 		return new ApiException(HttpStatus.CONFLICT, ErrorCode.PROFILE_NAME_ALREADY_EXISTS,
 				"Profile name is already in use");
@@ -46,5 +61,9 @@ public class ProfileService {
 
 	private ApiException invalidUser() {
 		return new ApiException(HttpStatus.UNAUTHORIZED, ErrorCode.AUTH_INVALID_CREDENTIALS, "Invalid credentials");
+	}
+
+	private ApiException profileNotFound() {
+		return new ApiException(HttpStatus.NOT_FOUND, ErrorCode.PROFILE_NOT_FOUND, "Profile not found");
 	}
 }
