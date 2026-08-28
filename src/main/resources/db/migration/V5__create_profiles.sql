@@ -1,0 +1,22 @@
+CREATE TABLE profiles (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    user_id BIGINT NOT NULL,
+    profile_name VARCHAR(100) NOT NULL,
+    full_name VARCHAR(255) NOT NULL,
+    job_title VARCHAR(255) NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    phone_number VARCHAR(50) NOT NULL,
+    address VARCHAR(500) NOT NULL,
+    years_of_experience DECIMAL(5,2) NOT NULL,
+    has_previewed BOOLEAN NOT NULL DEFAULT FALSE,
+    deleted_at TIMESTAMP(6) NULL,
+    version BIGINT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP(6) NOT NULL,
+    updated_at TIMESTAMP(6) NOT NULL,
+    active_profile_name VARCHAR(100) GENERATED ALWAYS AS (CASE WHEN deleted_at IS NULL THEN LOWER(profile_name) ELSE NULL END) STORED,
+    PRIMARY KEY (id),
+    KEY idx_profiles_user_id (user_id),
+    UNIQUE KEY uk_profiles_user_active_name (user_id, active_profile_name),
+    CONSTRAINT fk_profiles_user FOREIGN KEY (user_id) REFERENCES users (id),
+    CONSTRAINT chk_profiles_years_of_experience CHECK (years_of_experience >= 0)
+);
