@@ -43,15 +43,16 @@ public class SecurityConfig {
 	SecurityFilterChain securityFilterChain(
 			HttpSecurity http,
 			ObjectMapper objectMapper,
-			UserAccountJwtAuthenticationConverter jwtAuthenticationConverter
-	) throws Exception {
+			UserAccountJwtAuthenticationConverter jwtAuthenticationConverter,
+			@Value("${app.auth.cookies.secure:true}") boolean secureCookies
+		) throws Exception {
 
 		CsrfTokenRequestAttributeHandler csrfRequestHandler =
 				new CsrfTokenRequestAttributeHandler();
 
 		return http
 				.csrf(csrf -> csrf
-						.csrfTokenRepository(csrfTokenRepository())
+						.csrfTokenRepository(csrfTokenRepository(secureCookies))
 						.csrfTokenRequestHandler(csrfRequestHandler)
 						.requireCsrfProtectionMatcher(
 								new OrRequestMatcher(
@@ -91,11 +92,11 @@ public class SecurityConfig {
 				.build();
 	}
 
-	private CookieCsrfTokenRepository csrfTokenRepository() {
+	private CookieCsrfTokenRepository csrfTokenRepository(boolean secureCookies) {
 		CookieCsrfTokenRepository repository = CookieCsrfTokenRepository.withHttpOnlyFalse();
 		repository.setCookieName("XSRF-TOKEN");
 		repository.setHeaderName("X-XSRF-TOKEN");
-		repository.setCookieCustomizer(cookie -> cookie.path("/").secure(true).sameSite("Strict"));
+		repository.setCookieCustomizer(cookie -> cookie.path("/").secure(secureCookies).sameSite("Strict"));
 		return repository;
 	}
 

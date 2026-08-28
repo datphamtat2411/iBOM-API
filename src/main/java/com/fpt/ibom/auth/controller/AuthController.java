@@ -23,6 +23,7 @@ import com.fpt.ibom.common.ApiResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -39,14 +40,17 @@ public class AuthController {
 	private final RegistrationService registrationService;
 	private final PasswordResetService passwordResetService;
 	private final AccountSettingsService accountSettingsService;
+	private final boolean secureCookies;
 	private final SecureRandom secureRandom = new SecureRandom();
 
 	public AuthController(LoginService loginService, RegistrationService registrationService,
-			PasswordResetService passwordResetService, AccountSettingsService accountSettingsService) {
+			PasswordResetService passwordResetService, AccountSettingsService accountSettingsService,
+			@Value("${app.auth.cookies.secure:true}") boolean secureCookies) {
 		this.loginService = loginService;
 		this.registrationService = registrationService;
 		this.passwordResetService = passwordResetService;
 		this.accountSettingsService = accountSettingsService;
+		this.secureCookies = secureCookies;
 	}
 
 	@PostMapping("/login")
@@ -79,12 +83,12 @@ public class AuthController {
 	}
 
 	private ResponseCookie refreshCookie(String value, long maxAge) {
-		return ResponseCookie.from("refresh_token", value).httpOnly(true).secure(true).path("/api/auth")
+		return ResponseCookie.from("refresh_token", value).httpOnly(true).secure(secureCookies).path("/api/auth")
 				.maxAge(maxAge).sameSite("Strict").build();
 	}
 
 	private ResponseCookie csrfCookie(String value, long maxAge) {
-		return ResponseCookie.from("XSRF-TOKEN", value).httpOnly(false).secure(true).path("/")
+		return ResponseCookie.from("XSRF-TOKEN", value).httpOnly(false).secure(secureCookies).path("/")
 				.maxAge(maxAge).sameSite("Strict").build();
 	}
 

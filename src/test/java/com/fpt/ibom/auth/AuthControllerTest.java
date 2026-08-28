@@ -37,6 +37,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -45,6 +46,7 @@ import org.springframework.web.bind.annotation.RestController;
 @WebMvcTest(controllers = AuthControllerTest.ProtectedController.class)
 @Import({AuthController.class, SecurityConfig.class, UserAccountJwtAuthenticationConverter.class, AuthControllerTest.ProtectedController.class})
 @ActiveProfiles("test")
+@TestPropertySource(properties = "app.auth.cookies.secure=false")
 class AuthControllerTest {
 
 	@Autowired
@@ -87,8 +89,10 @@ class AuthControllerTest {
 				.andExpect(header().string("Set-Cookie", org.hamcrest.Matchers.allOf(
 						org.hamcrest.Matchers.containsString("refresh_token=refresh-token"),
 						org.hamcrest.Matchers.containsString("HttpOnly"),
-						org.hamcrest.Matchers.containsString("Secure"),
-						org.hamcrest.Matchers.containsString("Path=/api/auth"))));
+						org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("Secure")),
+						org.hamcrest.Matchers.containsString("Path=/api/auth"),
+						org.hamcrest.Matchers.containsString("SameSite=Strict"),
+						org.hamcrest.Matchers.containsString("Max-Age=604800"))));
 	}
 
 	@Test
@@ -102,8 +106,10 @@ class AuthControllerTest {
 				.andExpect(header().stringValues("Set-Cookie", org.hamcrest.Matchers.hasItem(
 						org.hamcrest.Matchers.allOf(org.hamcrest.Matchers.containsString("XSRF-TOKEN="),
 								org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("HttpOnly")),
-								org.hamcrest.Matchers.containsString("Secure"),
-								org.hamcrest.Matchers.containsString("Path=/")))));
+								org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("Secure")),
+								org.hamcrest.Matchers.containsString("Path=/"),
+								org.hamcrest.Matchers.containsString("SameSite=Strict"),
+								org.hamcrest.Matchers.containsString("Max-Age=604800")))));
 	}
 
 	@Test
@@ -123,10 +129,14 @@ class AuthControllerTest {
 				.andExpect(jsonPath("$.data.accessToken").value("access-token"))
 				.andExpect(header().stringValues("Set-Cookie", org.hamcrest.Matchers.hasItem(
 						org.hamcrest.Matchers.allOf(org.hamcrest.Matchers.containsString("XSRF-TOKEN="),
-								org.hamcrest.Matchers.containsString("Path=/")))))
+								org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("Secure")),
+								org.hamcrest.Matchers.containsString("Path=/"),
+								org.hamcrest.Matchers.containsString("SameSite=Strict")))))
 				.andExpect(header().stringValues("Set-Cookie", org.hamcrest.Matchers.hasItem(
 						org.hamcrest.Matchers.allOf(org.hamcrest.Matchers.containsString("refresh_token=refresh-token"),
-								org.hamcrest.Matchers.containsString("Path=/api/auth")))));
+								org.hamcrest.Matchers.containsString("Path=/api/auth"),
+								org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("Secure")),
+								org.hamcrest.Matchers.containsString("SameSite=Strict")))));
 	}
 
 	@Test
@@ -144,10 +154,14 @@ class AuthControllerTest {
 				.andExpect(header().stringValues("Set-Cookie", org.hamcrest.Matchers.hasItems(
 						org.hamcrest.Matchers.allOf(org.hamcrest.Matchers.containsString("refresh_token="),
 								org.hamcrest.Matchers.containsString("Max-Age=0"),
-								org.hamcrest.Matchers.containsString("Path=/api/auth")),
+								org.hamcrest.Matchers.containsString("Path=/api/auth"),
+								org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("Secure")),
+								org.hamcrest.Matchers.containsString("HttpOnly")),
 						org.hamcrest.Matchers.allOf(org.hamcrest.Matchers.containsString("XSRF-TOKEN="),
 								org.hamcrest.Matchers.containsString("Max-Age=0"),
-								org.hamcrest.Matchers.containsString("Path=/")))));
+								org.hamcrest.Matchers.containsString("Path=/"),
+								org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("Secure")),
+								org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("HttpOnly"))))));
 		verify(loginService).logout(null);
 	}
 
