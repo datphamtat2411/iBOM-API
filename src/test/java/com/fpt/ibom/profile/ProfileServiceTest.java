@@ -7,6 +7,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doThrow;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -19,6 +20,7 @@ import com.fpt.ibom.auth.repository.UserAccountRepository;
 import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.exception.ErrorCode;
 import com.fpt.ibom.profile.dto.ProfileRequest;
+import com.fpt.ibom.profile.dto.ProfileUpdateRequest;
 import com.fpt.ibom.profile.dto.ProfileDetailResponse;
 import com.fpt.ibom.profile.dto.ProfileSummaryResponse;
 import com.fpt.ibom.profile.entity.Profile;
@@ -27,6 +29,7 @@ import com.fpt.ibom.profile.service.ProfileService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
 class ProfileServiceTest {
 	private final ProfileRepository profiles = mock(ProfileRepository.class);
@@ -105,6 +108,64 @@ class ProfileServiceTest {
 		assertEquals(ErrorCode.PROFILE_NOT_FOUND, exception.getErrorCode());
 	}
 
+	@Test
+	void updatesOwnedProfileAndResetsPreviewState() {
+		Profile profile = new Profile(user(), "Default", "Full Name", "Engineer", "user@example.com", "0123456789",
+				"Address", new BigDecimal("3.5"));
+		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profiles.existsByUserIdAndDeletedAtIsNullAndProfileNameIgnoreCaseAndIdNot(7L, "Updated", 8L))
+				.thenReturn(false);
+		when(profiles.saveAndFlush(profile)).thenReturn(profile);
+
+		ProfileDetailResponse result = service.update(7L, 8L, updateRequest(0L));
+
+		assertEquals("Updated", result.profileName());
+		assertEquals("First", result.firstName());
+		assertEquals("Last", result.lastName());
+		assertEquals("Technical summary", result.technicalSummary());
+		assertEquals(false, result.hasPreviewed());
+	}
+
+	@Test
+	void rejectsStaleProfileVersionBeforeMutation() {
+		Profile profile = new Profile(user(), "Default", "Full Name", "Engineer", "user@example.com", "0123456789",
+				"Address", new BigDecimal("3.5"));
+		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+
+		ApiException exception = assertThrows(ApiException.class, () -> service.update(7L, 8L, updateRequest(1L)));
+
+		assertEquals(HttpStatus.CONFLICT, exception.getStatus());
+		assertEquals(ErrorCode.PROFILE_VERSION_CONFLICT, exception.getErrorCode());
+		verify(profiles, never()).saveAndFlush(any());
+	}
+
+	@Test
+	void translatesConcurrentOptimisticLockFailure() {
+		Profile profile = new Profile(user(), "Default", "Full Name", "Engineer", "user@example.com", "0123456789",
+				"Address", new BigDecimal("3.5"));
+		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profiles.existsByUserIdAndDeletedAtIsNullAndProfileNameIgnoreCaseAndIdNot(7L, "Updated", 8L))
+				.thenReturn(false);
+		doThrow(new ObjectOptimisticLockingFailureException(Profile.class, 8L)).when(profiles).saveAndFlush(profile);
+
+		ApiException exception = assertThrows(ApiException.class, () -> service.update(7L, 8L, updateRequest(0L)));
+
+		assertEquals(ErrorCode.PROFILE_VERSION_CONFLICT, exception.getErrorCode());
+	}
+
+	@Test
+	void rejectsDuplicateNameExcludingCurrentProfile() {
+		Profile profile = new Profile(user(), "Default", "Full Name", "Engineer", "user@example.com", "0123456789",
+				"Address", new BigDecimal("3.5"));
+		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profiles.existsByUserIdAndDeletedAtIsNullAndProfileNameIgnoreCaseAndIdNot(7L, "Updated", 8L))
+				.thenReturn(true);
+
+		ApiException exception = assertThrows(ApiException.class, () -> service.update(7L, 8L, updateRequest(0L)));
+
+		assertEquals(ErrorCode.PROFILE_NAME_ALREADY_EXISTS, exception.getErrorCode());
+	}
+
 	private UserAccount user() {
 		return new UserAccount("user@example.com", "member", "hash", UserRole.MEMBER, UserStatus.ACTIVE);
 	}
@@ -112,5 +173,10 @@ class ProfileServiceTest {
 	private ProfileRequest request() {
 		return new ProfileRequest(" Default ", "Full Name", "Engineer", "user@example.com", "0123456789",
 				"Address", new BigDecimal("3.5"));
+	}
+
+	private ProfileUpdateRequest updateRequest(Long version) {
+		return new ProfileUpdateRequest(" Updated ", " First ", " Last ", " Developer ", new BigDecimal("0.5"),
+				" Friendly ", " Technical summary ", version);
 	}
 }

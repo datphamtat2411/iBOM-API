@@ -3,6 +3,7 @@ package com.fpt.ibom.profile;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -23,6 +24,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.ActiveProfiles;
@@ -77,6 +79,29 @@ class ProfileControllerTest {
 				"Profile not found"));
 		mockMvc.perform(get("/api/profiles/9").with(principal())).andExpect(status().isNotFound())
 				.andExpect(jsonPath("$.errorCode").value("PROFILE_NOT_FOUND"));
+	}
+
+	@Test
+	void updatesProfileForAuthenticatedOwner() throws Exception {
+		when(profileService.update(org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.eq(8L),
+				org.mockito.ArgumentMatchers.any())).thenReturn(new ProfileDetailResponse(8L, "Updated", "Full Name",
+					"First", "Last", "Developer", "Friendly", "Technical summary", "user@example.com",
+					"0123456789", "Address", null, false, 1L, null, null));
+
+		mockMvc.perform(put("/api/profiles/8").with(principal()).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"profileName\":\"Updated\",\"firstName\":\"First\",\"lastName\":\"Last\","
+						+ "\"jobTitle\":\"Developer\",\"yearsOfExperience\":0,\"personality\":\"Friendly\","
+						+ "\"technicalSummary\":\"Technical summary\",\"version\":0}"))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.code").value(200))
+				.andExpect(jsonPath("$.data.profileName").value("Updated"))
+				.andExpect(jsonPath("$.data.firstName").value("First"))
+				.andExpect(jsonPath("$.data.version").value(1));
+	}
+
+	@Test
+	void requiresAuthenticationForProfileUpdate() throws Exception {
+		mockMvc.perform(put("/api/profiles/8").contentType(MediaType.APPLICATION_JSON).content("{}"))
+				.andExpect(status().isUnauthorized());
 	}
 
 	private org.springframework.test.web.servlet.request.RequestPostProcessor principal() {

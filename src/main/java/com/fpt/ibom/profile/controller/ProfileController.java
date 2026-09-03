@@ -4,6 +4,7 @@ import com.fpt.ibom.auth.security.UserPrincipal;
 import com.fpt.ibom.common.ApiResponse;
 import com.fpt.ibom.profile.dto.ProfileRequest;
 import com.fpt.ibom.profile.dto.ProfileResponse;
+import com.fpt.ibom.profile.dto.ProfileUpdateRequest;
 import com.fpt.ibom.profile.dto.ProfileDetailResponse;
 import com.fpt.ibom.profile.dto.ProfileSummaryResponse;
 import com.fpt.ibom.profile.service.ProfileService;
@@ -12,6 +13,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -44,5 +46,12 @@ public class ProfileController {
 	public ResponseEntity<ApiResponse<ProfileDetailResponse>> get(@AuthenticationPrincipal UserPrincipal principal,
 			@PathVariable Long profileId) {
 		return ResponseEntity.ok(new ApiResponse<>(200, "Success", profileService.get(principal.userId(), profileId)));
+	}
+
+	@PutMapping("/{profileId}")
+	public ResponseEntity<ApiResponse<ProfileDetailResponse>> update(@AuthenticationPrincipal UserPrincipal principal,
+			@PathVariable Long profileId, @Valid @RequestBody ProfileUpdateRequest request) {
+		return ResponseEntity.ok(new ApiResponse<>(200, "Success",
+				profileService.update(principal.userId(), profileId, request)));
 	}
 }

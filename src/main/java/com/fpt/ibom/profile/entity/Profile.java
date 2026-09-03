@@ -33,8 +33,16 @@ public class Profile {
 	private String profileName;
 	@Column(name = "full_name", nullable = false)
 	private String fullName;
+	@Column(name = "first_name")
+	private String firstName;
+	@Column(name = "last_name")
+	private String lastName;
 	@Column(name = "job_title", nullable = false)
 	private String jobTitle;
+	@Column
+	private String personality;
+	@Column(name = "technical_summary")
+	private String technicalSummary;
 	@Column(nullable = false)
 	private String email;
 	@Column(name = "phone_number", nullable = false, length = 50)
@@ -76,7 +84,11 @@ public class Profile {
 	public UserAccount getUser() { return user; }
 	public String getProfileName() { return profileName; }
 	public String getFullName() { return fullName; }
+	public String getFirstName() { return firstName; }
+	public String getLastName() { return lastName; }
 	public String getJobTitle() { return jobTitle; }
+	public String getPersonality() { return personality; }
+	public String getTechnicalSummary() { return technicalSummary; }
 	public String getEmail() { return email; }
 	public String getPhoneNumber() { return phoneNumber; }
 	public String getAddress() { return address; }
@@ -88,4 +100,16 @@ public class Profile {
 	public Instant getUpdatedAt() { return updatedAt; }
 
 	public void softDelete(Instant deletedAt) { this.deletedAt = deletedAt; }
+
+	public void update(String profileName, String firstName, String lastName, String jobTitle,
+			BigDecimal yearsOfExperience, String personality, String technicalSummary) {
+		this.profileName = profileName;
+		this.firstName = firstName;
+		this.lastName = lastName;
+		this.jobTitle = jobTitle;
+		this.yearsOfExperience = yearsOfExperience;
+		this.personality = personality;
+		this.technicalSummary = technicalSummary;
+		this.hasPreviewed = false;
+	}
 }

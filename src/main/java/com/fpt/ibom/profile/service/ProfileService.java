@@ -5,13 +5,16 @@ import com.fpt.ibom.auth.repository.UserAccountRepository;
 import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.exception.ErrorCode;
 import com.fpt.ibom.profile.dto.ProfileRequest;
+import com.fpt.ibom.profile.dto.ProfileUpdateRequest;
 import com.fpt.ibom.profile.dto.ProfileResponse;
 import com.fpt.ibom.profile.dto.ProfileDetailResponse;
 import com.fpt.ibom.profile.dto.ProfileSummaryResponse;
 import com.fpt.ibom.profile.entity.Profile;
 import java.util.List;
+import jakarta.persistence.OptimisticLockException;
 import com.fpt.ibom.profile.repository.ProfileRepository;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,6 +57,29 @@ public class ProfileService {
 				.map(ProfileDetailResponse::from).orElseThrow(this::profileNotFound);
 	}
 
+	@Transactional
+	public ProfileDetailResponse update(Long userId, Long profileId, ProfileUpdateRequest request) {
+		Profile profile = profileRepository.findByIdAndUserIdAndDeletedAtIsNull(profileId, userId)
+				.orElseThrow(this::profileNotFound);
+		if (profile.getVersion() != request.version()) {
+			throw versionConflict();
+		}
+		String profileName = request.profileName().trim();
+		if (profileRepository.existsByUserIdAndDeletedAtIsNullAndProfileNameIgnoreCaseAndIdNot(userId, profileName,
+				profileId)) {
+			throw duplicateName();
+		}
+		profile.update(profileName, request.firstName().trim(), request.lastName().trim(), request.jobTitle().trim(),
+				request.yearsOfExperience(), request.personality().trim(), request.technicalSummary().trim());
+		try {
+			return ProfileDetailResponse.from(profileRepository.saveAndFlush(profile));
+		} catch (ObjectOptimisticLockingFailureException | OptimisticLockException exception) {
+			throw versionConflict();
+		} catch (DataIntegrityViolationException exception) {
+			throw duplicateName();
+		}
+	}
+
 	private ApiException duplicateName() {
 		return new ApiException(HttpStatus.CONFLICT, ErrorCode.PROFILE_NAME_ALREADY_EXISTS,
 				"Profile name is already in use");
@@ -65,5 +91,10 @@ public class ProfileService {
 
 	private ApiException profileNotFound() {
 		return new ApiException(HttpStatus.NOT_FOUND, ErrorCode.PROFILE_NOT_FOUND, "Profile not found");
+	}
+
+	private ApiException versionConflict() {
+		return new ApiException(HttpStatus.CONFLICT, ErrorCode.PROFILE_VERSION_CONFLICT,
+				"Profile was updated by another request");
 	}
 }
