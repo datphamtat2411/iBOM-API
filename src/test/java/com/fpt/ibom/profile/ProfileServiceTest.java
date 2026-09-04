@@ -166,6 +166,49 @@ class ProfileServiceTest {
 		assertEquals(ErrorCode.PROFILE_NAME_ALREADY_EXISTS, exception.getErrorCode());
 	}
 
+	@Test
+	void softDeletesOwnedActiveProfileWithoutPhysicalDeletion() {
+		UserAccount user = user();
+		Profile profile = new Profile(user, "Default", "Full Name", "Engineer", "user@example.com", "0123456789",
+				"Address", new BigDecimal("3.5"));
+		when(users.findByIdForUpdate(7L)).thenReturn(Optional.of(user));
+		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profiles.countByUserIdAndDeletedAtIsNull(7L)).thenReturn(2L);
+
+		service.delete(7L, 8L);
+
+		assertEquals(false, profile.getDeletedAt() == null);
+		verify(profiles).saveAndFlush(profile);
+		verify(profiles, never()).delete(any());
+	}
+
+	@Test
+	void rejectsDeletingLastActiveProfile() {
+		UserAccount user = user();
+		Profile profile = new Profile(user, "Default", "Full Name", "Engineer", "user@example.com", "0123456789",
+				"Address", new BigDecimal("3.5"));
+		when(users.findByIdForUpdate(7L)).thenReturn(Optional.of(user));
+		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profiles.countByUserIdAndDeletedAtIsNull(7L)).thenReturn(1L);
+
+		ApiException exception = assertThrows(ApiException.class, () -> service.delete(7L, 8L));
+
+		assertEquals(HttpStatus.CONFLICT, exception.getStatus());
+		assertEquals(ErrorCode.PROFILE_LAST_ACTIVE_CANNOT_DELETE, exception.getErrorCode());
+		verify(profiles, never()).saveAndFlush(any());
+	}
+
+	@Test
+	void rejectsMissingDeletedOrForeignProfileThroughActiveOwnedLookup() {
+		when(users.findByIdForUpdate(7L)).thenReturn(Optional.of(user()));
+		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.empty());
+
+		ApiException exception = assertThrows(ApiException.class, () -> service.delete(7L, 8L));
+
+		assertEquals(ErrorCode.PROFILE_NOT_FOUND, exception.getErrorCode());
+		verify(profiles, never()).countByUserIdAndDeletedAtIsNull(any());
+	}
+
 	private UserAccount user() {
 		return new UserAccount("user@example.com", "member", "hash", UserRole.MEMBER, UserStatus.ACTIVE);
 	}

@@ -14,4 +14,6 @@ public interface ProfileRepository extends JpaRepository<Profile, Long> {
 	List<Profile> findByUserIdAndDeletedAtIsNullOrderByUpdatedAtDescIdDesc(Long userId);
 
 	Optional<Profile> findByIdAndUserIdAndDeletedAtIsNull(Long id, Long userId);
+
+	long countByUserIdAndDeletedAtIsNull(Long userId);
 }

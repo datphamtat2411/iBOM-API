@@ -11,6 +11,7 @@ import com.fpt.ibom.profile.dto.ProfileDetailResponse;
 import com.fpt.ibom.profile.dto.ProfileSummaryResponse;
 import com.fpt.ibom.profile.entity.Profile;
 import java.util.List;
+import java.time.Instant;
 import jakarta.persistence.OptimisticLockException;
 import com.fpt.ibom.profile.repository.ProfileRepository;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -80,6 +81,18 @@ public class ProfileService {
 		}
 	}
 
+	@Transactional
+	public void delete(Long userId, Long profileId) {
+		userAccountRepository.findByIdForUpdate(userId).orElseThrow(this::invalidUser);
+		Profile profile = profileRepository.findByIdAndUserIdAndDeletedAtIsNull(profileId, userId)
+				.orElseThrow(this::profileNotFound);
+		if (profileRepository.countByUserIdAndDeletedAtIsNull(userId) <= 1) {
+			throw lastActiveProfileCannotDelete();
+		}
+		profile.softDelete(Instant.now());
+		profileRepository.saveAndFlush(profile);
+	}
+
 	private ApiException duplicateName() {
 		return new ApiException(HttpStatus.CONFLICT, ErrorCode.PROFILE_NAME_ALREADY_EXISTS,
 				"Profile name is already in use");
@@ -96,5 +109,10 @@ public class ProfileService {
 	private ApiException versionConflict() {
 		return new ApiException(HttpStatus.CONFLICT, ErrorCode.PROFILE_VERSION_CONFLICT,
 				"Profile was updated by another request");
+	}
+
+	private ApiException lastActiveProfileCannotDelete() {
+		return new ApiException(HttpStatus.CONFLICT, ErrorCode.PROFILE_LAST_ACTIVE_CANNOT_DELETE,
+				"The last active Profile cannot be deleted");
 	}
 }

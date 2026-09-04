@@ -17,6 +17,10 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, Long> 
 	@Query("select user from UserAccount user where lower(user.email) = lower(:email)")
 	Optional<UserAccount> findByEmailIgnoreCaseForUpdate(@Param("email") String email);
 
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("select user from UserAccount user where user.id = :id")
+	Optional<UserAccount> findByIdForUpdate(@Param("id") Long id);
+
 	boolean existsByEmailIgnoreCase(String email);
 	boolean existsByUsernameIgnoreCase(String username);
 	boolean existsByUsernameIgnoreCaseAndIdNot(String username, Long id);

@@ -1,8 +1,10 @@
 package com.fpt.ibom.profile;
 
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doThrow;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -102,6 +104,31 @@ class ProfileControllerTest {
 	void requiresAuthenticationForProfileUpdate() throws Exception {
 		mockMvc.perform(put("/api/profiles/8").contentType(MediaType.APPLICATION_JSON).content("{}"))
 				.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void deletesProfileForAuthenticatedOwner() throws Exception {
+		mockMvc.perform(delete("/api/profiles/8").with(principal())).andExpect(status().isOk())
+				.andExpect(jsonPath("$.code").value(200)).andExpect(jsonPath("$.data").doesNotExist());
+		org.mockito.Mockito.verify(profileService).delete(7L, 8L);
+	}
+
+	@Test
+	void rejectsUnauthenticatedProfileDeletion() throws Exception {
+		mockMvc.perform(delete("/api/profiles/8")).andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void returnsDeletionBusinessErrors() throws Exception {
+		doThrow(new ApiException(HttpStatus.NOT_FOUND, ErrorCode.PROFILE_NOT_FOUND, "Profile not found"))
+				.when(profileService).delete(7L, 8L);
+		mockMvc.perform(delete("/api/profiles/8").with(principal())).andExpect(status().isNotFound())
+				.andExpect(jsonPath("$.errorCode").value("PROFILE_NOT_FOUND"));
+
+		doThrow(new ApiException(HttpStatus.CONFLICT, ErrorCode.PROFILE_LAST_ACTIVE_CANNOT_DELETE,
+				"The last active Profile cannot be deleted")).when(profileService).delete(7L, 9L);
+		mockMvc.perform(delete("/api/profiles/9").with(principal())).andExpect(status().isConflict())
+				.andExpect(jsonPath("$.errorCode").value("PROFILE_LAST_ACTIVE_CANNOT_DELETE"));
 	}
 
 	private org.springframework.test.web.servlet.request.RequestPostProcessor principal() {
