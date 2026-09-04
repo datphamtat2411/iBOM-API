@@ -31,24 +31,16 @@ public class Profile {
 
 	@Column(name = "profile_name", nullable = false, length = 100)
 	private String profileName;
-	@Column(name = "full_name", nullable = false)
-	private String fullName;
-	@Column(name = "first_name")
+	@Column(name = "first_name", nullable = false, length = 100)
 	private String firstName;
-	@Column(name = "last_name")
+	@Column(name = "last_name", nullable = false, length = 100)
 	private String lastName;
-	@Column(name = "job_title", nullable = false)
+	@Column(name = "job_title", nullable = false, length = 100)
 	private String jobTitle;
-	@Column
+	@Column(nullable = false, length = 4000)
 	private String personality;
-	@Column(name = "technical_summary")
+	@Column(name = "technical_summary", nullable = false, length = 4000)
 	private String technicalSummary;
-	@Column(nullable = false)
-	private String email;
-	@Column(name = "phone_number", nullable = false, length = 50)
-	private String phoneNumber;
-	@Column(nullable = false, length = 500)
-	private String address;
 	@Column(name = "years_of_experience", nullable = false, precision = 5, scale = 2)
 	private BigDecimal yearsOfExperience;
 	@Column(name = "has_previewed", nullable = false)
@@ -68,30 +60,26 @@ public class Profile {
 	protected Profile() {
 	}
 
-	public Profile(UserAccount user, String profileName, String fullName, String jobTitle, String email,
-			String phoneNumber, String address, BigDecimal yearsOfExperience) {
+	public Profile(UserAccount user, String profileName, String firstName, String lastName, String jobTitle,
+			BigDecimal yearsOfExperience, String personality, String technicalSummary) {
 		this.user = user;
 		this.profileName = profileName;
-		this.fullName = fullName;
+		this.firstName = firstName;
+		this.lastName = lastName;
 		this.jobTitle = jobTitle;
-		this.email = email;
-		this.phoneNumber = phoneNumber;
-		this.address = address;
 		this.yearsOfExperience = yearsOfExperience;
+		this.personality = personality;
+		this.technicalSummary = technicalSummary;
 	}
 
 	public Long getId() { return id; }
 	public UserAccount getUser() { return user; }
 	public String getProfileName() { return profileName; }
-	public String getFullName() { return fullName; }
 	public String getFirstName() { return firstName; }
 	public String getLastName() { return lastName; }
 	public String getJobTitle() { return jobTitle; }
 	public String getPersonality() { return personality; }
 	public String getTechnicalSummary() { return technicalSummary; }
-	public String getEmail() { return email; }
-	public String getPhoneNumber() { return phoneNumber; }
-	public String getAddress() { return address; }
 	public BigDecimal getYearsOfExperience() { return yearsOfExperience; }
 	public boolean isHasPreviewed() { return hasPreviewed; }
 	public Instant getDeletedAt() { return deletedAt; }

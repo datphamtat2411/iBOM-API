@@ -1,6 +1,7 @@
 package com.fpt.ibom.profile;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -29,7 +30,9 @@ import com.fpt.ibom.profile.service.ProfileService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.hibernate.exception.ConstraintViolationException;
 
 class ProfileServiceTest {
 	private final ProfileRepository profiles = mock(ProfileRepository.class);
@@ -49,8 +52,14 @@ class ProfileServiceTest {
 		verify(profiles).saveAndFlush(captor.capture());
 		assertEquals(user, captor.getValue().getUser());
 		assertEquals("Default", captor.getValue().getProfileName());
+		assertEquals("First", captor.getValue().getFirstName());
+		assertEquals("Last", captor.getValue().getLastName());
+		assertEquals("Engineer", captor.getValue().getJobTitle());
 		assertEquals(new BigDecimal("3.5"), captor.getValue().getYearsOfExperience());
+		assertEquals("Personality", captor.getValue().getPersonality());
+		assertEquals("Technical summary", captor.getValue().getTechnicalSummary());
 		assertEquals(false, captor.getValue().isHasPreviewed());
+		assertEquals(0L, captor.getValue().getVersion());
 	}
 
 	@Test
@@ -66,10 +75,10 @@ class ProfileServiceTest {
 
 	@Test
 	void listsOwnedActiveProfilesInRepositoryOrder() {
-		Profile first = new Profile(user(), "First", "First Name", "Engineer", "first@example.com", "1", "Address",
-				new BigDecimal("1.0"));
-		Profile second = new Profile(user(), "Second", "Second Name", "Manager", "second@example.com", "2", "Address",
-				new BigDecimal("2.0"));
+		Profile first = new Profile(user(), "First", "First", "Name", "Engineer", new BigDecimal("1.0"),
+				"Personality", "Summary");
+		Profile second = new Profile(user(), "Second", "Second", "Name", "Manager", new BigDecimal("2.0"),
+				"Personality", "Summary");
 		when(profiles.findByUserIdAndDeletedAtIsNullOrderByUpdatedAtDescIdDesc(7L)).thenReturn(List.of(first, second));
 
 		List<ProfileSummaryResponse> result = service.list(7L);
@@ -86,14 +95,15 @@ class ProfileServiceTest {
 
 	@Test
 	void mapsOwnedProfileDetailsIncludingVersion() {
-		Profile profile = new Profile(user(), "Default", "Full Name", "Engineer", "user@example.com", "0123456789",
-				"Address", new BigDecimal("3.5"));
+		Profile profile = new Profile(user(), "Default", "First", "Last", "Engineer", new BigDecimal("3.5"),
+				"Personality", "Summary");
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
 
 		ProfileDetailResponse result = service.get(7L, 8L);
 
 		assertEquals("Default", result.profileName());
-		assertEquals("Full Name", result.fullName());
+		assertEquals("First", result.firstName());
+		assertEquals("Last", result.lastName());
 		assertEquals(new BigDecimal("3.5"), result.yearsOfExperience());
 		assertEquals(0L, result.version());
 	}
@@ -110,8 +120,8 @@ class ProfileServiceTest {
 
 	@Test
 	void updatesOwnedProfileAndResetsPreviewState() {
-		Profile profile = new Profile(user(), "Default", "Full Name", "Engineer", "user@example.com", "0123456789",
-				"Address", new BigDecimal("3.5"));
+		Profile profile = new Profile(user(), "Default", "First", "Last", "Engineer", new BigDecimal("3.5"),
+				"Personality", "Summary");
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
 		when(profiles.existsByUserIdAndDeletedAtIsNullAndProfileNameIgnoreCaseAndIdNot(7L, "Updated", 8L))
 				.thenReturn(false);
@@ -122,14 +132,17 @@ class ProfileServiceTest {
 		assertEquals("Updated", result.profileName());
 		assertEquals("First", result.firstName());
 		assertEquals("Last", result.lastName());
+		assertEquals("Developer", result.jobTitle());
+		assertEquals(new BigDecimal("0.5"), result.yearsOfExperience());
+		assertEquals("Friendly", result.personality());
 		assertEquals("Technical summary", result.technicalSummary());
 		assertEquals(false, result.hasPreviewed());
 	}
 
 	@Test
 	void rejectsStaleProfileVersionBeforeMutation() {
-		Profile profile = new Profile(user(), "Default", "Full Name", "Engineer", "user@example.com", "0123456789",
-				"Address", new BigDecimal("3.5"));
+		Profile profile = new Profile(user(), "Default", "First", "Last", "Engineer", new BigDecimal("3.5"),
+				"Personality", "Summary");
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
 
 		ApiException exception = assertThrows(ApiException.class, () -> service.update(7L, 8L, updateRequest(1L)));
@@ -141,8 +154,8 @@ class ProfileServiceTest {
 
 	@Test
 	void translatesConcurrentOptimisticLockFailure() {
-		Profile profile = new Profile(user(), "Default", "Full Name", "Engineer", "user@example.com", "0123456789",
-				"Address", new BigDecimal("3.5"));
+		Profile profile = new Profile(user(), "Default", "First", "Last", "Engineer", new BigDecimal("3.5"),
+				"Personality", "Summary");
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
 		when(profiles.existsByUserIdAndDeletedAtIsNullAndProfileNameIgnoreCaseAndIdNot(7L, "Updated", 8L))
 				.thenReturn(false);
@@ -154,9 +167,39 @@ class ProfileServiceTest {
 	}
 
 	@Test
+	void translatesProfileNameUniqueConstraintFailure() {
+		UserAccount user = user();
+		when(profiles.existsByUserIdAndDeletedAtIsNullAndProfileNameIgnoreCase(7L, "Default")).thenReturn(false);
+		when(users.findById(7L)).thenReturn(Optional.of(user));
+		ConstraintViolationException violation = new ConstraintViolationException("duplicate", null,
+				"uk_profiles_user_active_name");
+		when(profiles.saveAndFlush(any(Profile.class))).thenThrow(new DataIntegrityViolationException("duplicate", violation));
+
+		ApiException exception = assertThrows(ApiException.class, () -> service.create(7L, request()));
+
+		assertEquals(ErrorCode.PROFILE_NAME_ALREADY_EXISTS, exception.getErrorCode());
+	}
+
+	@Test
+	void doesNotTranslateUnrelatedIntegrityFailureAsDuplicateName() {
+		UserAccount user = user();
+		when(profiles.existsByUserIdAndDeletedAtIsNullAndProfileNameIgnoreCase(7L, "Default")).thenReturn(false);
+		when(users.findById(7L)).thenReturn(Optional.of(user));
+		ConstraintViolationException violation = new ConstraintViolationException("constraint", null,
+				"chk_profiles_years_of_experience");
+		DataIntegrityViolationException integrityFailure = new DataIntegrityViolationException("constraint", violation);
+		when(profiles.saveAndFlush(any(Profile.class))).thenThrow(integrityFailure);
+
+		DataIntegrityViolationException exception = assertThrows(DataIntegrityViolationException.class,
+				() -> service.create(7L, request()));
+
+		assertSame(integrityFailure, exception);
+	}
+
+	@Test
 	void rejectsDuplicateNameExcludingCurrentProfile() {
-		Profile profile = new Profile(user(), "Default", "Full Name", "Engineer", "user@example.com", "0123456789",
-				"Address", new BigDecimal("3.5"));
+		Profile profile = new Profile(user(), "Default", "First", "Last", "Engineer", new BigDecimal("3.5"),
+				"Personality", "Summary");
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
 		when(profiles.existsByUserIdAndDeletedAtIsNullAndProfileNameIgnoreCaseAndIdNot(7L, "Updated", 8L))
 				.thenReturn(true);
@@ -169,8 +212,8 @@ class ProfileServiceTest {
 	@Test
 	void softDeletesOwnedActiveProfileWithoutPhysicalDeletion() {
 		UserAccount user = user();
-		Profile profile = new Profile(user, "Default", "Full Name", "Engineer", "user@example.com", "0123456789",
-				"Address", new BigDecimal("3.5"));
+		Profile profile = new Profile(user, "Default", "First", "Last", "Engineer", new BigDecimal("3.5"),
+				"Personality", "Summary");
 		when(users.findByIdForUpdate(7L)).thenReturn(Optional.of(user));
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
 		when(profiles.countByUserIdAndDeletedAtIsNull(7L)).thenReturn(2L);
@@ -185,8 +228,8 @@ class ProfileServiceTest {
 	@Test
 	void rejectsDeletingLastActiveProfile() {
 		UserAccount user = user();
-		Profile profile = new Profile(user, "Default", "Full Name", "Engineer", "user@example.com", "0123456789",
-				"Address", new BigDecimal("3.5"));
+		Profile profile = new Profile(user, "Default", "First", "Last", "Engineer", new BigDecimal("3.5"),
+				"Personality", "Summary");
 		when(users.findByIdForUpdate(7L)).thenReturn(Optional.of(user));
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
 		when(profiles.countByUserIdAndDeletedAtIsNull(7L)).thenReturn(1L);
@@ -214,8 +257,8 @@ class ProfileServiceTest {
 	}
 
 	private ProfileRequest request() {
-		return new ProfileRequest(" Default ", "Full Name", "Engineer", "user@example.com", "0123456789",
-				"Address", new BigDecimal("3.5"));
+		return new ProfileRequest(" Default ", " First ", " Last ", " Engineer ", new BigDecimal("3.5"),
+				" Personality ", " Technical summary ");
 	}
 
 	private ProfileUpdateRequest updateRequest(Long version) {

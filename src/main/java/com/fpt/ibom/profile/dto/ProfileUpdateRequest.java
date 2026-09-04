@@ -9,11 +9,11 @@ import jakarta.validation.constraints.Size;
 
 public record ProfileUpdateRequest(
 		@NotBlank @Size(max = 100) String profileName,
-		@NotBlank String firstName,
-		@NotBlank String lastName,
-		@NotBlank String jobTitle,
+		@NotBlank @Size(max = 100) String firstName,
+		@NotBlank @Size(max = 100) String lastName,
+		@NotBlank @Size(max = 100) String jobTitle,
 		@NotNull @DecimalMin(value = "0.0") BigDecimal yearsOfExperience,
-		@NotBlank String personality,
-		@NotBlank String technicalSummary,
+		@NotBlank @Size(max = 4000) String personality,
+		@NotBlank @Size(max = 4000) String technicalSummary,
 		@NotNull @DecimalMin(value = "0") Long version) {
 }

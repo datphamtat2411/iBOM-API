@@ -19,9 +19,11 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.hibernate.exception.ConstraintViolationException;
 
 @Service
 public class ProfileService {
+	private static final String ACTIVE_PROFILE_NAME_CONSTRAINT = "uk_profiles_user_active_name";
 	private final ProfileRepository profileRepository;
 	private final UserAccountRepository userAccountRepository;
 
@@ -37,12 +39,16 @@ public class ProfileService {
 			throw duplicateName();
 		}
 		UserAccount user = userAccountRepository.findById(userId).orElseThrow(this::invalidUser);
-		Profile profile = new Profile(user, profileName, request.fullName().trim(), request.jobTitle().trim(),
-				request.email().trim(), request.phoneNumber().trim(), request.address().trim(), request.yearsOfExperience());
+		Profile profile = new Profile(user, profileName, request.firstName().trim(), request.lastName().trim(),
+				request.jobTitle().trim(), request.yearsOfExperience(), request.personality().trim(),
+				request.technicalSummary().trim());
 		try {
 			return ProfileResponse.from(profileRepository.saveAndFlush(profile));
 		} catch (DataIntegrityViolationException exception) {
-			throw duplicateName();
+			if (isActiveProfileNameConstraintViolation(exception)) {
+				throw duplicateName();
+			}
+			throw exception;
 		}
 	}
 
@@ -77,7 +83,10 @@ public class ProfileService {
 		} catch (ObjectOptimisticLockingFailureException | OptimisticLockException exception) {
 			throw versionConflict();
 		} catch (DataIntegrityViolationException exception) {
-			throw duplicateName();
+			if (isActiveProfileNameConstraintViolation(exception)) {
+				throw duplicateName();
+			}
+			throw exception;
 		}
 	}
 
@@ -96,6 +105,17 @@ public class ProfileService {
 	private ApiException duplicateName() {
 		return new ApiException(HttpStatus.CONFLICT, ErrorCode.PROFILE_NAME_ALREADY_EXISTS,
 				"Profile name is already in use");
+	}
+
+	private boolean isActiveProfileNameConstraintViolation(DataIntegrityViolationException exception) {
+		Throwable cause = exception;
+		while (cause != null) {
+			if (cause instanceof ConstraintViolationException constraintViolation) {
+				return ACTIVE_PROFILE_NAME_CONSTRAINT.equals(constraintViolation.getConstraintName());
+			}
+			cause = cause.getCause();
+		}
+		return false;
 	}
 
 	private ApiException invalidUser() {

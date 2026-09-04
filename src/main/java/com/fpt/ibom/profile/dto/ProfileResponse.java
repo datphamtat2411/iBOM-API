@@ -5,14 +5,14 @@ import java.time.Instant;
 
 import com.fpt.ibom.profile.entity.Profile;
 
-public record ProfileResponse(Long id, Long userId, String profileName, String fullName, String jobTitle,
-		String email, String phoneNumber, String address, BigDecimal yearsOfExperience, boolean hasPreviewed,
-		long version, Instant createdAt, Instant updatedAt) {
+public record ProfileResponse(Long id, Long userId, String profileName, String firstName, String lastName,
+		String jobTitle, BigDecimal yearsOfExperience, String personality, String technicalSummary,
+		boolean hasPreviewed, long version, Instant createdAt, Instant updatedAt) {
 
 	public static ProfileResponse from(Profile profile) {
-		return new ProfileResponse(profile.getId(), profile.getUser().getId(), profile.getProfileName(), profile.getFullName(),
-				profile.getJobTitle(), profile.getEmail(), profile.getPhoneNumber(), profile.getAddress(),
-				profile.getYearsOfExperience(), profile.isHasPreviewed(), profile.getVersion(), profile.getCreatedAt(),
-				profile.getUpdatedAt());
+		return new ProfileResponse(profile.getId(), profile.getUser().getId(), profile.getProfileName(),
+				profile.getFirstName(), profile.getLastName(), profile.getJobTitle(), profile.getYearsOfExperience(),
+				profile.getPersonality(), profile.getTechnicalSummary(), profile.isHasPreviewed(), profile.getVersion(),
+				profile.getCreatedAt(), profile.getUpdatedAt());
 	}
 }

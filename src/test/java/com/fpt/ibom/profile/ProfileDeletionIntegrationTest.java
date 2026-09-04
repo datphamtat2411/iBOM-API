@@ -3,6 +3,7 @@ package com.fpt.ibom.profile;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -25,6 +26,8 @@ import com.fpt.ibom.profile.service.ProfileService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 @SpringBootTest
 class ProfileDeletionIntegrationTest extends MySqlIntegrationTest {
@@ -35,6 +38,52 @@ class ProfileDeletionIntegrationTest extends MySqlIntegrationTest {
 	private ProfileRepository profileRepository;
 	@Autowired
 	private UserAccountRepository userAccountRepository;
+	@Autowired
+	private JdbcTemplate jdbcTemplate;
+
+	@Test
+	void persistsCanonicalFieldsAtTheirDatabaseBoundaries() {
+		UserAccount user = userAccountRepository.saveAndFlush(user("profile-boundary@example.com"));
+		Profile profile = new Profile(user, "Boundary", "f".repeat(100), "l".repeat(100), "j".repeat(100),
+				new BigDecimal("0"), "p".repeat(4000), "s".repeat(4000));
+
+		Profile persisted = profileRepository.saveAndFlush(profile);
+
+		assertEquals(100, jdbcTemplate.queryForObject(
+				"SELECT CHARACTER_MAXIMUM_LENGTH FROM information_schema.COLUMNS "
+						+ "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'profiles' AND COLUMN_NAME = 'first_name'",
+				Integer.class));
+		assertEquals(4000, jdbcTemplate.queryForObject(
+				"SELECT CHARACTER_MAXIMUM_LENGTH FROM information_schema.COLUMNS "
+						+ "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'profiles' AND COLUMN_NAME = 'personality'",
+				Integer.class));
+		assertEquals(4000, persisted.getTechnicalSummary().length());
+	}
+
+	@Test
+	void schemaRemovesLegacyProfileColumnsAndRequiresCanonicalFields() {
+		List<String> columns = jdbcTemplate.queryForList(
+				"SELECT COLUMN_NAME FROM information_schema.COLUMNS "
+						+ "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'profiles'",
+				String.class);
+
+		assertTrue(columns.containsAll(List.of("profile_name", "first_name", "last_name", "job_title",
+				"years_of_experience", "personality", "technical_summary")));
+		assertTrue(List.of("full_name", "email", "phone_number", "address").stream().noneMatch(columns::contains));
+		assertEquals("NO", jdbcTemplate.queryForObject(
+				"SELECT IS_NULLABLE FROM information_schema.COLUMNS "
+						+ "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'profiles' AND COLUMN_NAME = 'personality'",
+				String.class));
+	}
+
+	@Test
+	void databaseRejectsNullCanonicalAboutMeField() {
+		UserAccount user = userAccountRepository.saveAndFlush(user("profile-null@example.com"));
+		Profile profile = new Profile(user, "Null", "First", "Last", "Engineer", new BigDecimal("1"), null,
+				"Summary");
+
+		assertThrows(DataIntegrityViolationException.class, () -> profileRepository.saveAndFlush(profile));
+	}
 
 	@Test
 	void softDeletedProfileRemainsPersistedAndIsExcludedFromActiveReads() {
@@ -93,7 +142,7 @@ class ProfileDeletionIntegrationTest extends MySqlIntegrationTest {
 	}
 
 	private Profile profile(UserAccount user, String name) {
-		return new Profile(user, name, "Full Name", "Engineer", "user@example.com", "0123456789", "Address",
-				new BigDecimal("3.5"));
+		return new Profile(user, name, "First", "Last", "Engineer", new BigDecimal("3.5"), "Personality",
+				"Summary");
 	}
 }
