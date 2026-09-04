@@ -100,17 +100,19 @@ class ProfileControllerTest {
 				{"technicalSummary", "x".repeat(4001)}, {"yearsOfExperience", "-0.1"}
 		};
 		for (String[] invalid : invalidRequests) {
-			String json = invalid[0].equals("yearsOfExperience")
-					? profileJson("First", "Last", "Engineer", "Friendly", "Summary", invalid[1])
-					: profileJson("firstName".equals(invalid[0]) ? invalid[1] : "First",
-							"lastName".equals(invalid[0]) ? invalid[1] : "Last",
-							"jobTitle".equals(invalid[0]) ? invalid[1] : "Engineer",
-							"personality".equals(invalid[0]) ? invalid[1] : "Friendly",
-							"technicalSummary".equals(invalid[0]) ? invalid[1] : "Summary");
+			String firstName = "firstName".equals(invalid[0]) ? invalid[1] : "First";
+			String lastName = "lastName".equals(invalid[0]) ? invalid[1] : "Last";
+			String jobTitle = "jobTitle".equals(invalid[0]) ? invalid[1] : "Engineer";
+			String yearsOfExperience = "yearsOfExperience".equals(invalid[0]) ? invalid[1] : "3.5";
+			String personality = "personality".equals(invalid[0]) ? invalid[1] : "Friendly";
+			String technicalSummary = "technicalSummary".equals(invalid[0]) ? invalid[1] : "Summary";
+			String json = profileJson("Default", firstName, lastName, jobTitle, yearsOfExperience, personality,
+					technicalSummary);
 			mockMvc.perform(post("/api/profiles").with(principal()).contentType(MediaType.APPLICATION_JSON)
 					.content(json)).andExpect(status().isBadRequest());
 			mockMvc.perform(put("/api/profiles/8").with(principal()).contentType(MediaType.APPLICATION_JSON)
-					.content(json.replace("}", ",\"version\":0}"))).andExpect(status().isBadRequest());
+					.content(updateJson("Default", firstName, lastName, jobTitle, yearsOfExperience, personality,
+							technicalSummary))).andExpect(status().isBadRequest());
 		}
 	}
 
@@ -119,11 +121,12 @@ class ProfileControllerTest {
 		String[] requiredFields = { "profileName", "firstName", "lastName", "jobTitle", "yearsOfExperience",
 				"personality", "technicalSummary" };
 		for (String field : requiredFields) {
-			String value = field.equals("yearsOfExperience") ? "null" : "\"   \"";
-			String json = profileJson("First", "Last", "Engineer", "Friendly", "Summary")
-					.replace(field.equals("yearsOfExperience") ? "3.5" : "\"Default\"", value);
+			String json = requiredFieldJson(field, false);
 			mockMvc.perform(post("/api/profiles").with(principal()).contentType(MediaType.APPLICATION_JSON)
 					.content(json)).andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"));
+			mockMvc.perform(put("/api/profiles/8").with(principal()).contentType(MediaType.APPLICATION_JSON)
+					.content(requiredFieldJson(field, true))).andExpect(status().isBadRequest())
 					.andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"));
 		}
 	}
@@ -233,14 +236,60 @@ class ProfileControllerTest {
 
 	private String profileJson(String firstName, String lastName, String jobTitle, String personality,
 			String technicalSummary, String yearsOfExperience) {
-		return "{\"profileName\":\"Default\",\"firstName\":\"" + firstName + "\",\"lastName\":\""
-				+ lastName + "\",\"jobTitle\":\"" + jobTitle + "\",\"yearsOfExperience\":"
-				+ yearsOfExperience + ",\"personality\":\"" + personality + "\",\"technicalSummary\":\""
-				+ technicalSummary + "\"}";
+		return profileJson("Default", firstName, lastName, jobTitle, yearsOfExperience, personality,
+				technicalSummary);
+	}
+
+	private String profileJson(String profileName, String firstName, String lastName, String jobTitle,
+			String yearsOfExperience, String personality, String technicalSummary) {
+		return requestJson(profileName, firstName, lastName, jobTitle, yearsOfExperience, personality,
+				technicalSummary, null);
+	}
+
+	private String requestJson(String profileName, String firstName, String lastName, String jobTitle,
+			String yearsOfExperience, String personality, String technicalSummary, Integer version) {
+		return "{\"profileName\":\"" + profileName + "\",\"firstName\":\"" + firstName
+				+ "\",\"lastName\":\"" + lastName + "\",\"jobTitle\":\"" + jobTitle
+				+ "\",\"yearsOfExperience\":" + yearsOfExperience + ",\"personality\":\""
+				+ personality + "\",\"technicalSummary\":\"" + technicalSummary + "\""
+				+ (version == null ? "" : ",\"version\":" + version) + "}";
 	}
 
 	private String updateJson(String firstName, String lastName, String jobTitle, String personality,
 			String technicalSummary) {
-		return profileJson(firstName, lastName, jobTitle, personality, technicalSummary).replace("}", ",\"version\":0}");
+		return updateJson("Default", firstName, lastName, jobTitle, "3.5", personality, technicalSummary);
+	}
+
+	private String updateJson(String profileName, String firstName, String lastName, String jobTitle,
+			String yearsOfExperience, String personality, String technicalSummary) {
+		return requestJson(profileName, firstName, lastName, jobTitle, yearsOfExperience, personality,
+				technicalSummary, 0);
+	}
+
+	private String requiredFieldJson(String field, boolean update) {
+		String profileName = "Default";
+		String firstName = "First";
+		String lastName = "Last";
+		String jobTitle = "Engineer";
+		String yearsOfExperience = "3.5";
+		String personality = "Friendly";
+		String technicalSummary = "Summary";
+
+		switch (field) {
+		case "profileName" -> profileName = "   ";
+		case "firstName" -> firstName = "   ";
+		case "lastName" -> lastName = "   ";
+		case "jobTitle" -> jobTitle = "   ";
+		case "yearsOfExperience" -> yearsOfExperience = "null";
+		case "personality" -> personality = "   ";
+		case "technicalSummary" -> technicalSummary = "   ";
+		default -> throw new IllegalArgumentException("Unknown required field: " + field);
+		}
+
+		return update
+				? updateJson(profileName, firstName, lastName, jobTitle, yearsOfExperience, personality,
+						technicalSummary)
+				: profileJson(profileName, firstName, lastName, jobTitle, yearsOfExperience, personality,
+						technicalSummary);
 	}
 }
