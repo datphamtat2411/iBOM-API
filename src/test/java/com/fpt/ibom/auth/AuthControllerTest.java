@@ -3,6 +3,10 @@ package com.fpt.ibom.auth;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.allOf;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -116,6 +120,16 @@ class AuthControllerTest {
 	void requiresCsrfHeaderForRefreshToken() throws Exception {
 		mockMvc.perform(post("/api/auth/refresh-token").cookie(new Cookie("refresh_token", "refresh-token")))
 				.andExpect(status().isForbidden());
+		verifyNoInteractions(loginService);
+	}
+
+	@Test
+	void rejectsRefreshTokenWithMismatchedCsrfHeader() throws Exception {
+		mockMvc.perform(post("/api/auth/refresh-token")
+					.cookie(new Cookie("refresh_token", "refresh-token"), new Cookie("XSRF-TOKEN", "csrf-token"))
+					.header("X-XSRF-TOKEN", "different-token"))
+				.andExpect(status().isForbidden());
+		verifyNoInteractions(loginService);
 	}
 
 	@Test
@@ -137,18 +151,29 @@ class AuthControllerTest {
 								org.hamcrest.Matchers.containsString("Path=/api/auth"),
 								org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("Secure")),
 								org.hamcrest.Matchers.containsString("SameSite=Strict")))));
+		verify(loginService).refresh("refresh-token");
 	}
 
 	@Test
 	void requiresCsrfHeaderForLogout() throws Exception {
 		mockMvc.perform(post("/api/auth/logout").cookie(new Cookie("refresh_token", "refresh-token")))
 				.andExpect(status().isForbidden());
+		verifyNoInteractions(loginService);
+	}
+
+	@Test
+	void rejectsLogoutWithMismatchedCsrfHeader() throws Exception {
+		mockMvc.perform(post("/api/auth/logout")
+					.cookie(new Cookie("refresh_token", "refresh-token"), new Cookie("XSRF-TOKEN", "csrf-token"))
+					.header("X-XSRF-TOKEN", "different-token"))
+				.andExpect(status().isForbidden());
+		verifyNoInteractions(loginService);
 	}
 
 	@Test
 	void logoutClearsBothCookiesWithMatchingPaths() throws Exception {
 		mockMvc.perform(post("/api/auth/logout")
-					.cookie(new Cookie("XSRF-TOKEN", "csrf-token"))
+					.cookie(new Cookie("refresh_token", "refresh-token"), new Cookie("XSRF-TOKEN", "csrf-token"))
 					.header("X-XSRF-TOKEN", "csrf-token"))
 				.andExpect(status().isOk())
 				.andExpect(header().stringValues("Set-Cookie", org.hamcrest.Matchers.hasItems(
@@ -162,7 +187,7 @@ class AuthControllerTest {
 								org.hamcrest.Matchers.containsString("Path=/"),
 								org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("Secure")),
 								org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("HttpOnly"))))));
-		verify(loginService).logout(null);
+		verify(loginService).logout("refresh-token");
 	}
 
 	@Test
@@ -207,6 +232,7 @@ class AuthControllerTest {
 				.andExpect(jsonPath("$.code").value(401))
 				.andExpect(jsonPath("$.errorCode").value("AUTH_INVALID_REFRESH_TOKEN"))
 				.andExpect(jsonPath("$.message").value("Invalid refresh token"));
+		verify(loginService).refresh("invalid-refresh-token");
 	}
 
 	@Test
@@ -352,6 +378,63 @@ class AuthControllerTest {
 	}
 
 	@Test
+	void bearerRequestDoesNotDeleteExistingCsrfCookie() throws Exception {
+		activeAccountFor("valid-token");
+
+		mockMvc.perform(get("/test/protected")
+					.header("Authorization", "Bearer valid-token")
+					.cookie(new Cookie("XSRF-TOKEN", "A")))
+				.andExpect(status().isOk())
+				.andExpect(result -> {
+					for (String setCookie : result.getResponse().getHeaders("Set-Cookie")) {
+						assertThat(setCookie, not(allOf(containsString("XSRF-TOKEN="), containsString("Max-Age=0"))));
+					}
+				});
+	}
+
+	@Test
+	void refreshSucceedsAfterBearerRequestPreservesCsrfCookie() throws Exception {
+		activeAccountFor("valid-token");
+		when(loginService.refresh("refresh-token")).thenReturn(authenticationResult());
+
+		mockMvc.perform(get("/test/protected")
+					.header("Authorization", "Bearer valid-token")
+					.cookie(new Cookie("XSRF-TOKEN", "A")))
+				.andExpect(status().isOk())
+				.andExpect(result -> assertNoCsrfDeletionCookie(result.getResponse().getHeaders("Set-Cookie")));
+
+		mockMvc.perform(post("/api/auth/refresh-token")
+					.cookie(new Cookie("refresh_token", "refresh-token"), new Cookie("XSRF-TOKEN", "A"))
+					.header("X-XSRF-TOKEN", "A"))
+				.andExpect(status().isOk())
+				.andExpect(header().stringValues("Set-Cookie", org.hamcrest.Matchers.hasItems(
+						org.hamcrest.Matchers.containsString("refresh_token=refresh-token"),
+						org.hamcrest.Matchers.containsString("XSRF-TOKEN="))));
+		verify(loginService).refresh("refresh-token");
+	}
+
+	@Test
+	void logoutSucceedsAfterBearerRequestPreservesCsrfCookie() throws Exception {
+		activeAccountFor("valid-token");
+
+		mockMvc.perform(get("/test/protected")
+					.header("Authorization", "Bearer valid-token")
+					.cookie(new Cookie("XSRF-TOKEN", "A")))
+				.andExpect(status().isOk())
+				.andExpect(result -> assertNoCsrfDeletionCookie(result.getResponse().getHeaders("Set-Cookie")));
+
+		mockMvc.perform(post("/api/auth/logout")
+					.cookie(new Cookie("refresh_token", "refresh-token"), new Cookie("XSRF-TOKEN", "A"))
+					.header("X-XSRF-TOKEN", "A"))
+				.andExpect(status().isOk())
+				.andExpect(header().stringValues("Set-Cookie", org.hamcrest.Matchers.hasItems(
+						allOf(containsString("refresh_token="), containsString("Max-Age=0"),
+								containsString("Path=/api/auth")),
+						allOf(containsString("XSRF-TOKEN="), containsString("Max-Age=0"), containsString("Path=/")))));
+		verify(loginService).logout("refresh-token");
+	}
+
+	@Test
 	void rejectsExistingAccessTokenForInactiveAccount() throws Exception {
 		when(userAccountRepository.findById(1L)).thenReturn(Optional.of(new UserAccount("user@example.com", "member",
 				"hash", UserRole.MEMBER, UserStatus.INACTIVE)));
@@ -383,6 +466,12 @@ class AuthControllerTest {
 	private LoginService.AuthenticationResult authenticationResult() {
 		return new LoginService.AuthenticationResult("access-token", "refresh-token", 604800,
 				new AuthenticatedUser(1L, "user@example.com", "member", UserRole.MEMBER));
+	}
+
+	private void assertNoCsrfDeletionCookie(java.util.List<String> setCookies) {
+		for (String setCookie : setCookies) {
+			assertThat(setCookie, not(allOf(containsString("XSRF-TOKEN="), containsString("Max-Age=0"))));
+		}
 	}
 
 	@RestController

@@ -35,6 +35,7 @@ import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import org.springframework.security.web.util.matcher.OrRequestMatcher;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
+import org.springframework.security.web.authentication.session.NullAuthenticatedSessionStrategy;
 
 @Configuration
 public class SecurityConfig {
@@ -60,6 +61,7 @@ public class SecurityConfig {
 										new AntPathRequestMatcher("/api/auth/logout", "POST")
 								)
 						)
+						.sessionAuthenticationStrategy(new NullAuthenticatedSessionStrategy())
 				)
 				.sessionManagement(session ->
 						session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
