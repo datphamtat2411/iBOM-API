@@ -71,6 +71,18 @@ class ProfileControllerTest {
 	}
 
 	@Test
+	void acceptsOptionalAboutMeFieldsAsAbsentNullOrBlank() throws Exception {
+		mockMvc.perform(post("/api/profiles").with(principal()).contentType(MediaType.APPLICATION_JSON)
+				.content(profileJsonWithoutOptionalFields())).andExpect(status().isCreated());
+		mockMvc.perform(post("/api/profiles").with(principal()).contentType(MediaType.APPLICATION_JSON)
+				.content(profileJsonWithOptionalFields("Nulls", null, null))).andExpect(status().isCreated());
+		mockMvc.perform(post("/api/profiles").with(principal()).contentType(MediaType.APPLICATION_JSON)
+				.content(profileJsonWithOptionalFields("Blanks", "   ", ""))).andExpect(status().isCreated());
+		mockMvc.perform(post("/api/profiles").with(principal()).contentType(MediaType.APPLICATION_JSON)
+				.content(profileJsonWithOptionalFields("OneField", "Friendly", null))).andExpect(status().isCreated());
+	}
+
+	@Test
 	void acceptsMaximumAboutMeFieldLengthsOnCreateAndUpdate() throws Exception {
 		String firstName = "x".repeat(100);
 		String lastName = "x".repeat(100);
@@ -118,8 +130,7 @@ class ProfileControllerTest {
 
 	@Test
 	void rejectsMissingOrBlankRequiredFields() throws Exception {
-		String[] requiredFields = { "profileName", "firstName", "lastName", "jobTitle", "yearsOfExperience",
-				"personality", "technicalSummary" };
+		String[] requiredFields = { "profileName", "firstName", "lastName", "jobTitle", "yearsOfExperience" };
 		for (String field : requiredFields) {
 			String json = requiredFieldJson(field, false);
 			mockMvc.perform(post("/api/profiles").with(principal()).contentType(MediaType.APPLICATION_JSON)
@@ -281,8 +292,6 @@ class ProfileControllerTest {
 		case "lastName" -> lastName = "   ";
 		case "jobTitle" -> jobTitle = "   ";
 		case "yearsOfExperience" -> yearsOfExperience = "null";
-		case "personality" -> personality = "   ";
-		case "technicalSummary" -> technicalSummary = "   ";
 		default -> throw new IllegalArgumentException("Unknown required field: " + field);
 		}
 
@@ -291,5 +300,21 @@ class ProfileControllerTest {
 						technicalSummary)
 				: profileJson(profileName, firstName, lastName, jobTitle, yearsOfExperience, personality,
 						technicalSummary);
+	}
+
+	private String profileJsonWithoutOptionalFields() {
+		return "{\"profileName\":\"Default\",\"firstName\":\"First\",\"lastName\":\"Last\","
+				+ "\"jobTitle\":\"Engineer\",\"yearsOfExperience\":3.5}";
+	}
+
+	private String profileJsonWithOptionalFields(String profileName, String personality, String technicalSummary) {
+		return "{\"profileName\":\"" + profileName
+				+ "\",\"firstName\":\"First\",\"lastName\":\"Last\",\"jobTitle\":\"Engineer\","
+				+ "\"yearsOfExperience\":3.5,\"personality\":" + jsonValue(personality)
+				+ ",\"technicalSummary\":" + jsonValue(technicalSummary) + "}";
+	}
+
+	private String jsonValue(String value) {
+		return value == null ? "null" : "\"" + value + "\"";
 	}
 }

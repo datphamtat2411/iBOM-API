@@ -2,6 +2,7 @@ package com.fpt.ibom.profile;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -26,7 +27,6 @@ import com.fpt.ibom.profile.service.ProfileService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 @SpringBootTest
@@ -61,7 +61,7 @@ class ProfileDeletionIntegrationTest extends MySqlIntegrationTest {
 	}
 
 	@Test
-	void schemaRemovesLegacyProfileColumnsAndRequiresCanonicalFields() {
+	void schemaKeepsCanonicalFieldsAndAllowsOptionalAboutMeColumns() {
 		List<String> columns = jdbcTemplate.queryForList(
 				"SELECT COLUMN_NAME FROM information_schema.COLUMNS "
 						+ "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'profiles'",
@@ -70,19 +70,26 @@ class ProfileDeletionIntegrationTest extends MySqlIntegrationTest {
 		assertTrue(columns.containsAll(List.of("profile_name", "first_name", "last_name", "job_title",
 				"years_of_experience", "personality", "technical_summary")));
 		assertTrue(List.of("full_name", "email", "phone_number", "address").stream().noneMatch(columns::contains));
-		assertEquals("NO", jdbcTemplate.queryForObject(
+		assertEquals("YES", jdbcTemplate.queryForObject(
 				"SELECT IS_NULLABLE FROM information_schema.COLUMNS "
 						+ "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'profiles' AND COLUMN_NAME = 'personality'",
+				String.class));
+		assertEquals("YES", jdbcTemplate.queryForObject(
+				"SELECT IS_NULLABLE FROM information_schema.COLUMNS "
+						+ "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'profiles' AND COLUMN_NAME = 'technical_summary'",
 				String.class));
 	}
 
 	@Test
-	void databaseRejectsNullCanonicalAboutMeField() {
+	void databaseStoresNullOptionalAboutMeFields() {
 		UserAccount user = userAccountRepository.saveAndFlush(user("profile-null@example.com"));
 		Profile profile = new Profile(user, "Null", "First", "Last", "Engineer", new BigDecimal("1"), null,
-				"Summary");
+				null);
 
-		assertThrows(DataIntegrityViolationException.class, () -> profileRepository.saveAndFlush(profile));
+		Profile persisted = profileRepository.saveAndFlush(profile);
+
+		assertNull(persisted.getPersonality());
+		assertNull(persisted.getTechnicalSummary());
 	}
 
 	@Test

@@ -1,6 +1,7 @@
 package com.fpt.ibom.profile;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
@@ -60,6 +61,22 @@ class ProfileServiceTest {
 		assertEquals("Technical summary", captor.getValue().getTechnicalSummary());
 		assertEquals(false, captor.getValue().isHasPreviewed());
 		assertEquals(0L, captor.getValue().getVersion());
+	}
+
+	@Test
+	void createsProfileWithBlankOptionalFieldsAsNull() {
+		UserAccount user = new UserAccount("user@example.com", "member", "hash", UserRole.MEMBER, UserStatus.ACTIVE);
+		when(profiles.existsByUserIdAndDeletedAtIsNullAndProfileNameIgnoreCase(7L, "Default")).thenReturn(false);
+		when(users.findById(7L)).thenReturn(Optional.of(user));
+		when(profiles.saveAndFlush(any(Profile.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+		service.create(7L, new ProfileRequest("Default", "First", "Last", "Engineer", new BigDecimal("3.5"),
+				null, "   "));
+
+		ArgumentCaptor<Profile> captor = ArgumentCaptor.forClass(Profile.class);
+		verify(profiles).saveAndFlush(captor.capture());
+		assertNull(captor.getValue().getPersonality());
+		assertNull(captor.getValue().getTechnicalSummary());
 	}
 
 	@Test
@@ -137,6 +154,22 @@ class ProfileServiceTest {
 		assertEquals("Friendly", result.personality());
 		assertEquals("Technical summary", result.technicalSummary());
 		assertEquals(false, result.hasPreviewed());
+	}
+
+	@Test
+	void clearsOptionalFieldsOnUpdate() {
+		Profile profile = new Profile(user(), "Default", "First", "Last", "Engineer", new BigDecimal("3.5"),
+				"Personality", "Summary");
+		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profiles.existsByUserIdAndDeletedAtIsNullAndProfileNameIgnoreCaseAndIdNot(7L, "Updated", 8L))
+				.thenReturn(false);
+		when(profiles.saveAndFlush(profile)).thenReturn(profile);
+
+		ProfileDetailResponse result = service.update(7L, 8L,
+				new ProfileUpdateRequest("Updated", "First", "Last", "Engineer", new BigDecimal("3.5"), null, "   ", 0L));
+
+		assertNull(result.personality());
+		assertNull(result.technicalSummary());
 	}
 
 	@Test

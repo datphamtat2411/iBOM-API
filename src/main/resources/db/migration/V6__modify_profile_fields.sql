@@ -1,0 +1,3 @@
+ALTER TABLE profiles
+    MODIFY COLUMN personality VARCHAR(4000) NULL,
+    MODIFY COLUMN technical_summary VARCHAR(4000) NULL;

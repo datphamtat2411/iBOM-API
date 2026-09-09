@@ -13,7 +13,7 @@ public record ProfileUpdateRequest(
 		@NotBlank @Size(max = 100) String lastName,
 		@NotBlank @Size(max = 100) String jobTitle,
 		@NotNull @DecimalMin(value = "0.0") BigDecimal yearsOfExperience,
-		@NotBlank @Size(max = 4000) String personality,
-		@NotBlank @Size(max = 4000) String technicalSummary,
+		@Size(max = 4000) String personality,
+		@Size(max = 4000) String technicalSummary,
 		@NotNull @DecimalMin(value = "0") Long version) {
 }

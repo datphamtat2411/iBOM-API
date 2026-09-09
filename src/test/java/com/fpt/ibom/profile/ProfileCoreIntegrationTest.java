@@ -2,6 +2,7 @@ package com.fpt.ibom.profile;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -71,6 +72,27 @@ class ProfileCoreIntegrationTest extends MySqlIntegrationTest {
 	}
 
 	@Test
+	void createsProfilesWithOptionalFieldsAbsentNullBlankAndPartiallyPopulated() throws Exception {
+		UserAccount user = saveUser();
+
+		Profile absent = createPersistedProfile(user, requestJsonWithoutOptionalFields("Absent"));
+		assertNull(absent.getPersonality());
+		assertNull(absent.getTechnicalSummary());
+
+		Profile nulls = createPersistedProfile(user, requestJson("Nulls", null, null));
+		assertNull(nulls.getPersonality());
+		assertNull(nulls.getTechnicalSummary());
+
+		Profile blanks = createPersistedProfile(user, requestJson("Blanks", "   ", ""));
+		assertNull(blanks.getPersonality());
+		assertNull(blanks.getTechnicalSummary());
+
+		Profile oneField = createPersistedProfile(user, requestJson("OneField", "Personality", null));
+		assertEquals("Personality", oneField.getPersonality());
+		assertNull(oneField.getTechnicalSummary());
+	}
+
+	@Test
 	void listsOnlyOwnedActiveProfilesAndSupportsZeroProfiles() {
 		UserAccount owner = saveUser();
 		UserAccount other = saveUser();
@@ -118,6 +140,35 @@ class ProfileCoreIntegrationTest extends MySqlIntegrationTest {
 	}
 
 	@Test
+	void updatesThroughHttpCanClearEitherOrBothOptionalFields() throws Exception {
+		UserAccount user = saveUser();
+		Profile profile = saveProfile(user, "Original");
+
+		mockMvc.perform(put("/api/profiles/{id}", profile.getId()).with(authentication(userPrincipal(user)))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(updateJson("PersonalityCleared", null, "Kept summary", 0)))
+				.andExpect(status().isOk());
+		Profile personalityCleared = profileRepository.findById(profile.getId()).orElseThrow();
+		assertNull(personalityCleared.getPersonality());
+		assertEquals("Kept summary", personalityCleared.getTechnicalSummary());
+
+		mockMvc.perform(put("/api/profiles/{id}", profile.getId()).with(authentication(userPrincipal(user)))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(updateJson("SummaryCleared", "Kept personality", null, 1)))
+				.andExpect(status().isOk());
+		Profile summaryCleared = profileRepository.findById(profile.getId()).orElseThrow();
+		assertEquals("Kept personality", summaryCleared.getPersonality());
+		assertNull(summaryCleared.getTechnicalSummary());
+
+		mockMvc.perform(put("/api/profiles/{id}", profile.getId()).with(authentication(userPrincipal(user)))
+				.contentType(MediaType.APPLICATION_JSON).content(updateJson("BothCleared", "   ", "", 2)))
+				.andExpect(status().isOk());
+		Profile bothCleared = profileRepository.findById(profile.getId()).orElseThrow();
+		assertNull(bothCleared.getPersonality());
+		assertNull(bothCleared.getTechnicalSummary());
+	}
+
+	@Test
 	void rejectsCaseInsensitiveTrimmedDuplicateNames() {
 		UserAccount user = saveUser();
 		saveProfile(user, "Existing");
@@ -147,14 +198,40 @@ class ProfileCoreIntegrationTest extends MySqlIntegrationTest {
 	}
 
 	private String updateJson(String name, long version) {
-		return "{\"profileName\":\"" + name + "\",\"firstName\":\"NewFirst\",\"lastName\":\"NewLast\","
-				+ "\"jobTitle\":\"Developer\",\"yearsOfExperience\":0,\"personality\":\"New personality\","
-				+ "\"technicalSummary\":\"New summary\",\"version\":" + version + "}";
+		return updateJson(name, "New personality", "New summary", version);
 	}
 
 	private String requestJson(String name) {
-		return "{\"profileName\":\"" + name + "\",\"firstName\":\"First\",\"lastName\":\"Last\","
-				+ "\"jobTitle\":\"Engineer\",\"yearsOfExperience\":2.5,\"personality\":\"Personality\","
-				+ "\"technicalSummary\":\"Summary\"}";
+		return requestJson(name, "Personality", "Summary");
+	}
+
+	private String requestJsonWithoutOptionalFields(String name) {
+		return "{\"profileName\":\"" + name + "\",\"firstName\":\"First\",\"lastName\":\"Last\"," 
+				+ "\"jobTitle\":\"Engineer\",\"yearsOfExperience\":2.5}";
+	}
+
+	private String requestJson(String name, String personality, String technicalSummary) {
+		return "{\"profileName\":\"" + name + "\",\"firstName\":\"First\",\"lastName\":\"Last\"," 
+				+ "\"jobTitle\":\"Engineer\",\"yearsOfExperience\":2.5,\"personality\":"
+				+ jsonValue(personality) + ",\"technicalSummary\":" + jsonValue(technicalSummary) + "}";
+	}
+
+	private String updateJson(String name, String personality, String technicalSummary, long version) {
+		return "{\"profileName\":\"" + name + "\",\"firstName\":\"NewFirst\",\"lastName\":\"NewLast\"," 
+				+ "\"jobTitle\":\"Developer\",\"yearsOfExperience\":0,\"personality\":"
+				+ jsonValue(personality) + ",\"technicalSummary\":" + jsonValue(technicalSummary)
+				+ ",\"version\":" + version + "}";
+	}
+
+	private String jsonValue(String value) {
+		return value == null ? "null" : "\"" + value + "\"";
+	}
+
+	private Profile createPersistedProfile(UserAccount user, String request) throws Exception {
+		String response = mockMvc.perform(post("/api/profiles").with(authentication(userPrincipal(user)))
+				.contentType(MediaType.APPLICATION_JSON).content(request)).andExpect(status().isCreated()).andReturn()
+				.getResponse().getContentAsString();
+		Long profileId = ((Number) com.jayway.jsonpath.JsonPath.read(response, "$.data.id")).longValue();
+		return profileRepository.findById(profileId).orElseThrow();
 	}
 }

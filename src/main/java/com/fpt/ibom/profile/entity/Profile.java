@@ -37,9 +37,9 @@ public class Profile {
 	private String lastName;
 	@Column(name = "job_title", nullable = false, length = 100)
 	private String jobTitle;
-	@Column(nullable = false, length = 4000)
+	@Column(length = 4000)
 	private String personality;
-	@Column(name = "technical_summary", nullable = false, length = 4000)
+	@Column(name = "technical_summary", length = 4000)
 	private String technicalSummary;
 	@Column(name = "years_of_experience", nullable = false, precision = 5, scale = 2)
 	private BigDecimal yearsOfExperience;

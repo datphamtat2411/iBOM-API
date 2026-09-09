@@ -40,8 +40,8 @@ public class ProfileService {
 		}
 		UserAccount user = userAccountRepository.findById(userId).orElseThrow(this::invalidUser);
 		Profile profile = new Profile(user, profileName, request.firstName().trim(), request.lastName().trim(),
-				request.jobTitle().trim(), request.yearsOfExperience(), request.personality().trim(),
-				request.technicalSummary().trim());
+				request.jobTitle().trim(), request.yearsOfExperience(), normalizeOptional(request.personality()),
+				normalizeOptional(request.technicalSummary()));
 		try {
 			return ProfileResponse.from(profileRepository.saveAndFlush(profile));
 		} catch (DataIntegrityViolationException exception) {
@@ -77,7 +77,8 @@ public class ProfileService {
 			throw duplicateName();
 		}
 		profile.update(profileName, request.firstName().trim(), request.lastName().trim(), request.jobTitle().trim(),
-				request.yearsOfExperience(), request.personality().trim(), request.technicalSummary().trim());
+				request.yearsOfExperience(), normalizeOptional(request.personality()),
+				normalizeOptional(request.technicalSummary()));
 		try {
 			return ProfileDetailResponse.from(profileRepository.saveAndFlush(profile));
 		} catch (ObjectOptimisticLockingFailureException | OptimisticLockException exception) {
@@ -88,6 +89,13 @@ public class ProfileService {
 			}
 			throw exception;
 		}
+	}
+
+	private String normalizeOptional(String value) {
+		if (value == null || value.isBlank()) {
+			return null;
+		}
+		return value.trim();
 	}
 
 	@Transactional
