@@ -57,7 +57,7 @@ Expand context only when:
 Read docs only when routed by `plan.md` or required to proceed safely.
 
 Implement only the approved scope.
-Add or update tests relevant to the changed behavior.
+Write or update the focused tests for the changed behavior before implementing the production code.
 
 After implementation, run only the tests directly relevant to the task and changed behavior.
 
