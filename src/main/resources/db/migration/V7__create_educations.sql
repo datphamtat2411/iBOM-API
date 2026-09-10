@@ -7,6 +7,8 @@ CREATE TABLE educations (
     start_date DATE NOT NULL,
     end_date DATE NULL,
     status VARCHAR(20) NOT NULL,
+    created_at TIMESTAMP(6) NOT NULL,
+    updated_at TIMESTAMP(6) NOT NULL,
     PRIMARY KEY (id),
     KEY idx_educations_profile_id (profile_id),
     CONSTRAINT fk_educations_profile FOREIGN KEY (profile_id) REFERENCES profiles (id),

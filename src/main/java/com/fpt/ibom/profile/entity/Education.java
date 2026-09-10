@@ -1,5 +1,6 @@
 package com.fpt.ibom.profile.entity;
 
+import java.time.Instant;
 import java.time.LocalDate;
 
 import jakarta.persistence.Column;
@@ -13,6 +14,8 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 @Entity
 @Table(name = "educations")
@@ -39,6 +42,12 @@ public class Education {
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 20)
 	private EducationStatus status;
+	@CreationTimestamp
+	@Column(name = "created_at", nullable = false, updatable = false)
+	private Instant createdAt;
+	@UpdateTimestamp
+	@Column(name = "updated_at", nullable = false)
+	private Instant updatedAt;
 
 	protected Education() {
 	}
@@ -62,6 +71,8 @@ public class Education {
 	public LocalDate getStartDate() { return startDate; }
 	public LocalDate getEndDate() { return endDate; }
 	public EducationStatus getStatus() { return status; }
+	public Instant getCreatedAt() { return createdAt; }
+	public Instant getUpdatedAt() { return updatedAt; }
 
 	public void update(String schoolName, String degree, String fieldOfStudy, LocalDate startDate, LocalDate endDate,
 			EducationStatus status) {

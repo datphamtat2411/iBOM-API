@@ -2,6 +2,7 @@ package com.fpt.ibom.profile;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -80,12 +81,18 @@ class EducationIntegrationTest extends MySqlIntegrationTest {
 		assertFalse(afterCreate.isHasPreviewed());
 		assertNull(created.getEndDate());
 		assertEquals(EducationStatus.ONGOING, created.getStatus());
+		assertNotNull(created.getCreatedAt());
+		assertNotNull(created.getUpdatedAt());
 
 		mockMvc.perform(put("/api/profiles/{profileId}/educations/{educationId}", profile.getId(), educationId)
 				.with(authentication(userPrincipal(user))).contentType(MediaType.APPLICATION_JSON)
 				.content(requestJson("Updated School", "COMPLETED", "2020-01-01", "2022-01-01", 1)))
 				.andExpect(status().isOk()).andExpect(jsonPath("$.data.profileVersion").value(2));
-		assertEquals(EducationStatus.COMPLETED, educationRepository.findById(educationId).orElseThrow().getStatus());
+		Education updated = educationRepository.findById(educationId).orElseThrow();
+		assertEquals(EducationStatus.COMPLETED, updated.getStatus());
+		assertEquals(created.getCreatedAt(), updated.getCreatedAt());
+		assertNotNull(updated.getUpdatedAt());
+		assertFalse(updated.getUpdatedAt().isBefore(created.getUpdatedAt()));
 
 		mockMvc.perform(get("/api/profiles/{id}/educations", profile.getId()).with(authentication(userPrincipal(user))))
 				.andExpect(status().isOk()).andExpect(jsonPath("$.data[0].id").value(educationId))
@@ -137,6 +144,14 @@ class EducationIntegrationTest extends MySqlIntegrationTest {
 				+ "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'educations' AND COLUMN_NAME = 'end_date'", String.class));
 		assertEquals("varchar", jdbcTemplate.queryForObject("SELECT DATA_TYPE FROM information_schema.COLUMNS "
 				+ "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'educations' AND COLUMN_NAME = 'status'", String.class));
+		assertEquals("NO", jdbcTemplate.queryForObject("SELECT IS_NULLABLE FROM information_schema.COLUMNS "
+				+ "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'educations' AND COLUMN_NAME = 'created_at'", String.class));
+		assertEquals("NO", jdbcTemplate.queryForObject("SELECT IS_NULLABLE FROM information_schema.COLUMNS "
+				+ "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'educations' AND COLUMN_NAME = 'updated_at'", String.class));
+		assertEquals(6, jdbcTemplate.queryForObject("SELECT DATETIME_PRECISION FROM information_schema.COLUMNS "
+				+ "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'educations' AND COLUMN_NAME = 'created_at'", Integer.class));
+		assertEquals(6, jdbcTemplate.queryForObject("SELECT DATETIME_PRECISION FROM information_schema.COLUMNS "
+				+ "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'educations' AND COLUMN_NAME = 'updated_at'", Integer.class));
 	}
 
 	private UserAccount saveUser() {
