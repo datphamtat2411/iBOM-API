@@ -62,7 +62,7 @@ class LanguageIntegrationTest extends MySqlIntegrationTest {
 				+ "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'languages' AND COLUMN_NAME = 'created_at'", Integer.class));
 		assertEquals(6, jdbcTemplate.queryForObject("SELECT DATETIME_PRECISION FROM information_schema.COLUMNS "
 				+ "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'languages' AND COLUMN_NAME = 'updated_at'", Integer.class));
-		assertEquals(0, jdbcTemplate.queryForObject("SELECT COUNT(*) FROM information_schema.TABLES "
+		assertEquals(1, jdbcTemplate.queryForObject("SELECT COUNT(*) FROM information_schema.TABLES "
 				+ "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'profile_languages'", Integer.class));
 
 		for (String name : List.of("English", "Vietnamese", "Japanese")) {
