@@ -21,7 +21,10 @@ import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.exception.ErrorCode;
 import com.fpt.ibom.profile.controller.ProfileController;
 import com.fpt.ibom.profile.dto.ProfileDetailResponse;
+import com.fpt.ibom.profile.dto.ProfileCompletenessResponse;
+import com.fpt.ibom.profile.dto.ProfileCompletenessSectionResponse;
 import com.fpt.ibom.profile.dto.ProfileSummaryResponse;
+import com.fpt.ibom.profile.service.ProfileCompletenessService;
 import com.fpt.ibom.profile.service.ProfileService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,6 +48,9 @@ class ProfileControllerTest {
 
 	@MockitoBean
 	private ProfileService profileService;
+
+	@MockitoBean
+	private ProfileCompletenessService profileCompletenessService;
 
 	@MockitoBean
 	private JwtDecoder jwtDecoder;
@@ -146,6 +152,45 @@ class ProfileControllerTest {
 	void requiresAuthenticationForProfileReads() throws Exception {
 		mockMvc.perform(get("/api/profiles/me")).andExpect(status().isUnauthorized());
 		mockMvc.perform(get("/api/profiles/8")).andExpect(status().isUnauthorized());
+		mockMvc.perform(get("/api/profiles/8/completeness")).andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void returnsCompletenessForAuthenticatedOwnerWithStableSectionShape() throws Exception {
+		when(profileCompletenessService.get(7L, 8L)).thenReturn(completenessResponse());
+
+		mockMvc.perform(get("/api/profiles/8/completeness").with(principal())).andExpect(status().isOk())
+				.andExpect(jsonPath("$.code").value(200)).andExpect(jsonPath("$.data.percentage").value(100))
+				.andExpect(jsonPath("$.data.completed").value(true))
+				.andExpect(jsonPath("$.data.sections[0].key").value("aboutMe"))
+				.andExpect(jsonPath("$.data.sections[0].weight").value(20))
+				.andExpect(jsonPath("$.data.sections[0].completed").value(true))
+				.andExpect(jsonPath("$.data.sections[0].validFieldCount").value(6))
+				.andExpect(jsonPath("$.data.sections[0].fieldCount").value(6))
+				.andExpect(jsonPath("$.data.sections[0].hasQualifyingRecord").doesNotExist())
+				.andExpect(jsonPath("$.data.sections[1].key").value("education"))
+				.andExpect(jsonPath("$.data.sections[1].weight").value(20))
+				.andExpect(jsonPath("$.data.sections[1].hasQualifyingRecord").value(true))
+				.andExpect(jsonPath("$.data.sections[1].validFieldCount").doesNotExist())
+				.andExpect(jsonPath("$.data.sections[2].key").value("language"))
+				.andExpect(jsonPath("$.data.sections[2].weight").value(15))
+				.andExpect(jsonPath("$.data.sections[3].key").value("certificate"))
+				.andExpect(jsonPath("$.data.sections[3].weight").value(15))
+				.andExpect(jsonPath("$.data.sections[4].key").value("project"))
+				.andExpect(jsonPath("$.data.sections[4].weight").value(20))
+				.andExpect(jsonPath("$.data.sections[5].key").value("skills"))
+				.andExpect(jsonPath("$.data.sections[5].weight").value(10));
+
+		verify(profileCompletenessService).get(7L, 8L);
+	}
+
+	@Test
+	void mapsCompletenessProfileNotFoundForAuthenticatedOwner() throws Exception {
+		when(profileCompletenessService.get(7L, 9L)).thenThrow(new ApiException(HttpStatus.NOT_FOUND,
+				ErrorCode.PROFILE_NOT_FOUND, "Profile not found"));
+
+		mockMvc.perform(get("/api/profiles/9/completeness").with(principal())).andExpect(status().isNotFound())
+				.andExpect(jsonPath("$.errorCode").value("PROFILE_NOT_FOUND"));
 	}
 
 	@Test
@@ -316,5 +361,15 @@ class ProfileControllerTest {
 
 	private String jsonValue(String value) {
 		return value == null ? "null" : "\"" + value + "\"";
+	}
+
+	private ProfileCompletenessResponse completenessResponse() {
+		return new ProfileCompletenessResponse(100, true, List.of(
+				new ProfileCompletenessSectionResponse("aboutMe", 20, true, 6, 6, null),
+				new ProfileCompletenessSectionResponse("education", 20, true, null, null, true),
+				new ProfileCompletenessSectionResponse("language", 15, true, null, null, true),
+				new ProfileCompletenessSectionResponse("certificate", 15, true, null, null, true),
+				new ProfileCompletenessSectionResponse("project", 20, true, null, null, true),
+				new ProfileCompletenessSectionResponse("skills", 10, true, null, null, true)));
 	}
 }

@@ -11,6 +11,8 @@ public interface CertificateRepository extends JpaRepository<Certificate, Long> 
 
 	List<Certificate> findByProfileIdOrderByIssueDateDescIdAsc(Long profileId);
 
+	boolean existsByProfileId(Long profileId);
+
 	Optional<Certificate> findByIdAndProfileId(Long certificateId, Long profileId);
 
 	boolean existsByProfileIdAndCertificateNameAndIssueDate(Long profileId, String certificateName,

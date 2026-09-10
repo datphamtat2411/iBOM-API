@@ -15,5 +15,7 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
 			+ "p.endDate DESC, p.startDate DESC, p.createdAt DESC")
 	List<Project> findByProfileIdInDisplayOrder(@Param("profileId") Long profileId);
 
+	boolean existsByProfileId(Long profileId);
+
 	Optional<Project> findByIdAndProfileId(Long projectId, Long profileId);
 }

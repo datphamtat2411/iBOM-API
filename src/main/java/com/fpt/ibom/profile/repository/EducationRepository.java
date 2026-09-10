@@ -10,5 +10,7 @@ public interface EducationRepository extends JpaRepository<Education, Long> {
 
 	List<Education> findByProfileIdOrderByIdAsc(Long profileId);
 
+	boolean existsByProfileId(Long profileId);
+
 	Optional<Education> findByIdAndProfileId(Long educationId, Long profileId);
 }

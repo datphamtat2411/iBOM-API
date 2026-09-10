@@ -12,6 +12,8 @@ public interface ProfileLanguageRepository extends JpaRepository<ProfileLanguage
 	@EntityGraph(attributePaths = "language")
 	List<ProfileLanguage> findByProfileId(Long profileId);
 
+	boolean existsByProfileId(Long profileId);
+
 	Optional<ProfileLanguage> findByIdAndProfileId(Long profileLanguageId, Long profileId);
 
 	boolean existsByProfileIdAndLanguageId(Long profileId, Long languageId);

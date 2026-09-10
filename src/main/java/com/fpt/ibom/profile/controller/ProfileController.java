@@ -2,11 +2,13 @@ package com.fpt.ibom.profile.controller;
 
 import com.fpt.ibom.auth.security.UserPrincipal;
 import com.fpt.ibom.common.ApiResponse;
+import com.fpt.ibom.profile.dto.ProfileCompletenessResponse;
 import com.fpt.ibom.profile.dto.ProfileRequest;
 import com.fpt.ibom.profile.dto.ProfileResponse;
 import com.fpt.ibom.profile.dto.ProfileUpdateRequest;
 import com.fpt.ibom.profile.dto.ProfileDetailResponse;
 import com.fpt.ibom.profile.dto.ProfileSummaryResponse;
+import com.fpt.ibom.profile.service.ProfileCompletenessService;
 import com.fpt.ibom.profile.service.ProfileService;
 import java.util.List;
 import jakarta.validation.Valid;
@@ -25,9 +27,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/profiles")
 public class ProfileController {
 	private final ProfileService profileService;
+	private final ProfileCompletenessService profileCompletenessService;
 
-	public ProfileController(ProfileService profileService) {
+	public ProfileController(ProfileService profileService, ProfileCompletenessService profileCompletenessService) {
 		this.profileService = profileService;
+		this.profileCompletenessService = profileCompletenessService;
 	}
 
 	@PostMapping
@@ -47,6 +51,13 @@ public class ProfileController {
 	public ResponseEntity<ApiResponse<ProfileDetailResponse>> get(@AuthenticationPrincipal UserPrincipal principal,
 			@PathVariable Long profileId) {
 		return ResponseEntity.ok(new ApiResponse<>(200, "Success", profileService.get(principal.userId(), profileId)));
+	}
+
+	@GetMapping("/{profileId}/completeness")
+	public ResponseEntity<ApiResponse<ProfileCompletenessResponse>> completeness(
+			@AuthenticationPrincipal UserPrincipal principal, @PathVariable Long profileId) {
+		return ResponseEntity.ok(new ApiResponse<>(200, "Success",
+				profileCompletenessService.get(principal.userId(), profileId)));
 	}
 
 	@PutMapping("/{profileId}")
