@@ -28,7 +28,7 @@ PLAN owns discovery and task-specific decisions.
 
 Inspect only task-relevant source, tests, configuration, migrations, and documentation.
 
-Keep `plan` concise.
+Keep `plan.md` concise.
 
 Prefer:
 
