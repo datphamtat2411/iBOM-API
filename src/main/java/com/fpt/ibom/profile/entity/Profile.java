@@ -15,6 +15,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.OptimisticLock;
 import org.hibernate.annotations.UpdateTimestamp;
 
 @Entity
@@ -44,6 +45,7 @@ public class Profile {
 	@Column(name = "years_of_experience", nullable = false, precision = 5, scale = 2)
 	private BigDecimal yearsOfExperience;
 	@Column(name = "has_previewed", nullable = false)
+	@OptimisticLock(excluded = true)
 	private boolean hasPreviewed = false;
 	@Column(name = "deleted_at")
 	private Instant deletedAt;
@@ -88,6 +90,8 @@ public class Profile {
 	public Instant getUpdatedAt() { return updatedAt; }
 
 	public void softDelete(Instant deletedAt) { this.deletedAt = deletedAt; }
+
+	public void invalidatePreview() { this.hasPreviewed = false; }
 
 	public void update(String profileName, String firstName, String lastName, String jobTitle,
 			BigDecimal yearsOfExperience, String personality, String technicalSummary) {
