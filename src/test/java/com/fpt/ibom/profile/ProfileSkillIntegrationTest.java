@@ -15,8 +15,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.math.BigDecimal;
 import java.sql.Timestamp;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 
@@ -45,9 +47,13 @@ import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.test.web.servlet.MockMvc;
@@ -56,7 +62,12 @@ import org.springframework.test.util.ReflectionTestUtils;
 @SpringBootTest
 @AutoConfigureMockMvc
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+@Import(ProfileSkillIntegrationTest.FixedClockConfiguration.class)
 class ProfileSkillIntegrationTest extends MySqlIntegrationTest {
+
+	private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+	private static final Instant FIXED_INSTANT = Instant.parse("2026-09-10T18:30:00Z");
+	private static final LocalDate BUSINESS_DATE = LocalDate.of(2026, 9, 11);
 
 	@Autowired
 	private MockMvc mockMvc;
@@ -231,7 +242,7 @@ class ProfileSkillIntegrationTest extends MySqlIntegrationTest {
 		assertEquals(ErrorCode.PROFILE_SKILL_NOT_FOUND, foreign.getErrorCode());
 
 		ApiException future = assertThrows(ApiException.class, () -> profileSkillService.create(owner.getId(),
-				ownerProfile.getId(), new ProfileSkillRequest(skill.getId(), BigDecimal.ONE, LocalDate.now().plusDays(1), 0L)));
+				ownerProfile.getId(), new ProfileSkillRequest(skill.getId(), BigDecimal.ONE, BUSINESS_DATE.plusDays(1), 0L)));
 		assertEquals(ErrorCode.PROFILE_SKILL_LAST_USED_IN_FUTURE, future.getErrorCode());
 
 		profileSkillService.create(owner.getId(), ownerProfile.getId(),
@@ -246,6 +257,16 @@ class ProfileSkillIntegrationTest extends MySqlIntegrationTest {
 		ApiException inactive = assertThrows(ApiException.class,
 				() -> profileSkillService.list(owner.getId(), ownerProfile.getId()));
 		assertEquals(ErrorCode.PROFILE_NOT_FOUND, inactive.getErrorCode());
+	}
+
+	@TestConfiguration(proxyBeanMethods = false)
+	static class FixedClockConfiguration {
+
+		@Bean("fixedClock")
+		@Primary
+		Clock fixedClock() {
+			return Clock.fixed(FIXED_INSTANT, BUSINESS_ZONE);
+		}
 	}
 
 	private int constraintCount(String constraintName) {

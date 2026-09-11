@@ -14,7 +14,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 
@@ -36,9 +39,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -46,7 +53,12 @@ import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest
 @AutoConfigureMockMvc
+@Import(CertificateIntegrationTest.FixedClockConfiguration.class)
 class CertificateIntegrationTest extends MySqlIntegrationTest {
+
+	private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+	private static final Instant FIXED_INSTANT = Instant.parse("2026-09-10T18:30:00Z");
+	private static final LocalDate BUSINESS_DATE = LocalDate.of(2026, 9, 11);
 
 	@Autowired
 	private MockMvc mockMvc;
@@ -180,9 +192,19 @@ class CertificateIntegrationTest extends MySqlIntegrationTest {
 		Profile profile = saveProfile(user, "Future Certificate Profile");
 
 		ApiException exception = assertThrows(ApiException.class, () -> certificateService.create(user.getId(), profile.getId(),
-				new CertificateRequest("Future", LocalDate.now().plusDays(1), 0L)));
+				new CertificateRequest("Future", BUSINESS_DATE.plusDays(1), 0L)));
 
 		assertEquals(ErrorCode.CERTIFICATE_ISSUE_DATE_IN_FUTURE, exception.getErrorCode());
+	}
+
+	@TestConfiguration(proxyBeanMethods = false)
+	static class FixedClockConfiguration {
+
+		@Bean("fixedClock")
+		@Primary
+		Clock fixedClock() {
+			return Clock.fixed(FIXED_INSTANT, BUSINESS_ZONE);
+		}
 	}
 
 	private int constraintCount(String constraintName) {

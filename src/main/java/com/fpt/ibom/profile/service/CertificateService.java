@@ -1,6 +1,7 @@
 package com.fpt.ibom.profile.service;
 
 import java.time.LocalDate;
+import java.time.Clock;
 import java.util.List;
 
 import com.fpt.ibom.exception.ApiException;
@@ -30,12 +31,14 @@ public class CertificateService {
 	private final CertificateRepository certificateRepository;
 	private final ProfileRepository profileRepository;
 	private final EntityManager entityManager;
+	private final Clock clock;
 
 	public CertificateService(CertificateRepository certificateRepository, ProfileRepository profileRepository,
-			EntityManager entityManager) {
+			EntityManager entityManager, Clock clock) {
 		this.certificateRepository = certificateRepository;
 		this.profileRepository = profileRepository;
 		this.entityManager = entityManager;
+		this.clock = clock;
 	}
 
 	@Transactional(readOnly = true)
@@ -137,7 +140,7 @@ public class CertificateService {
 	}
 
 	private CanonicalCertificate canonicalize(CertificateRequest request) {
-		if (request.issueDate().isAfter(LocalDate.now())) {
+		if (request.issueDate().isAfter(LocalDate.now(clock))) {
 			throw futureIssueDate();
 		}
 		return new CanonicalCertificate(request.certificateName().trim(), request.issueDate());

@@ -1,6 +1,7 @@
 package com.fpt.ibom.profile.service;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.List;
@@ -35,13 +36,15 @@ public class ProfileSkillService {
 	private final ProfileRepository profileRepository;
 	private final SkillRepository skillRepository;
 	private final EntityManager entityManager;
+	private final Clock clock;
 
 	public ProfileSkillService(ProfileSkillRepository profileSkillRepository, ProfileRepository profileRepository,
-			SkillRepository skillRepository, EntityManager entityManager) {
+			SkillRepository skillRepository, EntityManager entityManager, Clock clock) {
 		this.profileSkillRepository = profileSkillRepository;
 		this.profileRepository = profileRepository;
 		this.skillRepository = skillRepository;
 		this.entityManager = entityManager;
+		this.clock = clock;
 	}
 
 	@Transactional(readOnly = true)
@@ -150,7 +153,7 @@ public class ProfileSkillService {
 				|| request.experienceYears().compareTo(BigDecimal.ZERO) < 0) {
 			throw validationFailed();
 		}
-		if (request.lastUsed() != null && request.lastUsed().isAfter(LocalDate.now())) {
+		if (request.lastUsed() != null && request.lastUsed().isAfter(LocalDate.now(clock))) {
 			throw futureLastUsed();
 		}
 		return new CanonicalProfileSkill(request.skillId(), request.experienceYears(), request.lastUsed());

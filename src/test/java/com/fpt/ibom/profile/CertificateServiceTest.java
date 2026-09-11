@@ -10,7 +10,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
@@ -40,10 +43,15 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 class CertificateServiceTest {
 
+	private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+	private static final Instant FIXED_INSTANT = Instant.parse("2026-09-10T18:30:00Z");
+	private static final Clock FIXED_CLOCK = Clock.fixed(FIXED_INSTANT, BUSINESS_ZONE);
+	private static final LocalDate BUSINESS_DATE = LocalDate.of(2026, 9, 11);
+
 	private final CertificateRepository certificates = org.mockito.Mockito.mock(CertificateRepository.class);
 	private final ProfileRepository profiles = org.mockito.Mockito.mock(ProfileRepository.class);
 	private final EntityManager entityManager = org.mockito.Mockito.mock(EntityManager.class);
-	private final CertificateService service = new CertificateService(certificates, profiles, entityManager);
+	private final CertificateService service = new CertificateService(certificates, profiles, entityManager, FIXED_CLOCK);
 
 	@Test
 	void listsOwnedCertificatesInIssueDateDescendingAndIdAscendingOrder() {
@@ -63,10 +71,10 @@ class CertificateServiceTest {
 	}
 
 	@Test
-	void createsTrimmedCertificateAndInvalidatesPreview() {
+	void createsTrimmedCertificateOnCurrentBusinessDateAndInvalidatesPreview() {
 		Profile profile = profile();
 		ReflectionTestUtils.setField(profile, "hasPreviewed", true);
-		LocalDate issueDate = LocalDate.of(2024, 1, 1);
+		LocalDate issueDate = BUSINESS_DATE;
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
 		when(certificates.existsByProfileIdAndCertificateNameAndIssueDate(8L, "AWS", issueDate)).thenReturn(false);
 		when(certificates.save(any(Certificate.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -92,7 +100,7 @@ class CertificateServiceTest {
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile()));
 
 		ApiException exception = assertThrows(ApiException.class, () -> service.create(7L, 8L,
-				new CertificateRequest("AWS", LocalDate.now().plusDays(1), 0L)));
+				new CertificateRequest("AWS", BUSINESS_DATE.plusDays(1), 0L)));
 
 		assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
 		assertEquals(ErrorCode.CERTIFICATE_ISSUE_DATE_IN_FUTURE, exception.getErrorCode());

@@ -10,7 +10,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
@@ -43,11 +46,17 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 class ProfileSkillServiceTest {
 
+	private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+	private static final Instant FIXED_INSTANT = Instant.parse("2026-09-10T18:30:00Z");
+	private static final Clock FIXED_CLOCK = Clock.fixed(FIXED_INSTANT, BUSINESS_ZONE);
+	private static final LocalDate BUSINESS_DATE = LocalDate.of(2026, 9, 11);
+
 	private final ProfileSkillRepository profileSkills = org.mockito.Mockito.mock(ProfileSkillRepository.class);
 	private final ProfileRepository profiles = org.mockito.Mockito.mock(ProfileRepository.class);
 	private final SkillRepository skills = org.mockito.Mockito.mock(SkillRepository.class);
 	private final EntityManager entityManager = org.mockito.Mockito.mock(EntityManager.class);
-	private final ProfileSkillService service = new ProfileSkillService(profileSkills, profiles, skills, entityManager);
+	private final ProfileSkillService service = new ProfileSkillService(profileSkills, profiles, skills, entityManager,
+			FIXED_CLOCK);
 
 	@Test
 	void listsOwnedSkillsByExperienceDescendingThenCaseInsensitiveSkillNameAndId() {
@@ -70,7 +79,7 @@ class ProfileSkillServiceTest {
 		Profile profile = profile();
 		ReflectionTestUtils.setField(profile, "hasPreviewed", true);
 		Skill skill = skill(22L, "Java");
-		LocalDate lastUsed = LocalDate.of(2025, 1, 15);
+		LocalDate lastUsed = BUSINESS_DATE;
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
 		when(skills.findById(22L)).thenReturn(Optional.of(skill));
 		when(profileSkills.save(any(ProfileSkill.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -129,7 +138,7 @@ class ProfileSkillServiceTest {
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile()));
 
 		ApiException exception = assertThrows(ApiException.class, () -> service.create(7L, 8L,
-				new ProfileSkillRequest(22L, new BigDecimal("1.00"), LocalDate.now().plusDays(1), 0L)));
+				new ProfileSkillRequest(22L, new BigDecimal("1.00"), BUSINESS_DATE.plusDays(1), 0L)));
 
 		assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
 		assertEquals(ErrorCode.PROFILE_SKILL_LAST_USED_IN_FUTURE, exception.getErrorCode());
