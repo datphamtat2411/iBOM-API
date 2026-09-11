@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -27,6 +28,10 @@ import com.fpt.ibom.master.repository.LanguageRepository;
 import com.fpt.ibom.master.repository.SkillCategoryRepository;
 import com.fpt.ibom.master.repository.SkillRepository;
 import com.fpt.ibom.profile.dto.ProfileCopyRequest;
+import com.fpt.ibom.profile.dto.EducationRequest;
+import com.fpt.ibom.profile.dto.ProfileDetailResponse;
+import com.fpt.ibom.profile.dto.ProfileLanguageRequest;
+import com.fpt.ibom.profile.dto.ProfileUpdateRequest;
 import com.fpt.ibom.profile.dto.ProfileResponse;
 import com.fpt.ibom.profile.entity.Certificate;
 import com.fpt.ibom.profile.entity.Education;
@@ -44,16 +49,35 @@ import com.fpt.ibom.profile.repository.ProfileRepository;
 import com.fpt.ibom.profile.repository.ProfileSkillRepository;
 import com.fpt.ibom.profile.repository.ProjectRepository;
 import com.fpt.ibom.profile.service.ProfileCopyService;
+import com.fpt.ibom.profile.service.CertificateService;
+import com.fpt.ibom.profile.service.EducationService;
+import com.fpt.ibom.profile.service.ProfileLanguageService;
+import com.fpt.ibom.profile.service.ProfileService;
+import com.fpt.ibom.profile.service.ProjectService;
+import com.fpt.ibom.profile.service.ProfileSkillService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @SpringBootTest
 @AutoConfigureMockMvc
 class ProfileCopyIntegrationTest extends MySqlIntegrationTest {
 	@Autowired
 	private ProfileCopyService profileCopyService;
+	@Autowired
+	private ProfileService profileService;
+	@Autowired
+	private EducationService educationService;
+	@Autowired
+	private CertificateService certificateService;
+	@Autowired
+	private ProjectService projectService;
+	@Autowired
+	private ProfileLanguageService profileLanguageService;
+	@Autowired
+	private ProfileSkillService profileSkillService;
 	@Autowired
 	private ProfileRepository profileRepository;
 	@Autowired
@@ -229,6 +253,131 @@ class ProfileCopyIntegrationTest extends MySqlIntegrationTest {
 	}
 
 	@Test
+	void maintainsServiceLevelIsolationAcrossNormalCopyMutations() {
+		UserAccount user = saveUser();
+		CopiedAggregate aggregate = savePopulatedAggregate(user);
+		Profile source = aggregate.source();
+		Profile copied = aggregate.copied();
+
+		Profile copiedEntity = profileRepository.findById(copied.getId()).orElseThrow();
+		ReflectionTestUtils.setField(copiedEntity, "hasPreviewed", true);
+		profileRepository.saveAndFlush(copiedEntity);
+
+		ProfileDetailResponse sourceBefore = profileService.get(user.getId(), source.getId());
+		ProfileDetailResponse copiedBefore = profileService.get(user.getId(), copied.getId());
+		assertTrue(sourceBefore.hasPreviewed());
+		assertTrue(copiedBefore.hasPreviewed());
+		assertEquals(1, educationService.list(user.getId(), copied.getId()).size());
+		assertEquals(1, certificateService.list(user.getId(), copied.getId()).size());
+		assertEquals(1, projectService.list(user.getId(), copied.getId()).size());
+		assertEquals(1, profileLanguageService.list(user.getId(), copied.getId()).size());
+		assertEquals(1, profileSkillService.list(user.getId(), copied.getId()).size());
+
+		ProfileDetailResponse copiedAfterProfileUpdate = profileService.update(user.getId(), copied.getId(),
+				new ProfileUpdateRequest("Updated Copy", "Copy First", "Copy Last", "Developer", new BigDecimal("4.0"),
+						"Copy Personality", "Copy Summary", copiedBefore.version()));
+		assertEquals(1L, copiedAfterProfileUpdate.version());
+		assertFalse(copiedAfterProfileUpdate.hasPreviewed());
+
+		Education copiedEducation = educationRepository.findByProfileIdOrderByIdAsc(copied.getId()).get(0);
+		educationService.update(user.getId(), copied.getId(), copiedEducation.getId(),
+				new EducationRequest("Updated Copy School", "Degree", "Field", LocalDate.of(2021, 1, 1), null,
+						"ONGOING", copiedAfterProfileUpdate.version()));
+		long copiedVersionAfterEducation = profileService.get(user.getId(), copied.getId()).version();
+		assertTrue(copiedVersionAfterEducation > copiedAfterProfileUpdate.version());
+
+		ProfileLanguage copiedLanguage = profileLanguageRepository.findByProfileId(copied.getId()).get(0);
+		profileLanguageService.update(user.getId(), copied.getId(), copiedLanguage.getId(),
+				new ProfileLanguageRequest(aggregate.language().getId(), "ADVANCED", copiedVersionAfterEducation));
+		long copiedVersionAfterLanguage = profileService.get(user.getId(), copied.getId()).version();
+		assertTrue(copiedVersionAfterLanguage > copiedVersionAfterEducation);
+
+		ProfileDetailResponse sourceAfterProfileUpdate = profileService.update(user.getId(), source.getId(),
+				new ProfileUpdateRequest("Updated Source", "Source First", "Source Last", "Architect",
+						new BigDecimal("5.0"), "Source Personality", "Source Summary", sourceBefore.version()));
+		Education sourceEducation = educationRepository.findByProfileIdOrderByIdAsc(source.getId()).get(0);
+		educationService.update(user.getId(), source.getId(), sourceEducation.getId(),
+				new EducationRequest("Updated Source School", "Degree", "Field", LocalDate.of(2021, 1, 1),
+						LocalDate.of(2025, 1, 1), "COMPLETED", sourceAfterProfileUpdate.version()));
+
+		ProfileDetailResponse copiedAfterMutations = profileService.get(user.getId(), copied.getId());
+		ProfileDetailResponse sourceAfterMutations = profileService.get(user.getId(), source.getId());
+		assertEquals("Updated Copy", copiedAfterMutations.profileName());
+		assertEquals(copiedVersionAfterLanguage, copiedAfterMutations.version());
+		assertFalse(copiedAfterMutations.hasPreviewed());
+		assertEquals("Updated Source", sourceAfterMutations.profileName());
+		assertTrue(sourceAfterMutations.version() > sourceAfterProfileUpdate.version());
+		assertFalse(sourceAfterMutations.hasPreviewed());
+		assertEquals("Updated Copy School", educationService.list(user.getId(), copied.getId()).get(0).schoolName());
+		assertEquals("Updated Source School", educationService.list(user.getId(), source.getId()).get(0).schoolName());
+		assertEquals(LanguageLevel.ADVANCED, profileLanguageService.list(user.getId(), copied.getId()).get(0).level());
+		assertEquals(LanguageLevel.NATIVE, profileLanguageService.list(user.getId(), source.getId()).get(0).level());
+
+		ProfileLanguage sourceLanguage = profileLanguageRepository.findByProfileId(source.getId()).get(0);
+		ProfileSkill copiedSkill = profileSkillRepository.findByProfileId(copied.getId()).get(0);
+		ProfileSkill sourceSkill = profileSkillRepository.findByProfileId(source.getId()).get(0);
+		assertNotEquals(sourceLanguage.getId(), copiedLanguage.getId());
+		assertEquals(aggregate.language().getId(), sourceLanguage.getLanguage().getId());
+		assertEquals(aggregate.language().getId(), copiedLanguage.getLanguage().getId());
+		assertNotEquals(sourceSkill.getId(), copiedSkill.getId());
+		assertEquals(aggregate.skill().getId(), sourceSkill.getSkill().getId());
+		assertEquals(aggregate.skill().getId(), copiedSkill.getSkill().getId());
+	}
+
+	@Test
+	void keepsCopiedAggregateActiveAfterSourceSoftDeletion() {
+		UserAccount user = saveUser();
+		CopiedAggregate aggregate = savePopulatedAggregate(user);
+		Profile source = aggregate.source();
+		Profile copied = aggregate.copied();
+
+		profileService.delete(user.getId(), source.getId());
+
+		assertThrowsWithCode(() -> profileService.get(user.getId(), source.getId()), ErrorCode.PROFILE_NOT_FOUND);
+		assertThrowsWithCode(() -> certificateService.list(user.getId(), source.getId()), ErrorCode.PROFILE_NOT_FOUND);
+		assertEquals(List.of(copied.getId()), profileService.list(user.getId()).stream().map(response -> response.id()).toList());
+
+		ProfileDetailResponse copiedBeforeUpdate = profileService.get(user.getId(), copied.getId());
+		assertEquals(0L, copiedBeforeUpdate.version());
+		assertFalse(copiedBeforeUpdate.hasPreviewed());
+		assertEquals(1, educationService.list(user.getId(), copied.getId()).size());
+		assertEquals(1, certificateService.list(user.getId(), copied.getId()).size());
+		assertEquals(1, projectService.list(user.getId(), copied.getId()).size());
+		assertEquals(1, profileLanguageService.list(user.getId(), copied.getId()).size());
+		assertEquals(1, profileSkillService.list(user.getId(), copied.getId()).size());
+
+		ProfileDetailResponse copiedAfterProfileUpdate = profileService.update(user.getId(), copied.getId(),
+				new ProfileUpdateRequest("After Source Delete", "Copy First", "Copy Last", "Developer",
+						new BigDecimal("4.0"), "Copy Personality", "Copy Summary", copiedBeforeUpdate.version()));
+		Education copiedEducation = educationRepository.findByProfileIdOrderByIdAsc(copied.getId()).get(0);
+		educationService.update(user.getId(), copied.getId(), copiedEducation.getId(),
+				new EducationRequest("After Delete School", "Degree", "Field", LocalDate.of(2021, 1, 1), null,
+						"ONGOING", copiedAfterProfileUpdate.version()));
+		ProfileDetailResponse copiedAfterEducationUpdate = profileService.get(user.getId(), copied.getId());
+		assertTrue(copiedAfterEducationUpdate.version() > copiedAfterProfileUpdate.version());
+
+		Profile copiedAfterUpdate = profileRepository.findById(copied.getId()).orElseThrow();
+		Profile deletedSource = profileRepository.findById(source.getId()).orElseThrow();
+		assertEquals(copiedAfterEducationUpdate.version(), copiedAfterUpdate.getVersion());
+		assertFalse(copiedAfterUpdate.isHasPreviewed());
+		assertNotNull(deletedSource.getDeletedAt());
+		assertEquals(1, educationRepository.findByProfileIdOrderByIdAsc(copied.getId()).size());
+		assertEquals(1, profileLanguageRepository.findByProfileId(copied.getId()).size());
+		assertEquals(1, profileSkillRepository.findByProfileId(copied.getId()).size());
+
+		ProfileLanguage copiedLanguage = profileLanguageRepository.findByProfileId(copied.getId()).get(0);
+		ProfileLanguage sourceLanguage = profileLanguageRepository.findByProfileId(source.getId()).get(0);
+		ProfileSkill copiedSkill = profileSkillRepository.findByProfileId(copied.getId()).get(0);
+		ProfileSkill sourceSkill = profileSkillRepository.findByProfileId(source.getId()).get(0);
+		assertNotEquals(sourceLanguage.getId(), copiedLanguage.getId());
+		assertEquals(aggregate.language().getId(), copiedLanguage.getLanguage().getId());
+		assertEquals(aggregate.language().getId(), sourceLanguage.getLanguage().getId());
+		assertNotEquals(sourceSkill.getId(), copiedSkill.getId());
+		assertEquals(aggregate.skill().getId(), copiedSkill.getSkill().getId());
+		assertEquals(aggregate.skill().getId(), sourceSkill.getSkill().getId());
+	}
+
+	@Test
 	void rejectsTrimmedCaseInsensitiveDuplicateName() {
 		UserAccount user = saveUser();
 		Profile source = saveProfile(user, "Copy Source-" + UUID.randomUUID());
@@ -255,5 +404,29 @@ class ProfileCopyIntegrationTest extends MySqlIntegrationTest {
 	private Profile saveProfile(UserAccount user, String name) {
 		return profileRepository.saveAndFlush(new Profile(user, name, "First", "Last", "Engineer",
 				new BigDecimal("3.5"), "Personality", "Summary"));
+	}
+
+	private CopiedAggregate savePopulatedAggregate(UserAccount user) {
+		Profile source = saveProfile(user, "Source-" + UUID.randomUUID());
+		ReflectionTestUtils.setField(source, "hasPreviewed", true);
+		source = profileRepository.saveAndFlush(source);
+		Language language = languageRepository.saveAndFlush(new Language("copy-language-" + UUID.randomUUID()));
+		SkillCategory category = skillCategoryRepository.findByCode("BACKEND").orElseThrow();
+		Skill skill = skillRepository.saveAndFlush(new Skill("copy-skill-" + UUID.randomUUID(), category));
+		educationRepository.saveAndFlush(new Education(source, "School", "Degree", "Field", LocalDate.of(2020, 1, 1),
+				LocalDate.of(2024, 1, 1), EducationStatus.COMPLETED));
+		profileLanguageRepository.saveAndFlush(new ProfileLanguage(source, language, LanguageLevel.NATIVE));
+		certificateRepository.saveAndFlush(new Certificate(source, "Certificate", LocalDate.of(2023, 5, 1)));
+		projectRepository.saveAndFlush(new Project(source, "Project", "Description", LocalDate.of(2022, 1, 1),
+				LocalDate.of(2023, 1, 1), ProjectStatus.COMPLETED, "Engineer", 4, "Responsibilities", "Java", "Tools"));
+		profileSkillRepository.saveAndFlush(new ProfileSkill(source, skill, new BigDecimal("2.5"), LocalDate.of(2025, 1, 1)));
+
+		ProfileResponse response = profileCopyService.copy(user.getId(), source.getId(),
+				new ProfileCopyRequest("Copy-" + UUID.randomUUID()));
+		Profile copied = profileRepository.findById(response.id()).orElseThrow();
+		return new CopiedAggregate(source, copied, language, skill);
+	}
+
+	private record CopiedAggregate(Profile source, Profile copied, Language language, Skill skill) {
 	}
 }
