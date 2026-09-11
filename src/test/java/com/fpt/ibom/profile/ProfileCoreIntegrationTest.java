@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -72,6 +73,21 @@ class ProfileCoreIntegrationTest extends MySqlIntegrationTest {
 	}
 
 	@Test
+	void createsAtLeastSevenProfilesThroughHttp() throws Exception {
+		UserAccount user = saveUser();
+
+		for (int index = 1; index <= 7; index++) {
+			String profileName = "Profile " + index;
+			mockMvc.perform(post("/api/profiles").with(authentication(userPrincipal(user)))
+					.contentType(MediaType.APPLICATION_JSON).content(requestJson(profileName)))
+					.andExpect(status().isCreated()).andExpect(jsonPath("$.data.profileName").value(profileName));
+		}
+
+		mockMvc.perform(get("/api/profiles/me").with(authentication(userPrincipal(user))))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.data.length()").value(7));
+	}
+
+	@Test
 	void createsProfilesWithOptionalFieldsAbsentNullBlankAndPartiallyPopulated() throws Exception {
 		UserAccount user = saveUser();
 
@@ -104,6 +120,49 @@ class ProfileCoreIntegrationTest extends MySqlIntegrationTest {
 
 		assertEquals(List.of("Second"), profileService.list(owner.getId()).stream()
 				.map(summary -> summary.profileName()).toList());
+	}
+
+	@Test
+	void listsOnlyAuthenticatedOwnersActiveProfilesThroughHttp() throws Exception {
+		UserAccount owner = saveUser();
+		UserAccount other = saveUser();
+		Profile active = saveProfile(owner, "Active");
+		Profile deleted = saveProfile(owner, "Deleted");
+		saveProfile(other, "Foreign");
+		profileService.delete(owner.getId(), deleted.getId());
+
+		mockMvc.perform(get("/api/profiles/me").with(authentication(userPrincipal(owner))))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.data.length()").value(1))
+				.andExpect(jsonPath("$.data[0].id").value(active.getId()))
+				.andExpect(jsonPath("$.data[0].profileName").value("Active"));
+	}
+
+	@Test
+	void keepsSurvivingProfileReadableAfterAnotherProfileIsDeletedThroughHttp() throws Exception {
+		UserAccount user = saveUser();
+		Profile deleted = saveProfile(user, "Deleted");
+		Profile surviving = saveProfile(user, "Surviving");
+
+		mockMvc.perform(delete("/api/profiles/{id}", deleted.getId()).with(authentication(userPrincipal(user))))
+				.andExpect(status().isOk());
+
+		mockMvc.perform(get("/api/profiles/{id}", surviving.getId()).with(authentication(userPrincipal(user))))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.data.id").value(surviving.getId()))
+				.andExpect(jsonPath("$.data.profileName").value("Surviving"));
+	}
+
+	@Test
+	void resolvesExplicitProfileIdsIndependentlyAcrossSequentialHttpReads() throws Exception {
+		UserAccount user = saveUser();
+		Profile first = saveProfile(user, "First");
+		Profile second = saveProfile(user, "Second");
+
+		mockMvc.perform(get("/api/profiles/{id}", first.getId()).with(authentication(userPrincipal(user))))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.data.profileName").value("First"));
+		mockMvc.perform(get("/api/profiles/{id}", second.getId()).with(authentication(userPrincipal(user))))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.data.profileName").value("Second"));
+		mockMvc.perform(get("/api/profiles/{id}", first.getId()).with(authentication(userPrincipal(user))))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.data.profileName").value("First"));
 	}
 
 	@Test
