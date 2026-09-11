@@ -10,12 +10,12 @@ import jakarta.validation.constraints.Size;
 public record ProjectRequest(
 		@NotBlank @Size(max = 255) String name,
 		@NotBlank String description,
-		@NotNull LocalDate startDate,
+		LocalDate startDate,
 		LocalDate endDate,
 		@NotBlank String status,
 		@NotBlank @Size(max = 255) String position,
-		@NotNull @Min(1) Integer teamSize,
-		@NotBlank String responsibilities,
+		@Min(1) Integer teamSize,
+		String responsibilities,
 		String programmingLanguages,
 		String tools,
 		@NotNull @Min(0) Long version) {

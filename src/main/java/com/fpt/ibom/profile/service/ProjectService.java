@@ -120,8 +120,7 @@ public class ProjectService {
 		String name = requiredText(request.name());
 		String description = requiredText(request.description());
 		String position = requiredText(request.position());
-		String responsibilities = requiredText(request.responsibilities());
-		if (request.startDate() == null || request.teamSize() == null || request.teamSize() < 1) {
+		if (request.teamSize() != null && request.teamSize() < 1) {
 			throw validationError();
 		}
 		ProjectStatus status = parseStatus(request.status());
@@ -131,12 +130,13 @@ public class ProjectService {
 		} else if (endDate == null) {
 			throw new ApiException(HttpStatus.BAD_REQUEST, ErrorCode.PROJECT_END_DATE_REQUIRED,
 					"Completed Project requires an end date");
-		} else if (request.startDate().isAfter(endDate)) {
+		} else if (request.startDate() != null && request.startDate().isAfter(endDate)) {
 			throw new ApiException(HttpStatus.BAD_REQUEST, ErrorCode.PROJECT_DATE_RANGE_INVALID,
 					"Project start date must not be after end date");
 		}
 		return new CanonicalProject(name, description, request.startDate(), endDate, status, position, request.teamSize(),
-				responsibilities, normalizeOptional(request.programmingLanguages()), normalizeOptional(request.tools()));
+				normalizeOptional(request.responsibilities()), normalizeOptional(request.programmingLanguages()),
+				normalizeOptional(request.tools()));
 	}
 
 	private ProjectStatus parseStatus(String value) {

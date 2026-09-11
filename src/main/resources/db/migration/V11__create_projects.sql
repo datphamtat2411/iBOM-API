@@ -3,12 +3,12 @@ CREATE TABLE projects (
     profile_id BIGINT NOT NULL,
     name VARCHAR(255) NOT NULL,
     description TEXT NOT NULL,
-    start_date DATE NOT NULL,
+    start_date DATE NULL,
     end_date DATE NULL,
     status VARCHAR(20) NOT NULL,
     position VARCHAR(255) NOT NULL,
-    team_size INT NOT NULL,
-    responsibilities TEXT NOT NULL,
+    team_size INT NULL,
+    responsibilities TEXT NULL,
     programming_languages TEXT NULL,
     tools TEXT NULL,
     created_at TIMESTAMP(6) NOT NULL,
@@ -21,6 +21,6 @@ CREATE TABLE projects (
     CONSTRAINT chk_projects_team_size CHECK (team_size >= 1),
     CONSTRAINT chk_projects_dates CHECK (
         (status = 'ONGOING' AND end_date IS NULL)
-        OR (status = 'COMPLETED' AND end_date IS NOT NULL AND start_date <= end_date)
+        OR (status = 'COMPLETED' AND end_date IS NOT NULL AND (start_date IS NULL OR start_date <= end_date))
     )
 );

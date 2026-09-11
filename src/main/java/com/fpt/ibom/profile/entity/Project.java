@@ -33,7 +33,7 @@ public class Project {
 	private String name;
 	@Column(nullable = false, columnDefinition = "TEXT")
 	private String description;
-	@Column(name = "start_date", nullable = false)
+	@Column(name = "start_date")
 	private LocalDate startDate;
 	@Column(name = "end_date")
 	private LocalDate endDate;
@@ -42,9 +42,9 @@ public class Project {
 	private ProjectStatus status;
 	@Column(nullable = false, length = 255)
 	private String position;
-	@Column(name = "team_size", nullable = false)
+	@Column(name = "team_size")
 	private Integer teamSize;
-	@Column(nullable = false, columnDefinition = "TEXT")
+	@Column(columnDefinition = "TEXT")
 	private String responsibilities;
 	@Column(name = "programming_languages", columnDefinition = "TEXT")
 	private String programmingLanguages;

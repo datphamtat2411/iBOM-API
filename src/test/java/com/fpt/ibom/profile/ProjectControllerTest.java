@@ -84,11 +84,13 @@ class ProjectControllerTest {
 	}
 
 	@Test
-	void requiresAuthenticationAndAllMutationFields() throws Exception {
+	void requiresAuthenticationAndRequiredMutationFields() throws Exception {
 		mockMvc.perform(get("/api/profiles/8/projects")).andExpect(status().isUnauthorized());
 		mockMvc.perform(post("/api/profiles/8/projects").with(principal()).contentType(MediaType.APPLICATION_JSON)
 				.content("{}" )).andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"));
+		mockMvc.perform(post("/api/profiles/8/projects").with(principal()).contentType(MediaType.APPLICATION_JSON)
+				.content(requestJsonWithNullableOptionalFields(0))).andExpect(status().isCreated());
 		mockMvc.perform(post("/api/profiles/8/projects").with(principal()).contentType(MediaType.APPLICATION_JSON)
 				.content(requestJsonWithTeamSize(0))).andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"));
@@ -121,9 +123,14 @@ class ProjectControllerTest {
 	}
 
 	private String requestJsonWithTeamSizeAndStatus(int teamSize, String status, long version) {
-		return "{\"name\":\"Project\",\"description\":\"Description\",\"startDate\":\"2020-01-01\","
+		return "{\"name\":\"Project\",\"description\":\"Description\",\"startDate\":\"2020-01-01\"," 
 				+ "\"endDate\":null,\"status\":\"" + status + "\",\"position\":\"Engineer\",\"teamSize\":"
-				+ teamSize + ",\"responsibilities\":\"Responsibilities\",\"programmingLanguages\":\"Java\","
+				+ teamSize + ",\"responsibilities\":\"Responsibilities\",\"programmingLanguages\":\"Java\"," 
 				+ "\"tools\":\"Docker\",\"version\":" + version + "}";
+	}
+
+	private String requestJsonWithNullableOptionalFields(long version) {
+		return "{\"name\":\"Project\",\"description\":\"Description\",\"status\":\"ONGOING\","
+				+ "\"position\":\"Engineer\",\"version\":" + version + "}";
 	}
 }

@@ -61,7 +61,7 @@ class ProjectServiceTest {
 	}
 
 	@Test
-	void createsCanonicalOngoingProjectAndInvalidatesPreview() {
+	void createsCanonicalOngoingProjectWithNullableFieldsAndInvalidatesPreview() {
 		Profile profile = profile();
 		ReflectionTestUtils.setField(profile, "hasPreviewed", true);
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
@@ -69,20 +69,20 @@ class ProjectServiceTest {
 		simulateVersionIncrementOnRefresh(profile);
 
 		ProjectMutationResponse result = service.create(7L, 8L,
-				new ProjectRequest(" Project ", " Description ", LocalDate.of(2020, 1, 1), LocalDate.of(2025, 1, 1),
-						" ongoing ", " Engineer ", 3, " Led team\nShipped product ", " Java, SQL ", "   ", 0L));
+				new ProjectRequest(" Project ", " Description ", null, LocalDate.of(2025, 1, 1), " ongoing ",
+						" Engineer ", null, null, " Java, SQL ", "   ", 0L));
 
 		ArgumentCaptor<Project> captor = ArgumentCaptor.forClass(Project.class);
 		verify(projects).save(captor.capture());
 		Project saved = captor.getValue();
 		assertEquals("Project", saved.getName());
 		assertEquals("Description", saved.getDescription());
-		assertEquals(LocalDate.of(2020, 1, 1), saved.getStartDate());
+		assertNull(saved.getStartDate());
 		assertNull(saved.getEndDate());
 		assertEquals(ProjectStatus.ONGOING, saved.getStatus());
 		assertEquals("Engineer", saved.getPosition());
-		assertEquals(3, saved.getTeamSize());
-		assertEquals("Led team\nShipped product", saved.getResponsibilities());
+		assertNull(saved.getTeamSize());
+		assertNull(saved.getResponsibilities());
 		assertEquals("Java, SQL", saved.getProgrammingLanguages());
 		assertNull(saved.getTools());
 		assertFalse(profile.isHasPreviewed());
@@ -102,6 +102,37 @@ class ProjectServiceTest {
 		assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
 		assertEquals(ErrorCode.VALIDATION_ERROR, exception.getErrorCode());
 		verify(projects, never()).save(any());
+	}
+
+	@Test
+	void rejectsZeroTeamSize() {
+		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile()));
+
+		ApiException exception = assertThrows(ApiException.class, () -> service.create(7L, 8L,
+				request("ONGOING", LocalDate.of(2020, 1, 1), null, 0, "Responsibilities", 0L)));
+
+		assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
+		assertEquals(ErrorCode.VALIDATION_ERROR, exception.getErrorCode());
+		verify(projects, never()).save(any());
+	}
+
+	@Test
+	void acceptsCompletedProjectWithoutStartDate() {
+		Profile profile = profile();
+		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		simulateVersionIncrementOnRefresh(profile);
+
+		ProjectMutationResponse result = service.create(7L, 8L,
+				request("COMPLETED", null, LocalDate.of(2023, 1, 1), 1, "Responsibilities", 0L));
+
+		ArgumentCaptor<Project> captor = ArgumentCaptor.forClass(Project.class);
+		verify(projects).save(captor.capture());
+		Project saved = captor.getValue();
+		assertNull(saved.getStartDate());
+		assertEquals(LocalDate.of(2023, 1, 1), saved.getEndDate());
+		assertEquals(ProjectStatus.COMPLETED, saved.getStatus());
+		assertEquals(1L, result.profileVersion());
 	}
 
 	@Test
@@ -204,8 +235,13 @@ class ProjectServiceTest {
 	}
 
 	private ProjectRequest request(String status, LocalDate startDate, LocalDate endDate, long version) {
-		return new ProjectRequest("Project", "Description", startDate, endDate, status, "Engineer", 1,
-				"Responsibilities", "Java", "Docker", version);
+		return request(status, startDate, endDate, 1, "Responsibilities", version);
+	}
+
+	private ProjectRequest request(String status, LocalDate startDate, LocalDate endDate, Integer teamSize,
+			String responsibilities, long version) {
+		return new ProjectRequest("Project", "Description", startDate, endDate, status, "Engineer", teamSize,
+				responsibilities, "Java", "Docker", version);
 	}
 
 	private void simulateVersionIncrementOnRefresh(Profile profile) {

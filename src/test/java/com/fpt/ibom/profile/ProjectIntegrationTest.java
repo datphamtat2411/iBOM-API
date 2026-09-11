@@ -2,6 +2,7 @@ package com.fpt.ibom.profile;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -27,6 +28,7 @@ import com.fpt.ibom.auth.repository.UserAccountRepository;
 import com.fpt.ibom.auth.security.UserPrincipal;
 import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.exception.ErrorCode;
+import com.fpt.ibom.profile.dto.ProjectMutationResponse;
 import com.fpt.ibom.profile.dto.ProjectRequest;
 import com.fpt.ibom.profile.entity.Profile;
 import com.fpt.ibom.profile.entity.Project;
@@ -80,12 +82,12 @@ class ProjectIntegrationTest extends MySqlIntegrationTest {
 		assertEquals("text", dataType("tools"));
 		assertEquals("NO", nullable("name"));
 		assertEquals("NO", nullable("description"));
-		assertEquals("NO", nullable("start_date"));
+		assertEquals("YES", nullable("start_date"));
 		assertEquals("YES", nullable("end_date"));
 		assertEquals("NO", nullable("status"));
 		assertEquals("NO", nullable("position"));
-		assertEquals("NO", nullable("team_size"));
-		assertEquals("NO", nullable("responsibilities"));
+		assertEquals("YES", nullable("team_size"));
+		assertEquals("YES", nullable("responsibilities"));
 		assertEquals("YES", nullable("programming_languages"));
 		assertEquals("YES", nullable("tools"));
 		assertEquals("NO", nullable("created_at"));
@@ -159,6 +161,25 @@ class ProjectIntegrationTest extends MySqlIntegrationTest {
 	}
 
 	@Test
+	void persistsNullableOptionalFieldsAndAllowsCompletedProjectWithoutStartDate() {
+		UserAccount user = saveUser();
+		Profile profile = saveProfile(user, "Project Nullable Profile");
+		ReflectionTestUtils.setField(profile, "hasPreviewed", true);
+		profileRepository.saveAndFlush(profile);
+
+		ProjectMutationResponse response = projectService.create(user.getId(), profile.getId(), new ProjectRequest(
+				"Completed Project", "Description", null, LocalDate.of(2024, 1, 1), "COMPLETED", "Engineer", null,
+				null, null, null, profile.getVersion()));
+		Project completed = projectRepository.findById(response.project().id()).orElseThrow();
+		assertNull(completed.getStartDate());
+		assertEquals(LocalDate.of(2024, 1, 1), completed.getEndDate());
+		assertNull(completed.getTeamSize());
+		assertNull(completed.getResponsibilities());
+		assertNull(completed.getProgrammingLanguages());
+		assertNull(completed.getTools());
+	}
+
+	@Test
 	void listsOngoingFirstThenDatesAndCreationOrder() {
 		UserAccount user = saveUser();
 		Profile profile = saveProfile(user, "Project Ordering Profile");
@@ -217,6 +238,9 @@ class ProjectIntegrationTest extends MySqlIntegrationTest {
 		assertDatabaseIntegrityViolation(() -> insertProject(profile.getId(), "COMPLETED", 1, LocalDate.of(2020, 1, 1), null));
 		assertDatabaseIntegrityViolation(() -> insertProject(profile.getId(), "COMPLETED", 1, LocalDate.of(2021, 1, 1),
 				LocalDate.of(2020, 1, 1)));
+		assertDoesNotThrow(() -> insertProject(profile.getId(), "COMPLETED", 1, null, LocalDate.of(2020, 1, 1),
+				"Responsibilities"));
+		assertDoesNotThrow(() -> insertProject(profile.getId(), "ONGOING", null, null, null, null));
 		assertDatabaseIntegrityViolation(() -> insertProject(Long.MAX_VALUE, "ONGOING", 1, LocalDate.of(2020, 1, 1), null));
 	}
 
@@ -243,10 +267,16 @@ class ProjectIntegrationTest extends MySqlIntegrationTest {
 	}
 
 	private void insertProject(long profileId, String status, int teamSize, LocalDate startDate, LocalDate endDate) {
+		insertProject(profileId, status, Integer.valueOf(teamSize), startDate, endDate, "Responsibilities");
+	}
+
+	private void insertProject(long profileId, String status, Integer teamSize, LocalDate startDate, LocalDate endDate,
+			String responsibilities) {
 		jdbcTemplate.update("INSERT INTO projects (profile_id, name, description, start_date, end_date, status, position, "
 				+ "team_size, responsibilities, programming_languages, tools, created_at, updated_at) "
-				+ "VALUES (?, 'Project', 'Description', ?, ?, ?, 'Engineer', ?, 'Responsibilities', NULL, NULL, "
-				+ "CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6))", profileId, startDate, endDate, status, teamSize);
+				+ "VALUES (?, 'Project', 'Description', ?, ?, ?, 'Engineer', ?, ?, NULL, NULL, "
+				+ "CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6))", profileId, startDate, endDate, status, teamSize,
+				responsibilities);
 	}
 
 	private void assertDatabaseIntegrityViolation(Runnable action) {
