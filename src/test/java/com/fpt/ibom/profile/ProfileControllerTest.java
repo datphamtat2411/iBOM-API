@@ -23,8 +23,10 @@ import com.fpt.ibom.profile.controller.ProfileController;
 import com.fpt.ibom.profile.dto.ProfileDetailResponse;
 import com.fpt.ibom.profile.dto.ProfileCompletenessResponse;
 import com.fpt.ibom.profile.dto.ProfileCompletenessSectionResponse;
+import com.fpt.ibom.profile.dto.ProfileResponse;
 import com.fpt.ibom.profile.dto.ProfileSummaryResponse;
 import com.fpt.ibom.profile.service.ProfileCompletenessService;
+import com.fpt.ibom.profile.service.ProfileCopyService;
 import com.fpt.ibom.profile.service.ProfileService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -53,6 +55,9 @@ class ProfileControllerTest {
 	private ProfileCompletenessService profileCompletenessService;
 
 	@MockitoBean
+	private ProfileCopyService profileCopyService;
+
+	@MockitoBean
 	private JwtDecoder jwtDecoder;
 
 	@MockitoBean
@@ -74,6 +79,59 @@ class ProfileControllerTest {
 				.andExpect(jsonPath("$.data.phoneNumber").doesNotExist())
 				.andExpect(jsonPath("$.data.address").doesNotExist());
 		verify(profileService).create(org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.any());
+	}
+
+	@Test
+	void copiesProfileForAuthenticatedOwner() throws Exception {
+		when(profileCopyService.copy(org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.eq(8L),
+				org.mockito.ArgumentMatchers.any()))
+				.thenReturn(new ProfileResponse(9L, 7L, "Copied", "First", "Last", "Engineer", null, "Friendly",
+					"Summary", false, 0L, null, null));
+
+		mockMvc.perform(post("/api/profiles/8/copy").with(principal()).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"profileName\":\" Copied \"}"))
+				.andExpect(status().isCreated()).andExpect(jsonPath("$.code").value(201))
+				.andExpect(jsonPath("$.data.id").value(9)).andExpect(jsonPath("$.data.profileName").value("Copied"))
+				.andExpect(jsonPath("$.data.hasPreviewed").value(false));
+
+		verify(profileCopyService).copy(org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.eq(8L),
+				org.mockito.ArgumentMatchers.any());
+	}
+
+	@Test
+	void validatesCopiedProfileName() throws Exception {
+		for (String json : List.of("{}", "{\"profileName\":\"   \"}",
+				"{\"profileName\":\"" + "x".repeat(101) + "\"}")) {
+			mockMvc.perform(post("/api/profiles/8/copy").with(principal()).contentType(MediaType.APPLICATION_JSON)
+					.content(json)).andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"));
+		}
+	}
+
+	@Test
+	void requiresAuthenticationForProfileCopy() throws Exception {
+		mockMvc.perform(post("/api/profiles/8/copy").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"profileName\":\"Copied\"}"))
+				.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void mapsProfileCopyBusinessErrors() throws Exception {
+		when(profileCopyService.copy(org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.eq(8L),
+				org.mockito.ArgumentMatchers.any()))
+				.thenThrow(new ApiException(HttpStatus.NOT_FOUND, ErrorCode.PROFILE_NOT_FOUND, "Profile not found"));
+		mockMvc.perform(post("/api/profiles/8/copy").with(principal()).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"profileName\":\"Copied\"}"))
+				.andExpect(status().isNotFound()).andExpect(jsonPath("$.errorCode").value("PROFILE_NOT_FOUND"));
+
+		when(profileCopyService.copy(org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.eq(9L),
+				org.mockito.ArgumentMatchers.any()))
+				.thenThrow(new ApiException(HttpStatus.CONFLICT, ErrorCode.PROFILE_NAME_ALREADY_EXISTS,
+						"Profile name is already in use"));
+		mockMvc.perform(post("/api/profiles/9/copy").with(principal()).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"profileName\":\"Copied\"}"))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.errorCode").value("PROFILE_NAME_ALREADY_EXISTS"));
 	}
 
 	@Test

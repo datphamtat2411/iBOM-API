@@ -3,12 +3,14 @@ package com.fpt.ibom.profile.controller;
 import com.fpt.ibom.auth.security.UserPrincipal;
 import com.fpt.ibom.common.ApiResponse;
 import com.fpt.ibom.profile.dto.ProfileCompletenessResponse;
+import com.fpt.ibom.profile.dto.ProfileCopyRequest;
 import com.fpt.ibom.profile.dto.ProfileRequest;
 import com.fpt.ibom.profile.dto.ProfileResponse;
 import com.fpt.ibom.profile.dto.ProfileUpdateRequest;
 import com.fpt.ibom.profile.dto.ProfileDetailResponse;
 import com.fpt.ibom.profile.dto.ProfileSummaryResponse;
 import com.fpt.ibom.profile.service.ProfileCompletenessService;
+import com.fpt.ibom.profile.service.ProfileCopyService;
 import com.fpt.ibom.profile.service.ProfileService;
 import java.util.List;
 import jakarta.validation.Valid;
@@ -28,10 +30,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProfileController {
 	private final ProfileService profileService;
 	private final ProfileCompletenessService profileCompletenessService;
+	private final ProfileCopyService profileCopyService;
 
-	public ProfileController(ProfileService profileService, ProfileCompletenessService profileCompletenessService) {
+	public ProfileController(ProfileService profileService, ProfileCompletenessService profileCompletenessService,
+			ProfileCopyService profileCopyService) {
 		this.profileService = profileService;
 		this.profileCompletenessService = profileCompletenessService;
+		this.profileCopyService = profileCopyService;
 	}
 
 	@PostMapping
@@ -39,6 +44,13 @@ public class ProfileController {
 			@Valid @RequestBody ProfileRequest request) {
 		return ResponseEntity.status(201).body(new ApiResponse<>(201, "Created",
 				profileService.create(principal.userId(), request)));
+	}
+
+	@PostMapping("/{sourceProfileId}/copy")
+	public ResponseEntity<ApiResponse<ProfileResponse>> copy(@AuthenticationPrincipal UserPrincipal principal,
+			@PathVariable Long sourceProfileId, @Valid @RequestBody ProfileCopyRequest request) {
+		return ResponseEntity.status(201).body(new ApiResponse<>(201, "Created",
+				profileCopyService.copy(principal.userId(), sourceProfileId, request)));
 	}
 
 	@GetMapping("/me")
