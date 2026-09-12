@@ -34,8 +34,7 @@ import com.fpt.ibom.profile.entity.ProfileSkill;
 import com.fpt.ibom.profile.repository.ProfileRepository;
 import com.fpt.ibom.profile.repository.ProfileSkillRepository;
 import com.fpt.ibom.profile.service.ProfileSkillService;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.LockModeType;
+import com.fpt.ibom.profile.service.ProfileVersionService;
 import jakarta.persistence.OptimisticLockException;
 import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
@@ -54,8 +53,8 @@ class ProfileSkillServiceTest {
 	private final ProfileSkillRepository profileSkills = org.mockito.Mockito.mock(ProfileSkillRepository.class);
 	private final ProfileRepository profiles = org.mockito.Mockito.mock(ProfileRepository.class);
 	private final SkillRepository skills = org.mockito.Mockito.mock(SkillRepository.class);
-	private final EntityManager entityManager = org.mockito.Mockito.mock(EntityManager.class);
-	private final ProfileSkillService service = new ProfileSkillService(profileSkills, profiles, skills, entityManager,
+	private final ProfileVersionService profileVersions = org.mockito.Mockito.mock(ProfileVersionService.class);
+	private final ProfileSkillService service = new ProfileSkillService(profileSkills, profiles, skills, profileVersions,
 			FIXED_CLOCK);
 
 	@Test
@@ -82,14 +81,14 @@ class ProfileSkillServiceTest {
 		LocalDate lastUsed = BUSINESS_DATE;
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
 		when(skills.findById(22L)).thenReturn(Optional.of(skill));
-		when(profileSkills.save(any(ProfileSkill.class))).thenAnswer(invocation -> invocation.getArgument(0));
-		simulateVersionIncrementOnRefresh(profile);
+		when(profileSkills.saveAndFlush(any(ProfileSkill.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		simulateVersionIncrementOnAdvance(profile);
 
 		ProfileSkillMutationResponse result = service.create(7L, 8L,
 				new ProfileSkillRequest(22L, new BigDecimal("2.75"), lastUsed, 0L));
 
 		ArgumentCaptor<ProfileSkill> captor = ArgumentCaptor.forClass(ProfileSkill.class);
-		verify(profileSkills).save(captor.capture());
+		verify(profileSkills).saveAndFlush(captor.capture());
 		ProfileSkill saved = captor.getValue();
 		assertEquals(skill, saved.getSkill());
 		assertEquals(new BigDecimal("2.75"), saved.getExperienceYears());
@@ -97,8 +96,7 @@ class ProfileSkillServiceTest {
 		assertEquals("Backend", result.profileSkill().categoryName());
 		assertFalse(profile.isHasPreviewed());
 		assertEquals(1L, result.profileVersion());
-		verify(entityManager).lock(profile, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
-		verify(entityManager).refresh(profile);
+		verify(profileVersions).advance(profile);
 	}
 
 	@Test
@@ -107,8 +105,8 @@ class ProfileSkillServiceTest {
 		Skill skill = skill(22L, "Java");
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
 		when(skills.findById(22L)).thenReturn(Optional.of(skill));
-		when(profileSkills.save(any(ProfileSkill.class))).thenAnswer(invocation -> invocation.getArgument(0));
-		simulateVersionIncrementOnRefresh(profile);
+		when(profileSkills.saveAndFlush(any(ProfileSkill.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		simulateVersionIncrementOnAdvance(profile);
 
 		ProfileSkillMutationResponse result = service.create(7L, 8L,
 				new ProfileSkillRequest(22L, new BigDecimal("10.25"), null, 0L));
@@ -129,7 +127,7 @@ class ProfileSkillServiceTest {
 		assertEquals(HttpStatus.BAD_REQUEST, negative.getStatus());
 		assertEquals(ErrorCode.VALIDATION_ERROR, negative.getErrorCode());
 		assertEquals(ErrorCode.VALIDATION_ERROR, missing.getErrorCode());
-		verify(entityManager, never()).lock(any(), any());
+		verify(profileVersions, never()).advance(any());
 		verify(skills, never()).findById(any());
 	}
 
@@ -142,7 +140,7 @@ class ProfileSkillServiceTest {
 
 		assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
 		assertEquals(ErrorCode.PROFILE_SKILL_LAST_USED_IN_FUTURE, exception.getErrorCode());
-		verify(entityManager, never()).lock(any(), any());
+		verify(profileVersions, never()).advance(any());
 		verify(skills, never()).findById(any());
 	}
 
@@ -162,7 +160,7 @@ class ProfileSkillServiceTest {
 		ApiException duplicate = assertThrows(ApiException.class, () -> service.create(7L, 8L,
 				new ProfileSkillRequest(22L, new BigDecimal("1.00"), null, 0L)));
 		assertEquals(ErrorCode.PROFILE_SKILL_ALREADY_EXISTS, duplicate.getErrorCode());
-		verify(profileSkills, never()).save(any());
+		verify(profileSkills, never()).saveAndFlush(any());
 	}
 
 	@Test
@@ -175,8 +173,8 @@ class ProfileSkillServiceTest {
 		when(profileSkills.findByIdAndProfileId(12L, 8L)).thenReturn(Optional.of(association));
 		when(skills.findById(23L)).thenReturn(Optional.of(replacement));
 		when(profileSkills.existsByProfileIdAndSkillIdAndIdNot(8L, 23L, 12L)).thenReturn(false);
-		when(profileSkills.save(association)).thenReturn(association);
-		simulateVersionIncrementOnRefresh(profile);
+		when(profileSkills.saveAndFlush(association)).thenReturn(association);
+		simulateVersionIncrementOnAdvance(profile);
 
 		ProfileSkillMutationResponse result = service.update(7L, 8L, 12L,
 				new ProfileSkillRequest(23L, new BigDecimal("4.25"), lastUsed, 0L));
@@ -202,8 +200,8 @@ class ProfileSkillServiceTest {
 				new ProfileSkillRequest(23L, new BigDecimal("4.25"), null, 0L)));
 
 		assertEquals(ErrorCode.PROFILE_SKILL_ALREADY_EXISTS, exception.getErrorCode());
-		verify(entityManager, never()).lock(any(), any());
-		verify(profileSkills, never()).save(any());
+		verify(profileVersions, never()).advance(any());
+		verify(profileSkills, never()).saveAndFlush(any());
 	}
 
 	@Test
@@ -212,14 +210,14 @@ class ProfileSkillServiceTest {
 		ProfileSkill association = profileSkill(profile, skill(22L, "Java"), 12L, "1.00", null);
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
 		when(profileSkills.findByIdAndProfileId(12L, 8L)).thenReturn(Optional.of(association));
-		simulateVersionIncrementOnRefresh(profile);
+		simulateVersionIncrementOnAdvance(profile);
 
 		ProfileVersionResponse result = service.delete(7L, 8L, 12L, 0L);
 
 		assertEquals(1L, result.profileVersion());
 		verify(profileSkills).delete(association);
-		verify(profileSkills, never()).save(any());
-		verify(entityManager).lock(profile, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
+		verify(profileSkills, never()).saveAndFlush(any());
+		verify(profileVersions).advance(profile);
 	}
 
 	@Test
@@ -234,7 +232,7 @@ class ProfileSkillServiceTest {
 		ApiException stale = assertThrows(ApiException.class, () -> service.create(7L, 8L,
 				new ProfileSkillRequest(22L, new BigDecimal("1.00"), null, 1L)));
 		assertEquals(ErrorCode.PROFILE_VERSION_CONFLICT, stale.getErrorCode());
-		verify(entityManager, never()).lock(any(), any());
+		verify(profileVersions, never()).advance(any());
 	}
 
 	@Test
@@ -243,20 +241,20 @@ class ProfileSkillServiceTest {
 		Skill skill = skill(22L, "Java");
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
 		when(skills.findById(22L)).thenReturn(Optional.of(skill));
-		when(profileSkills.save(any(ProfileSkill.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		when(profileSkills.saveAndFlush(any(ProfileSkill.class))).thenAnswer(invocation -> invocation.getArgument(0));
 		ConstraintViolationException violation = new ConstraintViolationException("duplicate", null,
 				"uk_profile_skills_profile_skill");
-		doThrow(new DataIntegrityViolationException("duplicate", violation)).when(entityManager).flush();
+		doThrow(new DataIntegrityViolationException("duplicate", violation)).when(profileSkills).saveAndFlush(any());
 
 		ApiException duplicate = assertThrows(ApiException.class, () -> service.create(7L, 8L,
 				new ProfileSkillRequest(22L, new BigDecimal("1.00"), null, 0L)));
 		assertEquals(ErrorCode.PROFILE_SKILL_ALREADY_EXISTS, duplicate.getErrorCode());
 
-		org.mockito.Mockito.reset(entityManager);
+		org.mockito.Mockito.reset(profileSkills, profileVersions);
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
 		when(skills.findById(22L)).thenReturn(Optional.of(skill));
-		when(profileSkills.save(any(ProfileSkill.class))).thenAnswer(invocation -> invocation.getArgument(0));
-		doThrow(new OptimisticLockException()).when(entityManager).flush();
+		when(profileSkills.saveAndFlush(any(ProfileSkill.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		doThrow(new OptimisticLockException()).when(profileVersions).advance(any());
 
 		ApiException conflict = assertThrows(ApiException.class, () -> service.create(7L, 8L,
 				new ProfileSkillRequest(22L, new BigDecimal("1.00"), null, 0L)));
@@ -299,10 +297,12 @@ class ProfileSkillServiceTest {
 		return profileSkill;
 	}
 
-	private void simulateVersionIncrementOnRefresh(Profile profile) {
+	private void simulateVersionIncrementOnAdvance(Profile profile) {
 		org.mockito.Mockito.doAnswer(invocation -> {
-			ReflectionTestUtils.setField(profile, "version", profile.getVersion() + 1);
-			return null;
-		}).when(entityManager).refresh(profile);
+			long nextVersion = profile.getVersion() + 1;
+			ReflectionTestUtils.setField(profile, "version", nextVersion);
+			ReflectionTestUtils.setField(profile, "hasPreviewed", false);
+			return nextVersion;
+		}).when(profileVersions).advance(profile);
 	}
 }

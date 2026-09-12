@@ -29,9 +29,8 @@ import com.fpt.ibom.profile.entity.Profile;
 import com.fpt.ibom.profile.repository.EducationRepository;
 import com.fpt.ibom.profile.repository.ProfileRepository;
 import com.fpt.ibom.profile.service.EducationService;
-import jakarta.persistence.EntityManager;
+import com.fpt.ibom.profile.service.ProfileVersionService;
 import jakarta.persistence.OptimisticLockException;
-import jakarta.persistence.LockModeType;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
@@ -41,8 +40,8 @@ class EducationServiceTest {
 
 	private final EducationRepository educations = org.mockito.Mockito.mock(EducationRepository.class);
 	private final ProfileRepository profiles = org.mockito.Mockito.mock(ProfileRepository.class);
-	private final EntityManager entityManager = org.mockito.Mockito.mock(EntityManager.class);
-	private final EducationService service = new EducationService(educations, profiles, entityManager);
+	private final ProfileVersionService profileVersions = org.mockito.Mockito.mock(ProfileVersionService.class);
+	private final EducationService service = new EducationService(educations, profiles, profileVersions);
 
 	@Test
 	void listsEducationForActiveOwnedProfileInIdOrder() {
@@ -63,15 +62,15 @@ class EducationServiceTest {
 	void createsOngoingEducationWithCanonicalTextAndNullEndDate() {
 		Profile profile = profile();
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
-		when(educations.save(any(Education.class))).thenAnswer(invocation -> invocation.getArgument(0));
-		simulateVersionIncrementOnRefresh(profile);
+		when(educations.saveAndFlush(any(Education.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		simulateVersionIncrementOnAdvance(profile);
 
 		EducationMutationResponse result = service.create(7L, 8L,
 				new EducationRequest(" School ", " Degree ", "   ", LocalDate.of(2020, 1, 1),
 						LocalDate.of(2025, 1, 1), " ongoing ", 0L));
 
 		ArgumentCaptor<Education> captor = ArgumentCaptor.forClass(Education.class);
-		verify(educations).save(captor.capture());
+		verify(educations).saveAndFlush(captor.capture());
 		Education saved = captor.getValue();
 		assertEquals("School", saved.getSchoolName());
 		assertEquals("Degree", saved.getDegree());
@@ -79,8 +78,7 @@ class EducationServiceTest {
 		assertNull(saved.getEndDate());
 		assertEquals(EducationStatus.ONGOING, saved.getStatus());
 		assertEquals(1L, result.profileVersion());
-		verify(entityManager).lock(profile, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
-		verify(entityManager).refresh(profile);
+		verify(profileVersions).advance(profile);
 	}
 
 	@Test
@@ -92,7 +90,7 @@ class EducationServiceTest {
 
 		assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
 		assertEquals(ErrorCode.EDUCATION_END_DATE_REQUIRED, exception.getErrorCode());
-		verify(educations, never()).save(any());
+		verify(educations, never()).saveAndFlush(any());
 	}
 
 	@Test
@@ -103,7 +101,7 @@ class EducationServiceTest {
 				request("COMPLETED", LocalDate.of(2021, 1, 1), LocalDate.of(2020, 1, 1), 0L)));
 
 		assertEquals(ErrorCode.EDUCATION_DATE_RANGE_INVALID, exception.getErrorCode());
-		verify(entityManager, never()).lock(any(), any());
+		verify(profileVersions, never()).advance(any());
 	}
 
 	@Test
@@ -114,7 +112,7 @@ class EducationServiceTest {
 				request("WITHDRAWN", LocalDate.of(2020, 1, 1), null, 0L)));
 
 		assertEquals(ErrorCode.EDUCATION_INVALID_STATUS, exception.getErrorCode());
-		verify(entityManager, never()).lock(any(), any());
+		verify(profileVersions, never()).advance(any());
 	}
 
 	@Test
@@ -123,8 +121,8 @@ class EducationServiceTest {
 		Education education = education(profile, "Original", EducationStatus.ONGOING, LocalDate.of(2020, 1, 1), null);
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
 		when(educations.findByIdAndProfileId(12L, 8L)).thenReturn(Optional.of(education));
-		when(educations.save(education)).thenReturn(education);
-		simulateVersionIncrementOnRefresh(profile);
+		when(educations.saveAndFlush(education)).thenReturn(education);
+		simulateVersionIncrementOnAdvance(profile);
 
 		EducationMutationResponse result = service.update(7L, 8L, 12L,
 				request("COMPLETED", LocalDate.of(2020, 1, 1), LocalDate.of(2022, 1, 1), 0L));
@@ -134,7 +132,7 @@ class EducationServiceTest {
 		assertEquals(EducationStatus.COMPLETED, education.getStatus());
 		assertEquals(LocalDate.of(2022, 1, 1), education.getEndDate());
 		verify(educations).findByIdAndProfileId(12L, 8L);
-		verify(entityManager).refresh(profile);
+		verify(profileVersions).advance(profile);
 	}
 
 	@Test
@@ -143,14 +141,14 @@ class EducationServiceTest {
 		Education education = education(profile, "School", EducationStatus.ONGOING, LocalDate.of(2020, 1, 1), null);
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
 		when(educations.findByIdAndProfileId(12L, 8L)).thenReturn(Optional.of(education));
-		simulateVersionIncrementOnRefresh(profile);
+		simulateVersionIncrementOnAdvance(profile);
 
 		ProfileVersionResponse result = service.delete(7L, 8L, 12L, 0L);
 
 		assertEquals(1L, result.profileVersion());
 		verify(educations).delete(education);
-		verify(educations, never()).save(any());
-		verify(entityManager).refresh(profile);
+		verify(educations, never()).saveAndFlush(any());
+		verify(profileVersions).advance(profile);
 	}
 
 	@Test
@@ -162,16 +160,16 @@ class EducationServiceTest {
 				request("ONGOING", LocalDate.of(2020, 1, 1), null, 1L)));
 
 		assertEquals(ErrorCode.PROFILE_VERSION_CONFLICT, exception.getErrorCode());
-		verify(entityManager, never()).lock(any(), any());
-		verify(educations, never()).save(any());
+		verify(profileVersions, never()).advance(any());
+		verify(educations, never()).saveAndFlush(any());
 	}
 
 	@Test
 	void translatesOptimisticLockFailure() {
 		Profile profile = profile();
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
-		when(educations.save(any(Education.class))).thenAnswer(invocation -> invocation.getArgument(0));
-		doThrow(new OptimisticLockException()).when(entityManager).flush();
+		when(educations.saveAndFlush(any(Education.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		doThrow(new OptimisticLockException()).when(profileVersions).advance(any());
 
 		ApiException exception = assertThrows(ApiException.class, () -> service.create(7L, 8L,
 				request("ONGOING", LocalDate.of(2020, 1, 1), null, 0L)));
@@ -207,10 +205,12 @@ class EducationServiceTest {
 		return new EducationRequest("School", "Degree", "Field", startDate, endDate, status, version);
 	}
 
-	private void simulateVersionIncrementOnRefresh(Profile profile) {
+	private void simulateVersionIncrementOnAdvance(Profile profile) {
 		org.mockito.Mockito.doAnswer(invocation -> {
-			ReflectionTestUtils.setField(profile, "version", profile.getVersion() + 1);
-			return null;
-		}).when(entityManager).refresh(profile);
+			long nextVersion = profile.getVersion() + 1;
+			ReflectionTestUtils.setField(profile, "version", nextVersion);
+			ReflectionTestUtils.setField(profile, "hasPreviewed", false);
+			return nextVersion;
+		}).when(profileVersions).advance(profile);
 	}
 }

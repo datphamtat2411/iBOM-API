@@ -14,8 +14,6 @@ import com.fpt.ibom.profile.entity.Certificate;
 import com.fpt.ibom.profile.entity.Profile;
 import com.fpt.ibom.profile.repository.CertificateRepository;
 import com.fpt.ibom.profile.repository.ProfileRepository;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.LockModeType;
 import jakarta.persistence.OptimisticLockException;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -30,14 +28,14 @@ public class CertificateService {
 
 	private final CertificateRepository certificateRepository;
 	private final ProfileRepository profileRepository;
-	private final EntityManager entityManager;
+	private final ProfileVersionService profileVersionService;
 	private final Clock clock;
 
 	public CertificateService(CertificateRepository certificateRepository, ProfileRepository profileRepository,
-			EntityManager entityManager, Clock clock) {
+			ProfileVersionService profileVersionService, Clock clock) {
 		this.certificateRepository = certificateRepository;
 		this.profileRepository = profileRepository;
-		this.entityManager = entityManager;
+		this.profileVersionService = profileVersionService;
 		this.clock = clock;
 	}
 
@@ -58,11 +56,11 @@ public class CertificateService {
 			throw duplicateCertificate();
 		}
 		try {
-			lockAndInvalidate(profile);
+			long profileVersion = profileVersionService.advance(profile);
 			Certificate certificate = new Certificate(profile, canonical.certificateName(), canonical.issueDate());
-			certificateRepository.save(certificate);
-			long profileVersion = flushAndReadVersion(profile);
-			return new CertificateMutationResponse(CertificateResponse.from(certificate), profileVersion);
+			certificateRepository.saveAndFlush(certificate);
+			CertificateResponse response = CertificateResponse.from(certificate);
+			return new CertificateMutationResponse(response, profileVersion);
 		} catch (OptimisticLockingFailureException | OptimisticLockException exception) {
 			throw versionConflict();
 		} catch (DataIntegrityViolationException exception) {
@@ -86,11 +84,11 @@ public class CertificateService {
 			throw duplicateCertificate();
 		}
 		try {
-			lockAndInvalidate(profile);
+			long profileVersion = profileVersionService.advance(profile);
 			certificate.update(canonical.certificateName(), canonical.issueDate());
-			certificateRepository.save(certificate);
-			long profileVersion = flushAndReadVersion(profile);
-			return new CertificateMutationResponse(CertificateResponse.from(certificate), profileVersion);
+			certificateRepository.saveAndFlush(certificate);
+			CertificateResponse response = CertificateResponse.from(certificate);
+			return new CertificateMutationResponse(response, profileVersion);
 		} catch (OptimisticLockingFailureException | OptimisticLockException exception) {
 			throw versionConflict();
 		} catch (DataIntegrityViolationException exception) {
@@ -108,9 +106,10 @@ public class CertificateService {
 				.orElseThrow(this::certificateNotFound);
 		checkVersion(profile, version);
 		try {
-			lockAndInvalidate(profile);
+			long profileVersion = profileVersionService.advance(profile);
 			certificateRepository.delete(certificate);
-			return new ProfileVersionResponse(flushAndReadVersion(profile));
+			certificateRepository.flush();
+			return new ProfileVersionResponse(profileVersion);
 		} catch (OptimisticLockingFailureException | OptimisticLockException exception) {
 			throw versionConflict();
 		}
@@ -127,18 +126,6 @@ public class CertificateService {
 		}
 	}
 
-	private void lockAndInvalidate(Profile profile) {
-		entityManager.lock(profile, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
-		profile.invalidatePreview();
-	}
-
-	private long flushAndReadVersion(Profile profile) {
-		long versionBeforeFlush = profile.getVersion();
-		entityManager.flush();
-		entityManager.refresh(profile);
-		return Math.max(profile.getVersion(), versionBeforeFlush + 1);
-	}
-
 	private CanonicalCertificate canonicalize(CertificateRequest request) {
 		if (request.issueDate().isAfter(LocalDate.now(clock))) {
 			throw futureIssueDate();
@@ -150,7 +137,9 @@ public class CertificateService {
 		Throwable cause = exception;
 		while (cause != null) {
 			if (cause instanceof ConstraintViolationException constraintViolation) {
-				return CERTIFICATE_UNIQUE_CONSTRAINT.equals(constraintViolation.getConstraintName());
+				String constraintName = constraintViolation.getConstraintName();
+				return CERTIFICATE_UNIQUE_CONSTRAINT.equals(constraintName)
+						|| constraintName != null && constraintName.endsWith("." + CERTIFICATE_UNIQUE_CONSTRAINT);
 			}
 			cause = cause.getCause();
 		}

@@ -30,8 +30,7 @@ import com.fpt.ibom.profile.entity.ProjectStatus;
 import com.fpt.ibom.profile.repository.ProfileRepository;
 import com.fpt.ibom.profile.repository.ProjectRepository;
 import com.fpt.ibom.profile.service.ProjectService;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.LockModeType;
+import com.fpt.ibom.profile.service.ProfileVersionService;
 import jakarta.persistence.OptimisticLockException;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -42,8 +41,8 @@ class ProjectServiceTest {
 
 	private final ProjectRepository projects = org.mockito.Mockito.mock(ProjectRepository.class);
 	private final ProfileRepository profiles = org.mockito.Mockito.mock(ProfileRepository.class);
-	private final EntityManager entityManager = org.mockito.Mockito.mock(EntityManager.class);
-	private final ProjectService service = new ProjectService(projects, profiles, entityManager);
+	private final ProfileVersionService profileVersions = org.mockito.Mockito.mock(ProfileVersionService.class);
+	private final ProjectService service = new ProjectService(projects, profiles, profileVersions);
 
 	@Test
 	void listsProjectsInApprovedOrder() {
@@ -65,15 +64,15 @@ class ProjectServiceTest {
 		Profile profile = profile();
 		ReflectionTestUtils.setField(profile, "hasPreviewed", true);
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
-		when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
-		simulateVersionIncrementOnRefresh(profile);
+		when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		simulateVersionIncrementOnAdvance(profile);
 
 		ProjectMutationResponse result = service.create(7L, 8L,
 				new ProjectRequest(" Project ", " Description ", null, LocalDate.of(2025, 1, 1), " ongoing ",
 						" Engineer ", null, null, " Java, SQL ", "   ", 0L));
 
 		ArgumentCaptor<Project> captor = ArgumentCaptor.forClass(Project.class);
-		verify(projects).save(captor.capture());
+		verify(projects).saveAndFlush(captor.capture());
 		Project saved = captor.getValue();
 		assertEquals("Project", saved.getName());
 		assertEquals("Description", saved.getDescription());
@@ -87,8 +86,7 @@ class ProjectServiceTest {
 		assertNull(saved.getTools());
 		assertFalse(profile.isHasPreviewed());
 		assertEquals(1L, result.profileVersion());
-		verify(entityManager).lock(profile, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
-		verify(entityManager).refresh(profile);
+		verify(profileVersions).advance(profile);
 	}
 
 	@Test
@@ -101,7 +99,7 @@ class ProjectServiceTest {
 
 		assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
 		assertEquals(ErrorCode.VALIDATION_ERROR, exception.getErrorCode());
-		verify(projects, never()).save(any());
+		verify(projects, never()).saveAndFlush(any());
 	}
 
 	@Test
@@ -113,21 +111,21 @@ class ProjectServiceTest {
 
 		assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
 		assertEquals(ErrorCode.VALIDATION_ERROR, exception.getErrorCode());
-		verify(projects, never()).save(any());
+		verify(projects, never()).saveAndFlush(any());
 	}
 
 	@Test
 	void acceptsCompletedProjectWithoutStartDate() {
 		Profile profile = profile();
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
-		when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
-		simulateVersionIncrementOnRefresh(profile);
+		when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		simulateVersionIncrementOnAdvance(profile);
 
 		ProjectMutationResponse result = service.create(7L, 8L,
 				request("COMPLETED", null, LocalDate.of(2023, 1, 1), 1, "Responsibilities", 0L));
 
 		ArgumentCaptor<Project> captor = ArgumentCaptor.forClass(Project.class);
-		verify(projects).save(captor.capture());
+		verify(projects).saveAndFlush(captor.capture());
 		Project saved = captor.getValue();
 		assertNull(saved.getStartDate());
 		assertEquals(LocalDate.of(2023, 1, 1), saved.getEndDate());
@@ -150,7 +148,7 @@ class ProjectServiceTest {
 		ApiException invalidStatus = assertThrows(ApiException.class, () -> service.create(7L, 8L,
 				request("CANCELLED", LocalDate.of(2020, 1, 1), null, 0L)));
 		assertEquals(ErrorCode.PROJECT_INVALID_STATUS, invalidStatus.getErrorCode());
-		verify(entityManager, never()).lock(any(), any());
+		verify(profileVersions, never()).advance(any());
 	}
 
 	@Test
@@ -160,8 +158,8 @@ class ProjectServiceTest {
 				LocalDate.of(2022, 1, 1));
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
 		when(projects.findByIdAndProfileId(12L, 8L)).thenReturn(Optional.of(project));
-		when(projects.save(project)).thenReturn(project);
-		simulateVersionIncrementOnRefresh(profile);
+		when(projects.saveAndFlush(project)).thenReturn(project);
+		simulateVersionIncrementOnAdvance(profile);
 
 		ProjectMutationResponse result = service.update(7L, 8L, 12L,
 				request("ONGOING", LocalDate.of(2020, 1, 1), LocalDate.of(2025, 1, 1), 0L));
@@ -170,7 +168,7 @@ class ProjectServiceTest {
 		assertNull(project.getEndDate());
 		assertEquals(1L, result.profileVersion());
 		verify(projects).findByIdAndProfileId(12L, 8L);
-		verify(entityManager).refresh(profile);
+		verify(profileVersions).advance(profile);
 	}
 
 	@Test
@@ -179,14 +177,14 @@ class ProjectServiceTest {
 		Project project = project(profile, 12L, "Project", ProjectStatus.ONGOING, LocalDate.of(2020, 1, 1), null);
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
 		when(projects.findByIdAndProfileId(12L, 8L)).thenReturn(Optional.of(project));
-		simulateVersionIncrementOnRefresh(profile);
+		simulateVersionIncrementOnAdvance(profile);
 
 		ProfileVersionResponse result = service.delete(7L, 8L, 12L, 0L);
 
 		assertEquals(1L, result.profileVersion());
 		verify(projects).delete(project);
-		verify(projects, never()).save(any());
-		verify(entityManager).refresh(profile);
+		verify(projects, never()).saveAndFlush(any());
+		verify(profileVersions).advance(profile);
 	}
 
 	@Test
@@ -202,15 +200,15 @@ class ProjectServiceTest {
 		ApiException stale = assertThrows(ApiException.class, () -> service.create(7L, 8L,
 				request("ONGOING", LocalDate.of(2020, 1, 1), null, 1L)));
 		assertEquals(ErrorCode.PROFILE_VERSION_CONFLICT, stale.getErrorCode());
-		verify(entityManager, never()).lock(any(), any());
+		verify(profileVersions, never()).advance(any());
 	}
 
 	@Test
 	void translatesOptimisticLockFailure() {
 		Profile profile = profile();
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
-		when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
-		doThrow(new OptimisticLockException()).when(entityManager).flush();
+		when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		doThrow(new OptimisticLockException()).when(profileVersions).advance(any());
 
 		ApiException exception = assertThrows(ApiException.class, () -> service.create(7L, 8L,
 				request("ONGOING", LocalDate.of(2020, 1, 1), null, 0L)));
@@ -244,10 +242,12 @@ class ProjectServiceTest {
 				responsibilities, "Java", "Docker", version);
 	}
 
-	private void simulateVersionIncrementOnRefresh(Profile profile) {
+	private void simulateVersionIncrementOnAdvance(Profile profile) {
 		org.mockito.Mockito.doAnswer(invocation -> {
-			ReflectionTestUtils.setField(profile, "version", profile.getVersion() + 1);
-			return null;
-		}).when(entityManager).refresh(profile);
+			long nextVersion = profile.getVersion() + 1;
+			ReflectionTestUtils.setField(profile, "version", nextVersion);
+			ReflectionTestUtils.setField(profile, "hasPreviewed", false);
+			return nextVersion;
+		}).when(profileVersions).advance(profile);
 	}
 }

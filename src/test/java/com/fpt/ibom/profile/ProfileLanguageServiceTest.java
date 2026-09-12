@@ -31,8 +31,7 @@ import com.fpt.ibom.profile.entity.ProfileLanguage;
 import com.fpt.ibom.profile.repository.ProfileLanguageRepository;
 import com.fpt.ibom.profile.repository.ProfileRepository;
 import com.fpt.ibom.profile.service.ProfileLanguageService;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.LockModeType;
+import com.fpt.ibom.profile.service.ProfileVersionService;
 import jakarta.persistence.OptimisticLockException;
 import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
@@ -46,9 +45,9 @@ class ProfileLanguageServiceTest {
 	private final ProfileLanguageRepository profileLanguages = org.mockito.Mockito.mock(ProfileLanguageRepository.class);
 	private final ProfileRepository profiles = org.mockito.Mockito.mock(ProfileRepository.class);
 	private final LanguageRepository languages = org.mockito.Mockito.mock(LanguageRepository.class);
-	private final EntityManager entityManager = org.mockito.Mockito.mock(EntityManager.class);
+	private final ProfileVersionService profileVersions = org.mockito.Mockito.mock(ProfileVersionService.class);
 	private final ProfileLanguageService service = new ProfileLanguageService(profileLanguages, profiles, languages,
-			entityManager);
+			profileVersions);
 
 	@Test
 	void listsOwnedLanguagesByProficiencyThenCaseInsensitiveNameAndId() {
@@ -73,21 +72,20 @@ class ProfileLanguageServiceTest {
 		Language language = language(22L, "English");
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
 		when(languages.findById(22L)).thenReturn(Optional.of(language));
-		when(profileLanguages.save(any(ProfileLanguage.class))).thenAnswer(invocation -> invocation.getArgument(0));
-		simulateVersionIncrementOnRefresh(profile);
+		when(profileLanguages.saveAndFlush(any(ProfileLanguage.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		simulateVersionIncrementOnAdvance(profile);
 
 		ProfileLanguageMutationResponse result = service.create(7L, 8L,
 				new ProfileLanguageRequest(22L, " upper_intermediate ", 0L));
 
 		ArgumentCaptor<ProfileLanguage> captor = ArgumentCaptor.forClass(ProfileLanguage.class);
-		verify(profileLanguages).save(captor.capture());
+		verify(profileLanguages).saveAndFlush(captor.capture());
 		ProfileLanguage saved = captor.getValue();
 		assertEquals(language, saved.getLanguage());
 		assertEquals(LanguageLevel.UPPER_INTERMEDIATE, saved.getLevel());
 		assertFalse(profile.isHasPreviewed());
 		assertEquals(1L, result.profileVersion());
-		verify(entityManager).lock(profile, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
-		verify(entityManager).refresh(profile);
+		verify(profileVersions).advance(profile);
 	}
 
 	@Test
@@ -99,7 +97,7 @@ class ProfileLanguageServiceTest {
 
 		assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
 		assertEquals(ErrorCode.PROFILE_LANGUAGE_INVALID_LEVEL, exception.getErrorCode());
-		verify(entityManager, never()).lock(any(), any());
+		verify(profileVersions, never()).advance(any());
 		verify(languages, never()).findById(any());
 	}
 
@@ -118,7 +116,7 @@ class ProfileLanguageServiceTest {
 		ApiException duplicate = assertThrows(ApiException.class, () -> service.create(7L, 8L,
 				new ProfileLanguageRequest(22L, "NATIVE", 0L)));
 		assertEquals(ErrorCode.PROFILE_LANGUAGE_ALREADY_EXISTS, duplicate.getErrorCode());
-		verify(profileLanguages, never()).save(any());
+		verify(profileLanguages, never()).saveAndFlush(any());
 	}
 
 	@Test
@@ -129,8 +127,8 @@ class ProfileLanguageServiceTest {
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
 		when(profileLanguages.findByIdAndProfileId(12L, 8L)).thenReturn(Optional.of(association));
 		when(languages.findById(23L)).thenReturn(Optional.of(replacement));
-		when(profileLanguages.save(association)).thenReturn(association);
-		simulateVersionIncrementOnRefresh(profile);
+		when(profileLanguages.saveAndFlush(association)).thenReturn(association);
+		simulateVersionIncrementOnAdvance(profile);
 
 		ProfileLanguageMutationResponse result = service.update(7L, 8L, 12L,
 				new ProfileLanguageRequest(23L, " advanced ", 0L));
@@ -155,8 +153,8 @@ class ProfileLanguageServiceTest {
 				new ProfileLanguageRequest(23L, "ADVANCED", 0L)));
 
 		assertEquals(ErrorCode.PROFILE_LANGUAGE_ALREADY_EXISTS, exception.getErrorCode());
-		verify(entityManager, never()).lock(any(), any());
-		verify(profileLanguages, never()).save(any());
+		verify(profileVersions, never()).advance(any());
+		verify(profileLanguages, never()).saveAndFlush(any());
 	}
 
 	@Test
@@ -165,13 +163,13 @@ class ProfileLanguageServiceTest {
 		ProfileLanguage association = profileLanguage(profile, language(22L, "English"), LanguageLevel.NATIVE);
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
 		when(profileLanguages.findByIdAndProfileId(12L, 8L)).thenReturn(Optional.of(association));
-		simulateVersionIncrementOnRefresh(profile);
+		simulateVersionIncrementOnAdvance(profile);
 
 		ProfileVersionResponse result = service.delete(7L, 8L, 12L, 0L);
 
 		assertEquals(1L, result.profileVersion());
 		verify(profileLanguages).delete(association);
-		verify(profileLanguages, never()).save(any());
+		verify(profileLanguages, never()).saveAndFlush(any());
 	}
 
 	@Test
@@ -186,7 +184,7 @@ class ProfileLanguageServiceTest {
 		ApiException stale = assertThrows(ApiException.class, () -> service.create(7L, 8L,
 				new ProfileLanguageRequest(22L, "NATIVE", 1L)));
 		assertEquals(ErrorCode.PROFILE_VERSION_CONFLICT, stale.getErrorCode());
-		verify(entityManager, never()).lock(any(), any());
+		verify(profileVersions, never()).advance(any());
 	}
 
 	@Test
@@ -195,20 +193,20 @@ class ProfileLanguageServiceTest {
 		Language language = language(22L, "English");
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
 		when(languages.findById(22L)).thenReturn(Optional.of(language));
-		when(profileLanguages.save(any(ProfileLanguage.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		when(profileLanguages.saveAndFlush(any(ProfileLanguage.class))).thenAnswer(invocation -> invocation.getArgument(0));
 		ConstraintViolationException violation = new ConstraintViolationException("duplicate", null,
 				"uk_profile_languages_profile_language");
-		doThrow(new DataIntegrityViolationException("duplicate", violation)).when(entityManager).flush();
+		doThrow(new DataIntegrityViolationException("duplicate", violation)).when(profileLanguages).saveAndFlush(any());
 
 		ApiException duplicate = assertThrows(ApiException.class, () -> service.create(7L, 8L,
 				new ProfileLanguageRequest(22L, "NATIVE", 0L)));
 		assertEquals(ErrorCode.PROFILE_LANGUAGE_ALREADY_EXISTS, duplicate.getErrorCode());
 
-		org.mockito.Mockito.reset(entityManager);
+		org.mockito.Mockito.reset(profileLanguages, profileVersions);
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
 		when(languages.findById(22L)).thenReturn(Optional.of(language));
-		when(profileLanguages.save(any(ProfileLanguage.class))).thenAnswer(invocation -> invocation.getArgument(0));
-		doThrow(new OptimisticLockException()).when(entityManager).flush();
+		when(profileLanguages.saveAndFlush(any(ProfileLanguage.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		doThrow(new OptimisticLockException()).when(profileVersions).advance(any());
 
 		ApiException conflict = assertThrows(ApiException.class, () -> service.create(7L, 8L,
 				new ProfileLanguageRequest(22L, "NATIVE", 0L)));
@@ -245,10 +243,12 @@ class ProfileLanguageServiceTest {
 		return profileLanguage;
 	}
 
-	private void simulateVersionIncrementOnRefresh(Profile profile) {
+	private void simulateVersionIncrementOnAdvance(Profile profile) {
 		org.mockito.Mockito.doAnswer(invocation -> {
-			ReflectionTestUtils.setField(profile, "version", profile.getVersion() + 1);
-			return null;
-		}).when(entityManager).refresh(profile);
+			long nextVersion = profile.getVersion() + 1;
+			ReflectionTestUtils.setField(profile, "version", nextVersion);
+			ReflectionTestUtils.setField(profile, "hasPreviewed", false);
+			return nextVersion;
+		}).when(profileVersions).advance(profile);
 	}
 }

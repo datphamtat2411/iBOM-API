@@ -15,8 +15,6 @@ import com.fpt.ibom.profile.entity.EducationStatus;
 import com.fpt.ibom.profile.entity.Profile;
 import com.fpt.ibom.profile.repository.EducationRepository;
 import com.fpt.ibom.profile.repository.ProfileRepository;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.LockModeType;
 import jakarta.persistence.OptimisticLockException;
 import org.springframework.http.HttpStatus;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -27,13 +25,13 @@ import org.springframework.transaction.annotation.Transactional;
 public class EducationService {
 	private final EducationRepository educationRepository;
 	private final ProfileRepository profileRepository;
-	private final EntityManager entityManager;
+	private final ProfileVersionService profileVersionService;
 
 	public EducationService(EducationRepository educationRepository, ProfileRepository profileRepository,
-			EntityManager entityManager) {
+			ProfileVersionService profileVersionService) {
 		this.educationRepository = educationRepository;
 		this.profileRepository = profileRepository;
-		this.entityManager = entityManager;
+		this.profileVersionService = profileVersionService;
 	}
 
 	@Transactional(readOnly = true)
@@ -48,12 +46,12 @@ public class EducationService {
 		CanonicalEducation canonical = canonicalize(request);
 		checkVersion(profile, request.version());
 		try {
-			lockAndInvalidate(profile);
+			long profileVersion = profileVersionService.advance(profile);
 			Education education = new Education(profile, canonical.schoolName(), canonical.degree(), canonical.fieldOfStudy(),
 					canonical.startDate(), canonical.endDate(), canonical.status());
-			educationRepository.save(education);
-			long profileVersion = flushAndReadVersion(profile);
-			return new EducationMutationResponse(EducationResponse.from(education), profileVersion);
+			educationRepository.saveAndFlush(education);
+			EducationResponse response = EducationResponse.from(education);
+			return new EducationMutationResponse(response, profileVersion);
 		} catch (OptimisticLockingFailureException | OptimisticLockException exception) {
 			throw versionConflict();
 		}
@@ -67,12 +65,12 @@ public class EducationService {
 		CanonicalEducation canonical = canonicalize(request);
 		checkVersion(profile, request.version());
 		try {
-			lockAndInvalidate(profile);
+			long profileVersion = profileVersionService.advance(profile);
 			education.update(canonical.schoolName(), canonical.degree(), canonical.fieldOfStudy(), canonical.startDate(),
 					canonical.endDate(), canonical.status());
-			educationRepository.save(education);
-			long profileVersion = flushAndReadVersion(profile);
-			return new EducationMutationResponse(EducationResponse.from(education), profileVersion);
+			educationRepository.saveAndFlush(education);
+			EducationResponse response = EducationResponse.from(education);
+			return new EducationMutationResponse(response, profileVersion);
 		} catch (OptimisticLockingFailureException | OptimisticLockException exception) {
 			throw versionConflict();
 		}
@@ -85,9 +83,10 @@ public class EducationService {
 				.orElseThrow(this::educationNotFound);
 		checkVersion(profile, version);
 		try {
-			lockAndInvalidate(profile);
+			long profileVersion = profileVersionService.advance(profile);
 			educationRepository.delete(education);
-			return new ProfileVersionResponse(flushAndReadVersion(profile));
+			educationRepository.flush();
+			return new ProfileVersionResponse(profileVersion);
 		} catch (OptimisticLockingFailureException | OptimisticLockException exception) {
 			throw versionConflict();
 		}
@@ -102,19 +101,6 @@ public class EducationService {
 		if (profile.getVersion() != expectedVersion) {
 			throw versionConflict();
 		}
-	}
-
-	private void lockAndInvalidate(Profile profile) {
-		entityManager.lock(profile, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
-		profile.invalidatePreview();
-	}
-
-	private long flushAndReadVersion(Profile profile) {
-		long versionBeforeFlush = profile.getVersion();
-		entityManager.flush();
-		entityManager.refresh(profile);
-
-		return Math.max(profile.getVersion(), versionBeforeFlush + 1);
 	}
 
 	private CanonicalEducation canonicalize(EducationRequest request) {

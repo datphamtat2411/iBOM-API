@@ -18,8 +18,6 @@ import com.fpt.ibom.profile.entity.Profile;
 import com.fpt.ibom.profile.entity.ProfileSkill;
 import com.fpt.ibom.profile.repository.ProfileRepository;
 import com.fpt.ibom.profile.repository.ProfileSkillRepository;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.LockModeType;
 import jakarta.persistence.OptimisticLockException;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -35,15 +33,15 @@ public class ProfileSkillService {
 	private final ProfileSkillRepository profileSkillRepository;
 	private final ProfileRepository profileRepository;
 	private final SkillRepository skillRepository;
-	private final EntityManager entityManager;
+	private final ProfileVersionService profileVersionService;
 	private final Clock clock;
 
 	public ProfileSkillService(ProfileSkillRepository profileSkillRepository, ProfileRepository profileRepository,
-			SkillRepository skillRepository, EntityManager entityManager, Clock clock) {
+			SkillRepository skillRepository, ProfileVersionService profileVersionService, Clock clock) {
 		this.profileSkillRepository = profileSkillRepository;
 		this.profileRepository = profileRepository;
 		this.skillRepository = skillRepository;
-		this.entityManager = entityManager;
+		this.profileVersionService = profileVersionService;
 		this.clock = clock;
 	}
 
@@ -67,11 +65,11 @@ public class ProfileSkillService {
 			throw duplicateSkill();
 		}
 		try {
-			lockAndInvalidate(profile);
+			long profileVersion = profileVersionService.advance(profile);
 			ProfileSkill profileSkill = new ProfileSkill(profile, skill, canonical.experienceYears(), canonical.lastUsed());
-			profileSkillRepository.save(profileSkill);
-			long profileVersion = flushAndReadVersion(profile);
-			return new ProfileSkillMutationResponse(ProfileSkillResponse.from(profileSkill), profileVersion);
+			profileSkillRepository.saveAndFlush(profileSkill);
+			ProfileSkillResponse response = ProfileSkillResponse.from(profileSkill);
+			return new ProfileSkillMutationResponse(response, profileVersion);
 		} catch (OptimisticLockingFailureException | OptimisticLockException exception) {
 			throw versionConflict();
 		} catch (DataIntegrityViolationException exception) {
@@ -95,11 +93,11 @@ public class ProfileSkillService {
 			throw duplicateSkill();
 		}
 		try {
-			lockAndInvalidate(profile);
+			long profileVersion = profileVersionService.advance(profile);
 			profileSkill.update(skill, canonical.experienceYears(), canonical.lastUsed());
-			profileSkillRepository.save(profileSkill);
-			long profileVersion = flushAndReadVersion(profile);
-			return new ProfileSkillMutationResponse(ProfileSkillResponse.from(profileSkill), profileVersion);
+			profileSkillRepository.saveAndFlush(profileSkill);
+			ProfileSkillResponse response = ProfileSkillResponse.from(profileSkill);
+			return new ProfileSkillMutationResponse(response, profileVersion);
 		} catch (OptimisticLockingFailureException | OptimisticLockException exception) {
 			throw versionConflict();
 		} catch (DataIntegrityViolationException exception) {
@@ -117,9 +115,10 @@ public class ProfileSkillService {
 				.orElseThrow(this::profileSkillNotFound);
 		checkVersion(profile, version);
 		try {
-			lockAndInvalidate(profile);
+			long profileVersion = profileVersionService.advance(profile);
 			profileSkillRepository.delete(profileSkill);
-			return new ProfileVersionResponse(flushAndReadVersion(profile));
+			profileSkillRepository.flush();
+			return new ProfileVersionResponse(profileVersion);
 		} catch (OptimisticLockingFailureException | OptimisticLockException exception) {
 			throw versionConflict();
 		}
@@ -134,18 +133,6 @@ public class ProfileSkillService {
 		if (expectedVersion == null || profile.getVersion() != expectedVersion) {
 			throw versionConflict();
 		}
-	}
-
-	private void lockAndInvalidate(Profile profile) {
-		entityManager.lock(profile, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
-		profile.invalidatePreview();
-	}
-
-	private long flushAndReadVersion(Profile profile) {
-		long versionBeforeFlush = profile.getVersion();
-		entityManager.flush();
-		entityManager.refresh(profile);
-		return Math.max(profile.getVersion(), versionBeforeFlush + 1);
 	}
 
 	private CanonicalProfileSkill canonicalize(ProfileSkillRequest request) {
@@ -167,7 +154,9 @@ public class ProfileSkillService {
 		Throwable cause = exception;
 		while (cause != null) {
 			if (cause instanceof ConstraintViolationException constraintViolation) {
-				return PROFILE_SKILL_UNIQUE_CONSTRAINT.equals(constraintViolation.getConstraintName());
+				String constraintName = constraintViolation.getConstraintName();
+				return PROFILE_SKILL_UNIQUE_CONSTRAINT.equals(constraintName)
+						|| constraintName != null && constraintName.endsWith("." + PROFILE_SKILL_UNIQUE_CONSTRAINT);
 			}
 			cause = cause.getCause();
 		}

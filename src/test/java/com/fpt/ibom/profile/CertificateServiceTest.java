@@ -31,8 +31,7 @@ import com.fpt.ibom.profile.entity.Profile;
 import com.fpt.ibom.profile.repository.CertificateRepository;
 import com.fpt.ibom.profile.repository.ProfileRepository;
 import com.fpt.ibom.profile.service.CertificateService;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.LockModeType;
+import com.fpt.ibom.profile.service.ProfileVersionService;
 import jakarta.persistence.OptimisticLockException;
 import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
@@ -50,8 +49,8 @@ class CertificateServiceTest {
 
 	private final CertificateRepository certificates = org.mockito.Mockito.mock(CertificateRepository.class);
 	private final ProfileRepository profiles = org.mockito.Mockito.mock(ProfileRepository.class);
-	private final EntityManager entityManager = org.mockito.Mockito.mock(EntityManager.class);
-	private final CertificateService service = new CertificateService(certificates, profiles, entityManager, FIXED_CLOCK);
+	private final ProfileVersionService profileVersions = org.mockito.Mockito.mock(ProfileVersionService.class);
+	private final CertificateService service = new CertificateService(certificates, profiles, profileVersions, FIXED_CLOCK);
 
 	@Test
 	void listsOwnedCertificatesInIssueDateDescendingAndIdAscendingOrder() {
@@ -77,22 +76,21 @@ class CertificateServiceTest {
 		LocalDate issueDate = BUSINESS_DATE;
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
 		when(certificates.existsByProfileIdAndCertificateNameAndIssueDate(8L, "AWS", issueDate)).thenReturn(false);
-		when(certificates.save(any(Certificate.class))).thenAnswer(invocation -> invocation.getArgument(0));
-		simulateVersionIncrementOnRefresh(profile);
+		when(certificates.saveAndFlush(any(Certificate.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		simulateVersionIncrementOnAdvance(profile);
 
 		CertificateMutationResponse result = service.create(7L, 8L,
 				new CertificateRequest(" AWS ", issueDate, 0L));
 
 		ArgumentCaptor<Certificate> captor = ArgumentCaptor.forClass(Certificate.class);
-		verify(certificates).save(captor.capture());
+		verify(certificates).saveAndFlush(captor.capture());
 		Certificate saved = captor.getValue();
 		assertEquals("AWS", saved.getCertificateName());
 		assertEquals(issueDate, saved.getIssueDate());
 		assertFalse(profile.isHasPreviewed());
 		assertEquals(1L, result.profileVersion());
 		verify(certificates).existsByProfileIdAndCertificateNameAndIssueDate(8L, "AWS", issueDate);
-		verify(entityManager).lock(profile, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
-		verify(entityManager).refresh(profile);
+		verify(profileVersions).advance(profile);
 	}
 
 	@Test
@@ -104,8 +102,8 @@ class CertificateServiceTest {
 
 		assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
 		assertEquals(ErrorCode.CERTIFICATE_ISSUE_DATE_IN_FUTURE, exception.getErrorCode());
-		verify(entityManager, never()).lock(any(), any());
-		verify(certificates, never()).save(any());
+		verify(profileVersions, never()).advance(any());
+		verify(certificates, never()).saveAndFlush(any());
 	}
 
 	@Test
@@ -121,8 +119,8 @@ class CertificateServiceTest {
 		assertEquals(HttpStatus.CONFLICT, exception.getStatus());
 		assertEquals(ErrorCode.CERTIFICATE_ALREADY_EXISTS, exception.getErrorCode());
 		verify(certificates).existsByProfileIdAndCertificateNameAndIssueDate(8L, "AWS", issueDate);
-		verify(certificates, never()).save(any());
-		verify(entityManager, never()).lock(any(), any());
+		verify(certificates, never()).saveAndFlush(any());
+		verify(profileVersions, never()).advance(any());
 	}
 
 	@Test
@@ -134,8 +132,8 @@ class CertificateServiceTest {
 		when(certificates.findByIdAndProfileId(12L, 8L)).thenReturn(Optional.of(certificate));
 		when(certificates.existsByProfileIdAndCertificateNameAndIssueDateAndIdNot(8L, "Updated", issueDate, 12L))
 				.thenReturn(false);
-		when(certificates.save(certificate)).thenReturn(certificate);
-		simulateVersionIncrementOnRefresh(profile);
+		when(certificates.saveAndFlush(certificate)).thenReturn(certificate);
+		simulateVersionIncrementOnAdvance(profile);
 
 		CertificateMutationResponse result = service.update(7L, 8L, 12L,
 				new CertificateRequest(" Updated ", issueDate, 0L));
@@ -145,7 +143,7 @@ class CertificateServiceTest {
 		assertEquals(1L, result.profileVersion());
 		verify(certificates).findByIdAndProfileId(12L, 8L);
 		verify(certificates).existsByProfileIdAndCertificateNameAndIssueDateAndIdNot(8L, "Updated", issueDate, 12L);
-		verify(entityManager).refresh(profile);
+		verify(profileVersions).advance(profile);
 	}
 
 	@Test
@@ -162,8 +160,8 @@ class CertificateServiceTest {
 				new CertificateRequest("Existing", issueDate, 0L)));
 
 		assertEquals(ErrorCode.CERTIFICATE_ALREADY_EXISTS, exception.getErrorCode());
-		verify(certificates, never()).save(any());
-		verify(entityManager, never()).lock(any(), any());
+		verify(certificates, never()).saveAndFlush(any());
+		verify(profileVersions, never()).advance(any());
 	}
 
 	@Test
@@ -172,15 +170,14 @@ class CertificateServiceTest {
 		Certificate certificate = certificate(profile, 12L, "AWS", LocalDate.of(2020, 1, 1));
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
 		when(certificates.findByIdAndProfileId(12L, 8L)).thenReturn(Optional.of(certificate));
-		simulateVersionIncrementOnRefresh(profile);
+		simulateVersionIncrementOnAdvance(profile);
 
 		ProfileVersionResponse result = service.delete(7L, 8L, 12L, 0L);
 
 		assertEquals(1L, result.profileVersion());
 		verify(certificates).delete(certificate);
-		verify(certificates, never()).save(any());
-		verify(entityManager).lock(profile, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
-		verify(entityManager).refresh(profile);
+		verify(certificates, never()).saveAndFlush(any());
+		verify(profileVersions).advance(profile);
 	}
 
 	@Test
@@ -207,8 +204,8 @@ class CertificateServiceTest {
 				new CertificateRequest("AWS", LocalDate.of(2020, 1, 1), 1L)));
 
 		assertEquals(ErrorCode.PROFILE_VERSION_CONFLICT, exception.getErrorCode());
-		verify(entityManager, never()).lock(any(), any());
-		verify(certificates, never()).save(any());
+		verify(profileVersions, never()).advance(any());
+		verify(certificates, never()).saveAndFlush(any());
 	}
 
 	@Test
@@ -217,20 +214,20 @@ class CertificateServiceTest {
 		LocalDate issueDate = LocalDate.of(2020, 1, 1);
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
 		when(certificates.existsByProfileIdAndCertificateNameAndIssueDate(8L, "AWS", issueDate)).thenReturn(false);
-		when(certificates.save(any(Certificate.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		when(certificates.saveAndFlush(any(Certificate.class))).thenAnswer(invocation -> invocation.getArgument(0));
 		ConstraintViolationException violation = new ConstraintViolationException("duplicate", null,
 				"uk_certificates_profile_name_issue_date");
-		doThrow(new DataIntegrityViolationException("duplicate", violation)).when(entityManager).flush();
+		doThrow(new DataIntegrityViolationException("duplicate", violation)).when(certificates).saveAndFlush(any());
 
 		ApiException duplicate = assertThrows(ApiException.class, () -> service.create(7L, 8L,
 				new CertificateRequest("AWS", issueDate, 0L)));
 		assertEquals(ErrorCode.CERTIFICATE_ALREADY_EXISTS, duplicate.getErrorCode());
 
-		org.mockito.Mockito.reset(entityManager);
+		org.mockito.Mockito.reset(certificates, profileVersions);
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
 		when(certificates.existsByProfileIdAndCertificateNameAndIssueDate(8L, "AWS", issueDate)).thenReturn(false);
-		when(certificates.save(any(Certificate.class))).thenAnswer(invocation -> invocation.getArgument(0));
-		doThrow(new OptimisticLockException()).when(entityManager).flush();
+		when(certificates.saveAndFlush(any(Certificate.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		doThrow(new OptimisticLockException()).when(profileVersions).advance(any());
 
 		ApiException conflict = assertThrows(ApiException.class, () -> service.create(7L, 8L,
 				new CertificateRequest("AWS", issueDate, 0L)));
@@ -251,10 +248,12 @@ class CertificateServiceTest {
 		return certificate;
 	}
 
-	private void simulateVersionIncrementOnRefresh(Profile profile) {
+	private void simulateVersionIncrementOnAdvance(Profile profile) {
 		org.mockito.Mockito.doAnswer(invocation -> {
-			ReflectionTestUtils.setField(profile, "version", profile.getVersion() + 1);
-			return null;
-		}).when(entityManager).refresh(profile);
+			long nextVersion = profile.getVersion() + 1;
+			ReflectionTestUtils.setField(profile, "version", nextVersion);
+			ReflectionTestUtils.setField(profile, "hasPreviewed", false);
+			return nextVersion;
+		}).when(profileVersions).advance(profile);
 	}
 }

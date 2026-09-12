@@ -17,8 +17,6 @@ import com.fpt.ibom.profile.entity.Profile;
 import com.fpt.ibom.profile.entity.ProfileLanguage;
 import com.fpt.ibom.profile.repository.ProfileLanguageRepository;
 import com.fpt.ibom.profile.repository.ProfileRepository;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.LockModeType;
 import jakarta.persistence.OptimisticLockException;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -34,14 +32,14 @@ public class ProfileLanguageService {
 	private final ProfileLanguageRepository profileLanguageRepository;
 	private final ProfileRepository profileRepository;
 	private final LanguageRepository languageRepository;
-	private final EntityManager entityManager;
+	private final ProfileVersionService profileVersionService;
 
 	public ProfileLanguageService(ProfileLanguageRepository profileLanguageRepository, ProfileRepository profileRepository,
-			LanguageRepository languageRepository, EntityManager entityManager) {
+			LanguageRepository languageRepository, ProfileVersionService profileVersionService) {
 		this.profileLanguageRepository = profileLanguageRepository;
 		this.profileRepository = profileRepository;
 		this.languageRepository = languageRepository;
-		this.entityManager = entityManager;
+		this.profileVersionService = profileVersionService;
 	}
 
 	@Transactional(readOnly = true)
@@ -65,11 +63,11 @@ public class ProfileLanguageService {
 			throw duplicateLanguage();
 		}
 		try {
-			lockAndInvalidate(profile);
+			long profileVersion = profileVersionService.advance(profile);
 			ProfileLanguage profileLanguage = new ProfileLanguage(profile, language, canonical.level());
-			profileLanguageRepository.save(profileLanguage);
-			long profileVersion = flushAndReadVersion(profile);
-			return new ProfileLanguageMutationResponse(ProfileLanguageResponse.from(profileLanguage), profileVersion);
+			profileLanguageRepository.saveAndFlush(profileLanguage);
+			ProfileLanguageResponse response = ProfileLanguageResponse.from(profileLanguage);
+			return new ProfileLanguageMutationResponse(response, profileVersion);
 		} catch (OptimisticLockingFailureException | OptimisticLockException exception) {
 			throw versionConflict();
 		} catch (DataIntegrityViolationException exception) {
@@ -94,11 +92,11 @@ public class ProfileLanguageService {
 			throw duplicateLanguage();
 		}
 		try {
-			lockAndInvalidate(profile);
+			long profileVersion = profileVersionService.advance(profile);
 			profileLanguage.update(language, canonical.level());
-			profileLanguageRepository.save(profileLanguage);
-			long profileVersion = flushAndReadVersion(profile);
-			return new ProfileLanguageMutationResponse(ProfileLanguageResponse.from(profileLanguage), profileVersion);
+			profileLanguageRepository.saveAndFlush(profileLanguage);
+			ProfileLanguageResponse response = ProfileLanguageResponse.from(profileLanguage);
+			return new ProfileLanguageMutationResponse(response, profileVersion);
 		} catch (OptimisticLockingFailureException | OptimisticLockException exception) {
 			throw versionConflict();
 		} catch (DataIntegrityViolationException exception) {
@@ -116,9 +114,10 @@ public class ProfileLanguageService {
 				.orElseThrow(this::profileLanguageNotFound);
 		checkVersion(profile, version);
 		try {
-			lockAndInvalidate(profile);
+			long profileVersion = profileVersionService.advance(profile);
 			profileLanguageRepository.delete(profileLanguage);
-			return new ProfileVersionResponse(flushAndReadVersion(profile));
+			profileLanguageRepository.flush();
+			return new ProfileVersionResponse(profileVersion);
 		} catch (OptimisticLockingFailureException | OptimisticLockException exception) {
 			throw versionConflict();
 		}
@@ -133,18 +132,6 @@ public class ProfileLanguageService {
 		if (expectedVersion == null || profile.getVersion() != expectedVersion) {
 			throw versionConflict();
 		}
-	}
-
-	private void lockAndInvalidate(Profile profile) {
-		entityManager.lock(profile, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
-		profile.invalidatePreview();
-	}
-
-	private long flushAndReadVersion(Profile profile) {
-		long versionBeforeFlush = profile.getVersion();
-		entityManager.flush();
-		entityManager.refresh(profile);
-		return Math.max(profile.getVersion(), versionBeforeFlush + 1);
 	}
 
 	private CanonicalProfileLanguage canonicalize(ProfileLanguageRequest request) {
@@ -178,7 +165,9 @@ public class ProfileLanguageService {
 		Throwable cause = exception;
 		while (cause != null) {
 			if (cause instanceof ConstraintViolationException constraintViolation) {
-				return PROFILE_LANGUAGE_UNIQUE_CONSTRAINT.equals(constraintViolation.getConstraintName());
+				String constraintName = constraintViolation.getConstraintName();
+				return PROFILE_LANGUAGE_UNIQUE_CONSTRAINT.equals(constraintName)
+						|| constraintName != null && constraintName.endsWith("." + PROFILE_LANGUAGE_UNIQUE_CONSTRAINT);
 			}
 			cause = cause.getCause();
 		}

@@ -15,8 +15,6 @@ import com.fpt.ibom.profile.entity.Project;
 import com.fpt.ibom.profile.entity.ProjectStatus;
 import com.fpt.ibom.profile.repository.ProfileRepository;
 import com.fpt.ibom.profile.repository.ProjectRepository;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.LockModeType;
 import jakarta.persistence.OptimisticLockException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
@@ -27,13 +25,13 @@ import org.springframework.transaction.annotation.Transactional;
 public class ProjectService {
 	private final ProjectRepository projectRepository;
 	private final ProfileRepository profileRepository;
-	private final EntityManager entityManager;
+	private final ProfileVersionService profileVersionService;
 
 	public ProjectService(ProjectRepository projectRepository, ProfileRepository profileRepository,
-			EntityManager entityManager) {
+			ProfileVersionService profileVersionService) {
 		this.projectRepository = projectRepository;
 		this.profileRepository = profileRepository;
-		this.entityManager = entityManager;
+		this.profileVersionService = profileVersionService;
 	}
 
 	@Transactional(readOnly = true)
@@ -48,13 +46,13 @@ public class ProjectService {
 		CanonicalProject canonical = canonicalize(request);
 		checkVersion(profile, request.version());
 		try {
-			lockAndInvalidate(profile);
+			long profileVersion = profileVersionService.advance(profile);
 			Project project = new Project(profile, canonical.name(), canonical.description(), canonical.startDate(),
 					canonical.endDate(), canonical.status(), canonical.position(), canonical.teamSize(),
 					canonical.responsibilities(), canonical.programmingLanguages(), canonical.tools());
-			projectRepository.save(project);
-			long profileVersion = flushAndReadVersion(profile);
-			return new ProjectMutationResponse(ProjectResponse.from(project), profileVersion);
+			projectRepository.saveAndFlush(project);
+			ProjectResponse response = ProjectResponse.from(project);
+			return new ProjectMutationResponse(response, profileVersion);
 		} catch (OptimisticLockingFailureException | OptimisticLockException exception) {
 			throw versionConflict();
 		}
@@ -67,13 +65,13 @@ public class ProjectService {
 		CanonicalProject canonical = canonicalize(request);
 		checkVersion(profile, request.version());
 		try {
-			lockAndInvalidate(profile);
+			long profileVersion = profileVersionService.advance(profile);
 			project.update(canonical.name(), canonical.description(), canonical.startDate(), canonical.endDate(),
 					canonical.status(), canonical.position(), canonical.teamSize(), canonical.responsibilities(),
 					canonical.programmingLanguages(), canonical.tools());
-			projectRepository.save(project);
-			long profileVersion = flushAndReadVersion(profile);
-			return new ProjectMutationResponse(ProjectResponse.from(project), profileVersion);
+			projectRepository.saveAndFlush(project);
+			ProjectResponse response = ProjectResponse.from(project);
+			return new ProjectMutationResponse(response, profileVersion);
 		} catch (OptimisticLockingFailureException | OptimisticLockException exception) {
 			throw versionConflict();
 		}
@@ -85,9 +83,10 @@ public class ProjectService {
 		Project project = projectRepository.findByIdAndProfileId(projectId, profileId).orElseThrow(this::projectNotFound);
 		checkVersion(profile, version);
 		try {
-			lockAndInvalidate(profile);
+			long profileVersion = profileVersionService.advance(profile);
 			projectRepository.delete(project);
-			return new ProfileVersionResponse(flushAndReadVersion(profile));
+			projectRepository.flush();
+			return new ProfileVersionResponse(profileVersion);
 		} catch (OptimisticLockingFailureException | OptimisticLockException exception) {
 			throw versionConflict();
 		}
@@ -102,18 +101,6 @@ public class ProjectService {
 		if (expectedVersion == null || profile.getVersion() != expectedVersion) {
 			throw versionConflict();
 		}
-	}
-
-	private void lockAndInvalidate(Profile profile) {
-		entityManager.lock(profile, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
-		profile.invalidatePreview();
-	}
-
-	private long flushAndReadVersion(Profile profile) {
-		long versionBeforeFlush = profile.getVersion();
-		entityManager.flush();
-		entityManager.refresh(profile);
-		return Math.max(profile.getVersion(), versionBeforeFlush + 1);
 	}
 
 	private CanonicalProject canonicalize(ProjectRequest request) {
