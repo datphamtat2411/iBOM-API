@@ -2,6 +2,7 @@ package com.fpt.ibom.cv.service;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -32,11 +33,19 @@ public class FileNameResolutionService {
 	}
 
 	public String resolve(Profile profile, Long explicitFileNameFormatId, DocumentFormat documentFormat) {
+		return resolve(profile, explicitFileNameFormatId, documentFormat, clock.instant());
+	}
+
+	public String resolve(Profile profile, Long explicitFileNameFormatId, DocumentFormat documentFormat,
+			Instant exportTimestamp) {
 		if (profile == null) {
 			throw valueError("Profile is required");
 		}
 		if (documentFormat == null) {
 			throw formatError("Document format is required");
+		}
+		if (exportTimestamp == null) {
+			throw valueError("Export timestamp is required");
 		}
 
 		FileNameFormat format = selectFormat(profile, explicitFileNameFormatId);
@@ -46,7 +55,7 @@ public class FileNameResolutionService {
 			if (part.token() == null) {
 				fileName.append(part.value());
 			} else {
-				fileName.append(resolveToken(part.token(), profile));
+				fileName.append(resolveToken(part.token(), profile, exportTimestamp));
 			}
 		}
 
@@ -111,12 +120,12 @@ public class FileNameResolutionService {
 		return parts;
 	}
 
-	private String resolveToken(String token, Profile profile) {
+	private String resolveToken(String token, Profile profile, Instant exportTimestamp) {
 		return switch (token) {
 		case "LastName" -> normalizeProfileValue(profile.getLastName(), "LastName");
 		case "FirstName" -> normalizeProfileValue(profile.getFirstName(), "FirstName");
 		case "Role" -> normalizeProfileValue(profile.getJobTitle(), "Role");
-		case "Date" -> DATE_FORMAT.format(LocalDate.now(clock));
+		case "Date" -> DATE_FORMAT.format(exportTimestamp.atZone(clock.getZone()).toLocalDate());
 		default -> throw formatError("File Name Format pattern contains an unsupported token");
 		};
 	}

@@ -124,6 +124,14 @@ class FileNameResolutionServiceTest {
 	}
 
 	@Test
+	void resolvesDateFromTheLogicalExportTimestamp() {
+		when(formats.findById(1L)).thenReturn(Optional.of(format(1L, "Date", "{Date}", false)));
+
+		assertEquals("20260101.pdf", service.resolve(profile(), 1L, DocumentFormat.PDF,
+				Instant.parse("2026-01-01T00:30:00Z")));
+	}
+
+	@Test
 	void normalizesUnsafeProfileValuesWithoutTransliteration() {
 		Profile profile = new Profile(user(), "Profile", "Zoë", " Nguyễn/An\n", "C++ Engineer",
 				BigDecimal.ONE, null, null);

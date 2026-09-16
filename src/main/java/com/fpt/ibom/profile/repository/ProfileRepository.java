@@ -1,5 +1,7 @@
 package com.fpt.ibom.profile.repository;
 
+import java.time.Instant;
+
 import com.fpt.ibom.profile.entity.Profile;
 import java.util.List;
 import java.util.Optional;
@@ -31,4 +33,13 @@ public interface ProfileRepository extends JpaRepository<Profile, Long> {
 	@Query("update Profile profile set profile.hasPreviewed = true "
 			+ "where profile.id = :profileId and profile.version = :expectedVersion")
 	int markPreviewed(@Param("profileId") Long profileId, @Param("expectedVersion") long expectedVersion);
+
+	@Modifying(flushAutomatically = true)
+	@Query("update Profile profile set profile.lastExportedAt = case "
+			+ "when profile.lastExportedAt is null or profile.lastExportedAt < :exportedAt "
+			+ "then :exportedAt else profile.lastExportedAt end "
+			+ "where profile.id = :profileId and profile.version = :expectedVersion "
+			+ "and profile.hasPreviewed = true and profile.deletedAt is null")
+	int markExported(@Param("profileId") Long profileId, @Param("expectedVersion") long expectedVersion,
+			@Param("exportedAt") Instant exportedAt);
 }

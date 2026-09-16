@@ -1,5 +1,7 @@
 package com.fpt.ibom.profile.service;
 
+import java.time.Instant;
+
 import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.exception.ErrorCode;
 import com.fpt.ibom.profile.entity.Profile;
@@ -36,6 +38,14 @@ public class ProfileVersionService {
 			throw versionConflict();
 		}
 		entityManager.refresh(profile);
+	}
+
+	@Transactional
+	public void markExported(Profile profile, long expectedVersion, Instant exportedAt) {
+		int updated = profileRepository.markExported(profile.getId(), expectedVersion, exportedAt);
+		if (updated != 1) {
+			throw versionConflict();
+		}
 	}
 
 	private ApiException versionConflict() {
