@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8" />
+    <title>Curriculum Vitae</title>
+    <link rel="stylesheet" type="text/css" href="cv.css" />
+</head>
+<body>
+<main class="cv">
+    <header class="profile-header">
+        <h1 th:text="${document.personalDetails.firstName + ' ' + document.personalDetails.lastName}">Name</h1>
+        <p class="job-title" th:text="${document.personalDetails.jobTitle}">Job title</p>
+        <div class="personal-details">
+            <span><strong>Years of experience:</strong> <span th:text="${document.personalDetails.yearsOfExperience}">0.00</span></span>
+            <span><strong>Personality:</strong> <span th:text="${document.personalDetails.personality}">Personality</span></span>
+            <span><strong>Technical summary:</strong> <span th:text="${document.personalDetails.technicalSummary}">Summary</span></span>
+        </div>
+    </header>
+
+    <section class="section" th:if="${!#lists.isEmpty(document.education)}">
+        <h2>Education</h2>
+        <article class="entry" th:each="education : ${document.education}">
+            <h3 th:text="${education.schoolName}">School</h3>
+            <p><strong th:text="${education.degree}">Degree</strong> <span th:text="${education.fieldOfStudy}">Field</span></p>
+            <p class="metadata">
+                <span th:text="${#temporals.format(education.startDate, 'MMM yyyy')}">Jan 2020</span>
+                <span> - </span>
+                <span th:if="${education.endDate != null}" th:text="${#temporals.format(education.endDate, 'MMM yyyy')}">Jan 2024</span>
+                <span th:if="${education.endDate == null}">Present</span>
+                <span> | </span><span th:text="${education.status}">COMPLETED</span>
+            </p>
+        </article>
+    </section>
+
+    <section class="section" th:if="${!#lists.isEmpty(document.languages)}">
+        <h2>Languages</h2>
+        <ul>
+            <li th:each="language : ${document.languages}"><span th:text="${language.languageName}">Language</span> - <span th:text="${language.level}">NATIVE</span></li>
+        </ul>
+    </section>
+
+    <section class="section" th:if="${!#lists.isEmpty(document.certificates)}">
+        <h2>Certificates</h2>
+        <ul>
+            <li th:each="certificate : ${document.certificates}">
+                <span th:text="${certificate.certificateName}">Certificate</span> -
+                <span th:text="${#temporals.format(certificate.issueDate, 'MMM yyyy')}">Jan 2024</span>
+            </li>
+        </ul>
+    </section>
+
+    <section class="section" th:if="${!#lists.isEmpty(document.projects)}">
+        <h2>Projects</h2>
+        <article class="entry project" th:each="project : ${document.projects}">
+            <h3 th:text="${project.name}">Project</h3>
+            <p th:text="${project.description}">Description</p>
+            <p class="metadata">
+                <span th:text="${#temporals.format(project.startDate, 'MMM yyyy')}">Jan 2020</span>
+                <span> - </span>
+                <span th:if="${project.endDate != null}" th:text="${#temporals.format(project.endDate, 'MMM yyyy')}">Jan 2024</span>
+                <span th:if="${project.endDate == null}">Present</span>
+                <span> | </span><span th:text="${project.status}">ONGOING</span>
+            </p>
+            <p><strong>Position:</strong> <span th:text="${project.position}">Position</span></p>
+            <p><strong>Team size:</strong> <span th:text="${project.teamSize}">1</span></p>
+            <p><strong>Responsibilities:</strong> <span th:text="${project.responsibilities}">Responsibilities</span></p>
+            <p><strong>Programming languages:</strong> <span th:text="${project.programmingLanguages}">Java</span></p>
+            <p><strong>Tools:</strong> <span th:text="${project.tools}">Tools</span></p>
+        </article>
+    </section>
+
+    <section class="section" th:if="${!#lists.isEmpty(document.skills)}">
+        <h2>Skills</h2>
+        <ul>
+            <li th:each="skill : ${document.skills}">
+                <span th:text="${skill.skillName}">Skill</span> -
+                <span th:text="${skill.categoryName}">Category</span>
+                (<span th:text="${skill.categoryCode}">CODE</span>) -
+                <span th:text="${skill.experienceYears}">0.00</span> years
+                <span th:if="${skill.lastUsed != null}">, last used <span th:text="${#temporals.format(skill.lastUsed, 'MMM yyyy')}">Jan 2024</span></span>
+            </li>
+        </ul>
+    </section>
+</main>
+</body>
+</html>

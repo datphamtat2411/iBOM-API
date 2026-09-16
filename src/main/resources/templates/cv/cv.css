@@ -1,0 +1,104 @@
+@page {
+    size: A4;
+    margin: 18mm 17mm 18mm 17mm;
+}
+
+@font-face {
+    font-family: 'Noto Sans';
+    src: url('../fonts/NotoSans-Regular.ttf');
+    font-weight: normal;
+}
+
+@font-face {
+    font-family: 'Noto Sans';
+    src: url('../fonts/NotoSans-Bold.ttf');
+    font-weight: bold;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    color: #243447;
+    font-family: 'Noto Sans', sans-serif;
+    font-size: 10pt;
+    line-height: 1.45;
+}
+
+.cv {
+    width: 100%;
+}
+
+.profile-header {
+    border-bottom: 2px solid #2d6a72;
+    margin-bottom: 15pt;
+    padding-bottom: 10pt;
+}
+
+h1 {
+    color: #163b4d;
+    font-size: 25pt;
+    margin: 0;
+}
+
+.job-title {
+    color: #2d6a72;
+    font-size: 13pt;
+    margin: 2pt 0 8pt;
+}
+
+.personal-details {
+    color: #536575;
+}
+
+.personal-details span {
+    display: block;
+    margin-top: 2pt;
+}
+
+.section {
+    page-break-inside: avoid;
+    margin-bottom: 13pt;
+}
+
+h2 {
+    border-bottom: 1px solid #b8c9cc;
+    color: #2d6a72;
+    font-size: 14pt;
+    margin: 0 0 7pt;
+    padding-bottom: 2pt;
+    page-break-after: avoid;
+}
+
+h3 {
+    color: #163b4d;
+    font-size: 11pt;
+    margin: 0;
+}
+
+.entry {
+    border-left: 3px solid #d8e5e5;
+    margin: 0 0 9pt 2pt;
+    padding-left: 8pt;
+    page-break-inside: avoid;
+}
+
+p {
+    margin: 2pt 0;
+}
+
+.metadata {
+    color: #667985;
+    font-size: 9pt;
+}
+
+ul {
+    margin: 3pt 0 0;
+    padding-left: 17pt;
+}
+
+li {
+    margin-bottom: 3pt;
+    page-break-inside: avoid;
+}
