@@ -18,6 +18,8 @@ public interface ProfileRepository extends JpaRepository<Profile, Long> {
 
 	Optional<Profile> findByIdAndUserIdAndDeletedAtIsNull(Long id, Long userId);
 
+	Optional<Profile> findByIdAndDeletedAtIsNull(Long id);
+
 	long countByUserIdAndDeletedAtIsNull(Long userId);
 
 	@Modifying(flushAutomatically = true)

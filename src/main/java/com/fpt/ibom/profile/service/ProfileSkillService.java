@@ -3,7 +3,6 @@ package com.fpt.ibom.profile.service;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
-import java.util.Comparator;
 import java.util.List;
 
 import com.fpt.ibom.exception.ApiException;
@@ -49,9 +48,7 @@ public class ProfileSkillService {
 	public List<ProfileSkillResponse> list(Long userId, Long profileId) {
 		findOwnedActiveProfile(userId, profileId);
 		return profileSkillRepository.findByProfileId(profileId).stream()
-				.sorted(Comparator.comparing(ProfileSkill::getExperienceYears, Comparator.reverseOrder())
-						.thenComparing(profileSkill -> profileSkill.getSkill().getName(), String.CASE_INSENSITIVE_ORDER)
-						.thenComparing(ProfileSkill::getId, Comparator.nullsLast(Comparator.naturalOrder())))
+				.sorted(ProfileDisplayOrder.skillComparator())
 				.map(ProfileSkillResponse::from).toList();
 	}
 

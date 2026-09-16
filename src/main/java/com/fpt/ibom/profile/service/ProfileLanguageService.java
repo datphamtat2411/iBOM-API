@@ -1,6 +1,5 @@
 package com.fpt.ibom.profile.service;
 
-import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 
@@ -46,10 +45,7 @@ public class ProfileLanguageService {
 	public List<ProfileLanguageResponse> list(Long userId, Long profileId) {
 		findOwnedActiveProfile(userId, profileId);
 		return profileLanguageRepository.findByProfileId(profileId).stream()
-				.sorted(Comparator.comparingInt((ProfileLanguage profileLanguage) -> proficiencyRank(profileLanguage.getLevel()))
-						.thenComparing(ProfileLanguage::getLanguage,
-								Comparator.comparing(Language::getName, String.CASE_INSENSITIVE_ORDER))
-						.thenComparing(ProfileLanguage::getId, Comparator.nullsLast(Comparator.naturalOrder())))
+				.sorted(ProfileDisplayOrder.languageComparator())
 				.map(ProfileLanguageResponse::from).toList();
 	}
 
@@ -149,16 +145,6 @@ public class ProfileLanguageService {
 
 	private Language findLanguage(Long languageId) {
 		return languageRepository.findById(languageId).orElseThrow(this::languageNotFound);
-	}
-
-	private int proficiencyRank(LanguageLevel level) {
-		return switch (level) {
-		case NATIVE -> 0;
-		case ADVANCED -> 1;
-		case UPPER_INTERMEDIATE -> 2;
-		case INTERMEDIATE -> 3;
-		case BEGINNER -> 4;
-		};
 	}
 
 	private boolean isProfileLanguageUniqueConstraintViolation(DataIntegrityViolationException exception) {
