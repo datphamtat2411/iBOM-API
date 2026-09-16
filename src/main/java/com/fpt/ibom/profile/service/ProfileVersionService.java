@@ -7,6 +7,7 @@ import com.fpt.ibom.profile.repository.ProfileRepository;
 import jakarta.persistence.EntityManager;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ProfileVersionService {
@@ -26,6 +27,15 @@ public class ProfileVersionService {
 		}
 		entityManager.refresh(profile);
 		return profile.getVersion();
+	}
+
+	@Transactional
+	public void markPreviewed(Profile profile, long expectedVersion) {
+		int updated = profileRepository.markPreviewed(profile.getId(), expectedVersion);
+		if (updated != 1) {
+			throw versionConflict();
+		}
+		entityManager.refresh(profile);
 	}
 
 	private ApiException versionConflict() {

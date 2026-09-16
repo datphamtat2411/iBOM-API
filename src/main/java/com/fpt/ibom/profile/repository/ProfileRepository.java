@@ -26,4 +26,9 @@ public interface ProfileRepository extends JpaRepository<Profile, Long> {
 	@Query("update Profile profile set profile.version = profile.version + 1, profile.hasPreviewed = false "
 			+ "where profile.id = :profileId and profile.version = :expectedVersion")
 	int advanceVersion(@Param("profileId") Long profileId, @Param("expectedVersion") long expectedVersion);
+
+	@Modifying(flushAutomatically = true)
+	@Query("update Profile profile set profile.hasPreviewed = true "
+			+ "where profile.id = :profileId and profile.version = :expectedVersion")
+	int markPreviewed(@Param("profileId") Long profileId, @Param("expectedVersion") long expectedVersion);
 }
