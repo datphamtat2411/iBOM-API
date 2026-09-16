@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.doThrow;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -60,6 +61,8 @@ class ProfileServiceTest {
 		assertEquals("Personality", captor.getValue().getPersonality());
 		assertEquals("Technical summary", captor.getValue().getTechnicalSummary());
 		assertEquals(false, captor.getValue().isHasPreviewed());
+		assertNull(captor.getValue().getLastExportedAt());
+		assertNull(captor.getValue().getPreferredFileNameFormat());
 		assertEquals(0L, captor.getValue().getVersion());
 	}
 
@@ -122,6 +125,8 @@ class ProfileServiceTest {
 		assertEquals("First", result.firstName());
 		assertEquals("Last", result.lastName());
 		assertEquals(new BigDecimal("3.5"), result.yearsOfExperience());
+		assertNull(result.lastExportedAt());
+		assertNull(result.preferredFileNameFormatId());
 		assertEquals(0L, result.version());
 	}
 
@@ -139,6 +144,8 @@ class ProfileServiceTest {
 	void updatesOwnedProfileAndResetsPreviewState() {
 		Profile profile = new Profile(user(), "Default", "First", "Last", "Engineer", new BigDecimal("3.5"),
 				"Personality", "Summary");
+		Instant exportedAt = Instant.parse("2026-02-03T04:05:06Z");
+		profile.markExportedAt(exportedAt);
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
 		when(profiles.existsByUserIdAndDeletedAtIsNullAndProfileNameIgnoreCaseAndIdNot(7L, "Updated", 8L))
 				.thenReturn(false);
@@ -154,6 +161,25 @@ class ProfileServiceTest {
 		assertEquals("Friendly", result.personality());
 		assertEquals("Technical summary", result.technicalSummary());
 		assertEquals(false, result.hasPreviewed());
+		assertEquals(exportedAt, result.lastExportedAt());
+	}
+
+	@Test
+	void previewMarkingAndInvalidationDoNotChangeExportTimestamp() {
+		Profile profile = new Profile(user(), "Default", "First", "Last", "Engineer", new BigDecimal("3.5"),
+				"Personality", "Summary");
+		Instant exportedAt = Instant.parse("2026-02-03T04:05:06Z");
+
+		profile.markExportedAt(exportedAt);
+		profile.markPreviewed();
+
+		assertEquals(true, profile.isHasPreviewed());
+		assertEquals(exportedAt, profile.getLastExportedAt());
+
+		profile.invalidatePreview();
+
+		assertEquals(false, profile.isHasPreviewed());
+		assertEquals(exportedAt, profile.getLastExportedAt());
 	}
 
 	@Test

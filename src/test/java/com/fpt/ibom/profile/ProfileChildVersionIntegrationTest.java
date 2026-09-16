@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -171,7 +172,11 @@ class ProfileChildVersionIntegrationTest extends MySqlIntegrationTest {
 	@Test
 	void startsWithPreviewAlreadyFalseAndReturnedVersionCanBeUsedImmediately() {
 		UserAccount user = saveUser();
-		Profile profile = saveProfile(user, false);
+		Instant exportedAt = Instant.parse("2026-02-03T04:05:06Z");
+		Profile profile = new Profile(user, "Profile-" + UUID.randomUUID(), "First", "Last", "Engineer", BigDecimal.ONE,
+				"Personality", "Summary");
+		profile.markExportedAt(exportedAt);
+		profile = profileRepository.saveAndFlush(profile);
 
 		EducationMutationResponse first = educationService.create(user.getId(), profile.getId(),
 				new EducationRequest("First School", "Degree", null, LocalDate.of(2020, 1, 1), null, "ONGOING", 0L));
@@ -185,6 +190,7 @@ class ProfileChildVersionIntegrationTest extends MySqlIntegrationTest {
 		Profile reloaded = profileRepository.findById(profile.getId()).orElseThrow();
 		assertEquals(second.profileVersion(), reloaded.getVersion());
 		assertFalse(reloaded.isHasPreviewed());
+		assertEquals(exportedAt, reloaded.getLastExportedAt());
 	}
 
 	@Test

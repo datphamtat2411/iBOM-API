@@ -22,9 +22,11 @@ import com.fpt.ibom.auth.repository.UserAccountRepository;
 import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.exception.ErrorCode;
 import com.fpt.ibom.master.entity.Language;
+import com.fpt.ibom.master.entity.FileNameFormat;
 import com.fpt.ibom.master.entity.Skill;
 import com.fpt.ibom.master.entity.SkillCategory;
 import com.fpt.ibom.master.repository.LanguageRepository;
+import com.fpt.ibom.master.repository.FileNameFormatRepository;
 import com.fpt.ibom.master.repository.SkillCategoryRepository;
 import com.fpt.ibom.master.repository.SkillRepository;
 import com.fpt.ibom.profile.dto.ProfileCopyRequest;
@@ -93,6 +95,8 @@ class ProfileCopyIntegrationTest extends MySqlIntegrationTest {
 	@Autowired
 	private LanguageRepository languageRepository;
 	@Autowired
+	private FileNameFormatRepository fileNameFormatRepository;
+	@Autowired
 	private SkillRepository skillRepository;
 	@Autowired
 	private SkillCategoryRepository skillCategoryRepository;
@@ -104,6 +108,11 @@ class ProfileCopyIntegrationTest extends MySqlIntegrationTest {
 		UserAccount user = saveUser();
 		String sourceName = "Source-" + UUID.randomUUID();
 		Profile source = saveProfile(user, sourceName);
+		FileNameFormat preferredFormat = fileNameFormatRepository
+				.saveAndFlush(new FileNameFormat("Copy Format-" + UUID.randomUUID(), "{LastName}_{Date}", false));
+		source.setPreferredFileNameFormat(preferredFormat);
+		source.markExportedAt(Instant.parse("2026-02-03T04:05:06Z"));
+		source = profileRepository.saveAndFlush(source);
 		source.update(sourceName, "First", "Last", "Engineer", new BigDecimal("3.5"), "Personality", "Summary");
 		source = profileRepository.saveAndFlush(source);
 		source.softDelete(null);
@@ -140,6 +149,8 @@ class ProfileCopyIntegrationTest extends MySqlIntegrationTest {
 		assertEquals("Personality", response.personality());
 		assertEquals("Summary", response.technicalSummary());
 		assertFalse(response.hasPreviewed());
+		assertNull(response.lastExportedAt());
+		assertNull(response.preferredFileNameFormatId());
 		assertEquals(0L, response.version());
 		assertNotNull(response.createdAt());
 		assertNotNull(response.updatedAt());
@@ -147,6 +158,8 @@ class ProfileCopyIntegrationTest extends MySqlIntegrationTest {
 		Profile copied = profileRepository.findById(response.id()).orElseThrow();
 		assertNotEquals(source.getId(), copied.getId());
 		assertFalse(copied.isHasPreviewed());
+		assertNull(copied.getLastExportedAt());
+		assertNull(copied.getPreferredFileNameFormat());
 		assertEquals(0L, copied.getVersion());
 		assertNull(copied.getDeletedAt());
 		assertNotNull(copied.getCreatedAt());

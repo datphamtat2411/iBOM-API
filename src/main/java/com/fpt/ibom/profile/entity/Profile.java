@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 import com.fpt.ibom.auth.entity.UserAccount;
+import com.fpt.ibom.master.entity.FileNameFormat;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -47,6 +48,11 @@ public class Profile {
 	@Column(name = "has_previewed", nullable = false)
 	@OptimisticLock(excluded = true)
 	private boolean hasPreviewed = false;
+	@Column(name = "last_exported_at")
+	private Instant lastExportedAt;
+	@ManyToOne(fetch = FetchType.LAZY)
+	@JoinColumn(name = "preferred_file_name_format_id")
+	private FileNameFormat preferredFileNameFormat;
 	@Column(name = "deleted_at")
 	private Instant deletedAt;
 	@Version
@@ -84,6 +90,8 @@ public class Profile {
 	public String getTechnicalSummary() { return technicalSummary; }
 	public BigDecimal getYearsOfExperience() { return yearsOfExperience; }
 	public boolean isHasPreviewed() { return hasPreviewed; }
+	public Instant getLastExportedAt() { return lastExportedAt; }
+	public FileNameFormat getPreferredFileNameFormat() { return preferredFileNameFormat; }
 	public Instant getDeletedAt() { return deletedAt; }
 	public long getVersion() { return version; }
 	public Instant getCreatedAt() { return createdAt; }
@@ -92,6 +100,14 @@ public class Profile {
 	public void softDelete(Instant deletedAt) { this.deletedAt = deletedAt; }
 
 	public void invalidatePreview() { this.hasPreviewed = false; }
+
+	public void markPreviewed() { this.hasPreviewed = true; }
+
+	public void markExportedAt(Instant exportedAt) { this.lastExportedAt = exportedAt; }
+
+	public void setPreferredFileNameFormat(FileNameFormat preferredFileNameFormat) {
+		this.preferredFileNameFormat = preferredFileNameFormat;
+	}
 
 	public void update(String profileName, String firstName, String lastName, String jobTitle,
 			BigDecimal yearsOfExperience, String personality, String technicalSummary) {

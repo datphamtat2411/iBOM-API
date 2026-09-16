@@ -67,7 +67,7 @@ class ProfileControllerTest {
 	void createsProfileWithCurrentAboutMeContract() throws Exception {
 		when(profileService.create(org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.any()))
 				.thenReturn(new com.fpt.ibom.profile.dto.ProfileResponse(8L, 7L, "Default", "First", "Last",
-					"Engineer", null, "Friendly", "Summary", false, 0L, null, null));
+					"Engineer", null, "Friendly", "Summary", false, 0L, null, null, null, null));
 
 		mockMvc.perform(post("/api/profiles").with(principal()).contentType(MediaType.APPLICATION_JSON)
 				.content(profileJson("First", "Last", "Engineer", "Friendly", "Summary")))
@@ -86,7 +86,7 @@ class ProfileControllerTest {
 		when(profileCopyService.copy(org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.eq(8L),
 				org.mockito.ArgumentMatchers.any()))
 				.thenReturn(new ProfileResponse(9L, 7L, "Copied", "First", "Last", "Engineer", null, "Friendly",
-					"Summary", false, 0L, null, null));
+					"Summary", false, 0L, null, null, null, null));
 
 		mockMvc.perform(post("/api/profiles/8/copy").with(principal()).contentType(MediaType.APPLICATION_JSON)
 				.content("{\"profileName\":\" Copied \"}"))
@@ -155,10 +155,10 @@ class ProfileControllerTest {
 		String summary = "x".repeat(4000);
 		when(profileService.create(org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.any()))
 				.thenReturn(new com.fpt.ibom.profile.dto.ProfileResponse(8L, 7L, "Default", firstName, lastName,
-					jobTitle, null, personality, summary, false, 0L, null, null));
+					jobTitle, null, personality, summary, false, 0L, null, null, null, null));
 		when(profileService.update(org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.eq(8L),
 				org.mockito.ArgumentMatchers.any())).thenReturn(new ProfileDetailResponse(8L, "Default", firstName,
-					lastName, jobTitle, null, personality, summary, false, 1L, null, null));
+					lastName, jobTitle, null, personality, summary, false, 1L, null, null, null, null));
 
 		mockMvc.perform(post("/api/profiles").with(principal()).contentType(MediaType.APPLICATION_JSON)
 				.content(profileJson(firstName, lastName, jobTitle, personality, summary)))
@@ -270,7 +270,7 @@ class ProfileControllerTest {
 	@Test
 	void returnsProfileDetailAndNotFoundContract() throws Exception {
 		when(profileService.get(7L, 8L)).thenReturn(new ProfileDetailResponse(8L, "Default", "First", "Last",
-				"Engineer", null, "Personality", "Summary", false, 3L, null, null));
+				"Engineer", null, "Personality", "Summary", false, 3L, null, null, null, null));
 
 		mockMvc.perform(get("/api/profiles/8").with(principal())).andExpect(status().isOk())
 				.andExpect(jsonPath("$.data.profileName").value("Default"))
@@ -295,7 +295,7 @@ class ProfileControllerTest {
 	void updatesProfileForAuthenticatedOwner() throws Exception {
 		when(profileService.update(org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.eq(8L),
 				org.mockito.ArgumentMatchers.any())).thenReturn(new ProfileDetailResponse(8L, "Updated", "First", "Last",
-					"Developer", null, "Friendly", "Technical summary", false, 1L, null, null));
+					"Developer", null, "Friendly", "Technical summary", false, 1L, null, null, null, null));
 
 		mockMvc.perform(put("/api/profiles/8").with(principal()).contentType(MediaType.APPLICATION_JSON)
 				.content("{\"profileName\":\"Updated\",\"firstName\":\"First\",\"lastName\":\"Last\","

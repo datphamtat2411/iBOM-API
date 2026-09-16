@@ -13,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -70,6 +71,9 @@ class ProfileCoreIntegrationTest extends MySqlIntegrationTest {
 				.andExpect(jsonPath("$.data.yearsOfExperience").value(2.5))
 				.andExpect(jsonPath("$.data.technicalSummary").value("Summary"));
 		assertEquals("Created", profileRepository.findById(profileId).orElseThrow().getProfileName());
+		Profile created = profileRepository.findById(profileId).orElseThrow();
+		assertNull(created.getLastExportedAt());
+		assertNull(created.getPreferredFileNameFormat());
 	}
 
 	@Test
@@ -169,10 +173,15 @@ class ProfileCoreIntegrationTest extends MySqlIntegrationTest {
 	void updatesPersistCanonicalFieldsAndRejectsStaleVersion() {
 		UserAccount user = saveUser();
 		Profile profile = saveProfile(user, "Original");
-		var updated = profileService.update(user.getId(), profile.getId(), updateRequest("Updated", 0L));
+		Instant exportedAt = Instant.parse("2026-02-03T04:05:06Z");
+		profile.markExportedAt(exportedAt);
+		Profile persistedProfile = profileRepository.saveAndFlush(profile);
+		var updated = profileService.update(user.getId(), profile.getId(), updateRequest("Updated", persistedProfile.getVersion()));
 
-		assertEquals(1L, updated.version());
+		assertEquals(2L, updated.version());
 		assertFalse(updated.hasPreviewed());
+		assertEquals(exportedAt, updated.lastExportedAt());
+		assertEquals(exportedAt, profileRepository.findById(profile.getId()).orElseThrow().getLastExportedAt());
 		ApiException conflict = assertThrows(ApiException.class, () -> profileService.update(user.getId(), profile.getId(),
 				new ProfileUpdateRequest("Stale", "Other", "Other", "Other", BigDecimal.ONE, "Other", "Other", 0L)));
 		assertEquals(ErrorCode.PROFILE_VERSION_CONFLICT, conflict.getErrorCode());

@@ -42,6 +42,7 @@ import com.fpt.ibom.profile.repository.ProfileRepository;
 import com.fpt.ibom.profile.repository.ProfileSkillRepository;
 import com.fpt.ibom.profile.repository.ProjectRepository;
 import com.fpt.ibom.profile.service.ProfileCopyService;
+import com.fpt.ibom.master.entity.FileNameFormat;
 import com.fpt.ibom.master.entity.Language;
 import com.fpt.ibom.master.entity.Skill;
 import com.fpt.ibom.master.entity.SkillCategory;
@@ -68,6 +69,10 @@ class ProfileCopyServiceTest {
 				"Personality", "Technical summary");
 		ReflectionTestUtils.setField(source, "id", 41L);
 		ReflectionTestUtils.setField(source, "hasPreviewed", true);
+		Instant exportedAt = Instant.parse("2026-02-03T04:05:06Z");
+		FileNameFormat preferredFormat = new FileNameFormat("Custom", "{LastName}_{FirstName}", false);
+		source.markExportedAt(exportedAt);
+		source.setPreferredFileNameFormat(preferredFormat);
 		ReflectionTestUtils.setField(source, "version", 7L);
 		ReflectionTestUtils.setField(source, "createdAt", Instant.parse("2026-01-01T00:00:00Z"));
 		ReflectionTestUtils.setField(source, "updatedAt", Instant.parse("2026-01-02T00:00:00Z"));
@@ -102,6 +107,8 @@ class ProfileCopyServiceTest {
 		assertEquals("Personality", result.personality());
 		assertEquals("Technical summary", result.technicalSummary());
 		assertFalse(result.hasPreviewed());
+		assertNull(result.lastExportedAt());
+		assertNull(result.preferredFileNameFormatId());
 		assertEquals(0L, result.version());
 
 		org.mockito.ArgumentCaptor<Profile> profileCaptor = org.mockito.ArgumentCaptor.forClass(Profile.class);
@@ -112,6 +119,8 @@ class ProfileCopyServiceTest {
 		assertNull(copied.getId());
 		assertEquals("Copied", copied.getProfileName());
 		assertFalse(copied.isHasPreviewed());
+		assertNull(copied.getLastExportedAt());
+		assertNull(copied.getPreferredFileNameFormat());
 		assertEquals(0L, copied.getVersion());
 		assertNull(copied.getDeletedAt());
 		assertNull(copied.getCreatedAt());
