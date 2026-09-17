@@ -158,7 +158,7 @@ public class FileNameFormatService {
 				while (index < pattern.length() && pattern.charAt(index) != '{' && pattern.charAt(index) != '}') {
 					index++;
 				}
-				if (containsUnsafeFilenameCharacter(pattern.substring(start, index))) {
+				if (containsUnsupportedLiteralCharacter(pattern.substring(start, index))) {
 					throw invalidPattern("File Name Format pattern contains unsafe literal text");
 				}
 			}
@@ -169,12 +169,10 @@ public class FileNameFormatService {
 		}
 	}
 
-	private boolean containsUnsafeFilenameCharacter(String value) {
+	private boolean containsUnsupportedLiteralCharacter(String value) {
 		for (int offset = 0; offset < value.length();) {
 			int codePoint = value.codePointAt(offset);
-			if (Character.isISOControl(codePoint) || codePoint == '/' || codePoint == '\\' || codePoint == ':'
-					|| codePoint == '*' || codePoint == '?' || codePoint == '"' || codePoint == '<' || codePoint == '>'
-					|| codePoint == '|') {
+			if (codePoint != '-' && codePoint != '_') {
 				return true;
 			}
 			offset += Character.charCount(codePoint);

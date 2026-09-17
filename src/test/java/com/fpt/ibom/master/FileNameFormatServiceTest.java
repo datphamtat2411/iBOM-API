@@ -93,7 +93,7 @@ class FileNameFormatServiceTest {
 
 	@Test
 	void rejectsInvalidPatterns() {
-		for (String pattern : List.of(" ", "{LastName", "LastName}", "{Unknown}", "prefix/{Date}", "literal", "{Date}{Date}")) {
+		for (String pattern : List.of(" ", "{LastName", "LastName}", "{Unknown}", "prefix-{Date}", "literal", "{Date}{Date}")) {
 			ApiException exception = assertThrows(ApiException.class,
 					() -> fileNameFormatService.create(new FileNameFormatRequest("Format " + pattern, pattern)));
 			assertEquals(ErrorCode.FILE_NAME_FORMAT_INVALID, exception.getErrorCode());
