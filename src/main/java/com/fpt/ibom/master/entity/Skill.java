@@ -45,6 +45,11 @@ public class Skill {
 		this.category = category;
 	}
 
+	public void update(String name, SkillCategory category) {
+		this.name = name == null ? null : name.trim();
+		this.category = category;
+	}
+
 	public Long getId() { return id; }
 	public String getName() { return name; }
 	public SkillCategory getCategory() { return category; }

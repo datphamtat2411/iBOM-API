@@ -18,5 +18,7 @@ public interface ProfileSkillRepository extends JpaRepository<ProfileSkill, Long
 
 	boolean existsByProfileIdAndSkillId(Long profileId, Long skillId);
 
+	boolean existsBySkillId(Long skillId);
+
 	boolean existsByProfileIdAndSkillIdAndIdNot(Long profileId, Long skillId, Long profileSkillId);
 }

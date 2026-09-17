@@ -5,10 +5,15 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
@@ -25,6 +30,11 @@ import com.fpt.ibom.master.entity.Skill;
 import com.fpt.ibom.master.entity.SkillCategory;
 import com.fpt.ibom.master.repository.SkillCategoryRepository;
 import com.fpt.ibom.master.repository.SkillRepository;
+import com.fpt.ibom.profile.dto.ProfileSkillResponse;
+import com.fpt.ibom.profile.entity.Profile;
+import com.fpt.ibom.profile.entity.ProfileSkill;
+import com.fpt.ibom.profile.repository.ProfileRepository;
+import com.fpt.ibom.profile.repository.ProfileSkillRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -34,6 +44,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.orm.jpa.JpaSystemException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest
@@ -51,6 +62,12 @@ class SkillIntegrationTest extends MySqlIntegrationTest {
 
 	@Autowired
 	private UserAccountRepository userRepository;
+
+	@Autowired
+	private ProfileRepository profileRepository;
+
+	@Autowired
+	private ProfileSkillRepository profileSkillRepository;
 
 	@Autowired
 	private JdbcTemplate jdbcTemplate;
@@ -151,14 +168,87 @@ class SkillIntegrationTest extends MySqlIntegrationTest {
 				.andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"));
 	}
 
+	@Test
+	void managerCanCreateUpdateAndDeleteSkillThroughMigratedDatabase() throws Exception {
+		SkillCategory backend = skillCategoryRepository.findByCode("BACKEND").orElseThrow();
+		SkillCategory database = skillCategoryRepository.findByCode("DATABASE_DATA").orElseThrow();
+		UserAccount manager = saveUser(UserRole.MANAGER);
+		String marker = "crud-" + UUID.randomUUID();
+
+		String response = mockMvc.perform(post("/api/master/skills").with(authentication(userPrincipal(manager)))
+				.contentType(APPLICATION_JSON).content("{\"name\":\"  " + marker + "  \",\"categoryId\":"
+					+ backend.getId() + "}"))
+				.andExpect(status().isCreated()).andExpect(jsonPath("$.data.name").value(marker))
+				.andExpect(jsonPath("$.data.categoryCode").value("BACKEND")).andReturn().getResponse()
+				.getContentAsString();
+		Number skillIdValue = com.jayway.jsonpath.JsonPath.read(response, "$.data.id");
+		long skillId = skillIdValue.longValue();
+
+		mockMvc.perform(put("/api/master/skills/" + skillId).with(authentication(userPrincipal(manager)))
+				.contentType(APPLICATION_JSON).content("{\"name\":\"  " + marker + "-updated  \",\"categoryId\":"
+					+ database.getId() + "}"))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.data.name").value(marker + "-updated"))
+				.andExpect(jsonPath("$.data.categoryCode").value("DATABASE_DATA"));
+		assertEquals(marker + "-updated", skillRepository.findById(skillId).orElseThrow().getName());
+
+		mockMvc.perform(post("/api/master/skills").with(authentication(userPrincipal(manager)))
+				.contentType(APPLICATION_JSON).content("{\"name\":\"" + marker.toUpperCase(Locale.ROOT)
+					+ "-UPDATED\",\"categoryId\":" + backend.getId() + "}"))
+				.andExpect(status().isConflict()).andExpect(jsonPath("$.errorCode").value("SKILL_NAME_ALREADY_EXISTS"));
+		mockMvc.perform(post("/api/master/skills").with(authentication(userPrincipal(manager)))
+				.contentType(APPLICATION_JSON).content("{\"name\":\"unknown-category\",\"categoryId\":999999999}"))
+				.andExpect(status().isNotFound()).andExpect(jsonPath("$.errorCode").value("SKILL_CATEGORY_NOT_FOUND"));
+		mockMvc.perform(put("/api/master/skills/999999999").with(authentication(userPrincipal(manager)))
+				.contentType(APPLICATION_JSON).content("{\"name\":\"unknown-skill\",\"categoryId\":4}"))
+				.andExpect(status().isNotFound()).andExpect(jsonPath("$.errorCode").value("SKILL_NOT_FOUND"));
+
+		mockMvc.perform(delete("/api/master/skills/" + skillId).with(authentication(userPrincipal(manager))))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.code").value(200))
+				.andExpect(jsonPath("$.data").doesNotExist());
+		assertTrue(skillRepository.findById(skillId).isEmpty());
+	}
+
+	@Test
+	void rejectsDeletingReferencedSkillAndPreservesProfileSkillData() throws Exception {
+		SkillCategory category = skillCategoryRepository.findByCode("BACKEND").orElseThrow();
+		UserAccount manager = saveUser(UserRole.MANAGER);
+		UserAccount member = saveUser(UserRole.MEMBER);
+		Skill skill = skillRepository.saveAndFlush(new Skill("referenced-" + UUID.randomUUID(), category));
+		Profile profile = profileRepository.saveAndFlush(new Profile(member, "skill-profile-" + UUID.randomUUID(), "First",
+				"Last", "Engineer", BigDecimal.ONE, null, null));
+		ProfileSkill profileSkill = profileSkillRepository.saveAndFlush(
+				new ProfileSkill(profile, skill, BigDecimal.ONE, null));
+
+		mockMvc.perform(delete("/api/master/skills/" + skill.getId()).with(authentication(userPrincipal(manager))))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.errorCode").value("SKILL_REFERENCED_BY_PROFILES"));
+
+		assertTrue(skillRepository.existsById(skill.getId()));
+		assertTrue(profileSkillRepository.existsByProfileIdAndSkillId(profile.getId(), skill.getId()));
+		assertEquals(skill.getId(), profileSkillRepository.findById(profileSkill.getId()).orElseThrow().getSkill().getId());
+	}
+
+	@Test
+	void memberCannotMutateSkillsInMigratedApplication() throws Exception {
+		UserAccount member = saveUser(UserRole.MEMBER);
+		mockMvc.perform(post("/api/master/skills").with(authentication(userPrincipal(member))).contentType(APPLICATION_JSON)
+				.content("{\"name\":\"member-skill\",\"categoryId\":4}"))
+				.andExpect(status().isForbidden());
+	}
+
 	private UserAccount saveUser() {
+		return saveUser(UserRole.MEMBER);
+	}
+
+	private UserAccount saveUser(UserRole role) {
 		return userRepository.saveAndFlush(new UserAccount(UUID.randomUUID() + "@example.com",
-				"skill-user-" + UUID.randomUUID(), "hash", UserRole.MEMBER, UserStatus.ACTIVE));
+				"skill-user-" + UUID.randomUUID(), "hash", role, UserStatus.ACTIVE));
 	}
 
 	private Authentication userPrincipal(UserAccount user) {
 		return new UsernamePasswordAuthenticationToken(
-				new UserPrincipal(user.getId(), user.getEmail(), user.getUsername(), user.getRole()), null, List.of());
+				new UserPrincipal(user.getId(), user.getEmail(), user.getUsername(), user.getRole()), null,
+				List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name())));
 	}
 
 	private void assertDatabaseIntegrityViolation(Runnable action) {

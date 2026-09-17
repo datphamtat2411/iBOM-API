@@ -1,5 +1,7 @@
 package com.fpt.ibom.master.repository;
 
+import java.util.Optional;
+
 import com.fpt.ibom.master.entity.Skill;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -14,4 +16,10 @@ public interface SkillRepository extends JpaRepository<Skill, Long> {
 
 	@EntityGraph(attributePaths = "category")
 	Page<Skill> findByNameContainingIgnoreCase(String name, Pageable pageable);
+
+	boolean existsByNameIgnoreCase(String name);
+
+	boolean existsByNameIgnoreCaseAndIdNot(String name, Long id);
+
+	Optional<Skill> findByNameIgnoreCase(String name);
 }

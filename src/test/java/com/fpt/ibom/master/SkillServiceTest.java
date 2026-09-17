@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -12,24 +13,35 @@ import static org.mockito.Mockito.when;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 import com.fpt.ibom.common.PageResponse;
 import com.fpt.ibom.exception.ApiException;
+import com.fpt.ibom.exception.ErrorCode;
+import com.fpt.ibom.master.dto.SkillRequest;
+import com.fpt.ibom.master.dto.SkillResponse;
 import com.fpt.ibom.master.entity.Skill;
 import com.fpt.ibom.master.entity.SkillCategory;
+import com.fpt.ibom.master.repository.SkillCategoryRepository;
 import com.fpt.ibom.master.repository.SkillRepository;
+import com.fpt.ibom.profile.repository.ProfileSkillRepository;
+import org.hibernate.exception.ConstraintViolationException;
 import com.fpt.ibom.master.service.SkillService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class SkillServiceTest {
 
 	private final SkillRepository skillRepository = org.mockito.Mockito.mock(SkillRepository.class);
-	private final SkillService skillService = new SkillService(skillRepository);
+	private final SkillCategoryRepository categoryRepository = org.mockito.Mockito.mock(SkillCategoryRepository.class);
+	private final ProfileSkillRepository profileSkillRepository = org.mockito.Mockito.mock(ProfileSkillRepository.class);
+	private final SkillService skillService = new SkillService(skillRepository, categoryRepository, profileSkillRepository);
 
 	@Test
 	void mapsPageMetadataSkillCategoryAndTimestampsWithCaseInsensitiveOrdering() {
@@ -86,6 +98,111 @@ class SkillServiceTest {
 		assertThrows(ApiException.class, () -> skillService.list(-1, 10, null));
 		assertThrows(ApiException.class, () -> skillService.list(0, 0, null));
 		verifyNoInteractions(skillRepository);
+	}
+
+	@Test
+	void createsSkillWithTrimmedNameAndExistingCategory() {
+		SkillCategory category = category(4L, "BACKEND", "Backend");
+		when(categoryRepository.findById(4L)).thenReturn(Optional.of(category));
+		when(skillRepository.existsByNameIgnoreCase("Java")).thenReturn(false);
+		when(skillRepository.saveAndFlush(any(Skill.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+		SkillResponse result = skillService.create(new SkillRequest("  Java  ", 4L));
+
+		ArgumentCaptor<Skill> skill = ArgumentCaptor.forClass(Skill.class);
+		verify(skillRepository).saveAndFlush(skill.capture());
+		assertEquals("Java", skill.getValue().getName());
+		assertEquals(category, skill.getValue().getCategory());
+		assertEquals("Java", result.name());
+		assertEquals(4L, result.categoryId());
+	}
+
+	@Test
+	void updatesSkillWithTrimmedNameAndReplacementCategory() {
+		SkillCategory originalCategory = category(4L, "BACKEND", "Backend");
+		SkillCategory replacementCategory = category(5L, "DATABASE_DATA", "Database & Data");
+		Skill existing = skill(12L, "Java", originalCategory);
+		when(skillRepository.findById(12L)).thenReturn(Optional.of(existing));
+		when(categoryRepository.findById(5L)).thenReturn(Optional.of(replacementCategory));
+		when(skillRepository.existsByNameIgnoreCaseAndIdNot("Spring", 12L)).thenReturn(false);
+		when(skillRepository.saveAndFlush(existing)).thenReturn(existing);
+
+		SkillResponse result = skillService.update(12L, new SkillRequest(" Spring ", 5L));
+
+		assertEquals("Spring", existing.getName());
+		assertEquals(replacementCategory, existing.getCategory());
+		assertEquals("Spring", result.name());
+		assertEquals(5L, result.categoryId());
+	}
+
+	@Test
+	void deletesUnreferencedSkillWithoutTouchingProfileSkills() {
+		Skill existing = skill(12L, "Java", category(4L, "BACKEND", "Backend"));
+		when(skillRepository.findById(12L)).thenReturn(Optional.of(existing));
+		when(profileSkillRepository.existsBySkillId(12L)).thenReturn(false);
+
+		skillService.delete(12L);
+
+		verify(skillRepository).delete(existing);
+		verify(skillRepository).flush();
+		verifyNoInteractions(categoryRepository);
+	}
+
+	@Test
+	void rejectsReferencedSkillDeletion() {
+		Skill existing = skill(12L, "Java", category(4L, "BACKEND", "Backend"));
+		when(skillRepository.findById(12L)).thenReturn(Optional.of(existing));
+		when(profileSkillRepository.existsBySkillId(12L)).thenReturn(true);
+
+		ApiException exception = assertThrows(ApiException.class, () -> skillService.delete(12L));
+
+		assertEquals(HttpStatus.CONFLICT, exception.getStatus());
+		assertEquals(ErrorCode.SKILL_REFERENCED_BY_PROFILES, exception.getErrorCode());
+		verify(skillRepository, never()).delete(any(Skill.class));
+	}
+
+	@Test
+	void rejectsInvalidNamesDuplicateNamesAndUnknownReferences() {
+		ApiException blank = assertThrows(ApiException.class,
+				() -> skillService.create(new SkillRequest("  ", 4L)));
+		assertEquals(ErrorCode.VALIDATION_ERROR, blank.getErrorCode());
+		verifyNoInteractions(skillRepository, categoryRepository, profileSkillRepository);
+
+		when(categoryRepository.findById(4L)).thenReturn(Optional.of(category(4L, "BACKEND", "Backend")));
+		when(skillRepository.existsByNameIgnoreCase("java")).thenReturn(true);
+		ApiException duplicate = assertThrows(ApiException.class,
+				() -> skillService.create(new SkillRequest("java", 4L)));
+		assertEquals(HttpStatus.CONFLICT, duplicate.getStatus());
+		assertEquals(ErrorCode.SKILL_NAME_ALREADY_EXISTS, duplicate.getErrorCode());
+
+		when(categoryRepository.findById(99L)).thenReturn(Optional.empty());
+		ApiException categoryMissing = assertThrows(ApiException.class,
+				() -> skillService.create(new SkillRequest("Spring", 99L)));
+		assertEquals(HttpStatus.NOT_FOUND, categoryMissing.getStatus());
+		assertEquals(ErrorCode.SKILL_CATEGORY_NOT_FOUND, categoryMissing.getErrorCode());
+
+		when(skillRepository.findById(99L)).thenReturn(Optional.empty());
+		ApiException skillMissing = assertThrows(ApiException.class,
+				() -> skillService.update(99L, new SkillRequest("Spring", 4L)));
+		assertEquals(HttpStatus.NOT_FOUND, skillMissing.getStatus());
+		assertEquals(ErrorCode.SKILL_NOT_FOUND, skillMissing.getErrorCode());
+	}
+
+	@Test
+	void translatesDatabaseSkillNameConstraintConflict() {
+		SkillCategory category = category(4L, "BACKEND", "Backend");
+		when(categoryRepository.findById(4L)).thenReturn(Optional.of(category));
+		when(skillRepository.existsByNameIgnoreCase("Java")).thenReturn(false);
+		ConstraintViolationException violation = new ConstraintViolationException("duplicate", null,
+				"uk_skills_name_ci");
+		doThrow(new DataIntegrityViolationException("duplicate", violation)).when(skillRepository)
+				.saveAndFlush(any(Skill.class));
+
+		ApiException exception = assertThrows(ApiException.class,
+				() -> skillService.create(new SkillRequest("Java", 4L)));
+
+		assertEquals(HttpStatus.CONFLICT, exception.getStatus());
+		assertEquals(ErrorCode.SKILL_NAME_ALREADY_EXISTS, exception.getErrorCode());
 	}
 
 	private Skill skill(Long id, String name, SkillCategory category) {

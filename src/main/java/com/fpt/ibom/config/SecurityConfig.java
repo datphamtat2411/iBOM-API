@@ -84,6 +84,12 @@ public class SecurityConfig {
 								"/api/auth/refresh-token",
 								"/api/auth/logout"
 						).permitAll()
+						.requestMatchers(HttpMethod.POST, "/api/master/skills")
+								.hasAnyRole("MANAGER", "ADMIN")
+						.requestMatchers(HttpMethod.PUT, "/api/master/skills/*")
+								.hasAnyRole("MANAGER", "ADMIN")
+						.requestMatchers(HttpMethod.DELETE, "/api/master/skills/*")
+								.hasAnyRole("MANAGER", "ADMIN")
 						.requestMatchers(HttpMethod.POST, "/api/master/languages")
 							.hasAnyRole("MANAGER", "ADMIN")
 						.requestMatchers(HttpMethod.PUT, "/api/master/languages/*")
