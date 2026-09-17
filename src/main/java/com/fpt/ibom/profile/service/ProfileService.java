@@ -21,6 +21,7 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Isolation;
 import org.hibernate.exception.ConstraintViolationException;
 
 @Service
@@ -80,14 +81,14 @@ public class ProfileService {
 	}
 
 	@Transactional
-	public ProfileDetailResponse update(Long userId, Long profileId, ProfileUpdateRequest request) {
-		Profile profile = profileRepository.findByIdAndUserIdAndDeletedAtIsNull(profileId, userId)
-				.orElseThrow(this::profileNotFound);
+	public ProfileDetailResponse update(UserPrincipal principal, Long profileId, ProfileUpdateRequest request) {
+		Profile profile = profileAccessService.resolve(principal, profileId);
 		if (profile.getVersion() != request.version()) {
 			throw versionConflict();
 		}
 		String profileName = request.profileName().trim();
-		if (profileRepository.existsByUserIdAndDeletedAtIsNullAndProfileNameIgnoreCaseAndIdNot(userId, profileName,
+		Long ownerId = profile.getUser().getId();
+		if (profileRepository.existsByUserIdAndDeletedAtIsNullAndProfileNameIgnoreCaseAndIdNot(ownerId, profileName,
 				profileId)) {
 			throw duplicateName();
 		}
@@ -113,12 +114,14 @@ public class ProfileService {
 		return value.trim();
 	}
 
-	@Transactional
-	public void delete(Long userId, Long profileId) {
-		userAccountRepository.findByIdForUpdate(userId).orElseThrow(this::invalidUser);
-		Profile profile = profileRepository.findByIdAndUserIdAndDeletedAtIsNull(profileId, userId)
+	@Transactional(isolation = Isolation.READ_COMMITTED)
+	public void delete(UserPrincipal principal, Long profileId) {
+		Profile profile = profileAccessService.resolve(principal, profileId);
+		Long ownerId = profile.getUser().getId();
+		userAccountRepository.findByIdForUpdate(ownerId).orElseThrow(this::invalidUser);
+		profile = profileRepository.findByIdAndUserIdAndDeletedAtIsNull(profileId, ownerId)
 				.orElseThrow(this::profileNotFound);
-		if (profileRepository.countByUserIdAndDeletedAtIsNull(userId) <= 1) {
+		if (profileRepository.countByUserIdAndDeletedAtIsNull(ownerId) <= 1) {
 			throw lastActiveProfileCannotDelete();
 		}
 		profile.softDelete(Instant.now());

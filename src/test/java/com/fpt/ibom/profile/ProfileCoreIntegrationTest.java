@@ -120,7 +120,7 @@ class ProfileCoreIntegrationTest extends MySqlIntegrationTest {
 		Profile first = saveProfile(owner, "First");
 		saveProfile(owner, "Second");
 		saveProfile(other, "Foreign");
-		profileService.delete(owner.getId(), first.getId());
+		profileService.delete(principal(owner), first.getId());
 
 		assertEquals(List.of("Second"), profileService.list(owner.getId()).stream()
 				.map(summary -> summary.profileName()).toList());
@@ -133,7 +133,7 @@ class ProfileCoreIntegrationTest extends MySqlIntegrationTest {
 		Profile active = saveProfile(owner, "Active");
 		Profile deleted = saveProfile(owner, "Deleted");
 		saveProfile(other, "Foreign");
-		profileService.delete(owner.getId(), deleted.getId());
+		profileService.delete(principal(owner), deleted.getId());
 
 		mockMvc.perform(get("/api/profiles/me").with(authentication(userPrincipal(owner))))
 				.andExpect(status().isOk()).andExpect(jsonPath("$.data.length()").value(1))
@@ -176,13 +176,13 @@ class ProfileCoreIntegrationTest extends MySqlIntegrationTest {
 		Instant exportedAt = Instant.parse("2026-02-03T04:05:06Z");
 		profile.markExportedAt(exportedAt);
 		Profile persistedProfile = profileRepository.saveAndFlush(profile);
-		var updated = profileService.update(user.getId(), profile.getId(), updateRequest("Updated", persistedProfile.getVersion()));
+		var updated = profileService.update(principal(user), profile.getId(), updateRequest("Updated", persistedProfile.getVersion()));
 
 		assertEquals(2L, updated.version());
 		assertFalse(updated.hasPreviewed());
 		assertEquals(exportedAt, updated.lastExportedAt());
 		assertEquals(exportedAt, profileRepository.findById(profile.getId()).orElseThrow().getLastExportedAt());
-		ApiException conflict = assertThrows(ApiException.class, () -> profileService.update(user.getId(), profile.getId(),
+		ApiException conflict = assertThrows(ApiException.class, () -> profileService.update(principal(user), profile.getId(),
 				new ProfileUpdateRequest("Stale", "Other", "Other", "Other", BigDecimal.ONE, "Other", "Other", 0L)));
 		assertEquals(ErrorCode.PROFILE_VERSION_CONFLICT, conflict.getErrorCode());
 		assertEquals("Updated", profileRepository.findById(profile.getId()).orElseThrow().getProfileName());
@@ -257,7 +257,11 @@ class ProfileCoreIntegrationTest extends MySqlIntegrationTest {
 
 	private Authentication userPrincipal(UserAccount user) {
 		return new UsernamePasswordAuthenticationToken(
-				new UserPrincipal(user.getId(), user.getEmail(), user.getUsername(), user.getRole()), null, List.of());
+				principal(user), null, List.of());
+	}
+
+	private UserPrincipal principal(UserAccount user) {
+		return new UserPrincipal(user.getId(), user.getEmail(), user.getUsername(), user.getRole());
 	}
 
 	private ProfileUpdateRequest updateRequest(String name, long version) {

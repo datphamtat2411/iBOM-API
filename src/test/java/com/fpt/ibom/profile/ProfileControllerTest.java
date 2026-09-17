@@ -156,7 +156,7 @@ class ProfileControllerTest {
 		when(profileService.create(org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.any()))
 				.thenReturn(new com.fpt.ibom.profile.dto.ProfileResponse(8L, 7L, "Default", firstName, lastName,
 					jobTitle, null, personality, summary, false, 0L, null, null, null, null));
-		when(profileService.update(org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.eq(8L),
+		when(profileService.update(org.mockito.ArgumentMatchers.any(UserPrincipal.class), org.mockito.ArgumentMatchers.eq(8L),
 				org.mockito.ArgumentMatchers.any())).thenReturn(new ProfileDetailResponse(8L, "Default", firstName,
 					lastName, jobTitle, null, personality, summary, false, 1L, null, null, null, null));
 
@@ -306,7 +306,7 @@ class ProfileControllerTest {
 
 	@Test
 	void updatesProfileForAuthenticatedOwner() throws Exception {
-		when(profileService.update(org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.eq(8L),
+		when(profileService.update(org.mockito.ArgumentMatchers.any(UserPrincipal.class), org.mockito.ArgumentMatchers.eq(8L),
 				org.mockito.ArgumentMatchers.any())).thenReturn(new ProfileDetailResponse(8L, "Updated", "First", "Last",
 					"Developer", null, "Friendly", "Technical summary", false, 1L, null, null, null, null));
 
@@ -330,7 +330,8 @@ class ProfileControllerTest {
 	void deletesProfileForAuthenticatedOwner() throws Exception {
 		mockMvc.perform(delete("/api/profiles/8").with(principal())).andExpect(status().isOk())
 				.andExpect(jsonPath("$.code").value(200)).andExpect(jsonPath("$.data").doesNotExist());
-		org.mockito.Mockito.verify(profileService).delete(7L, 8L);
+		org.mockito.Mockito.verify(profileService).delete(org.mockito.ArgumentMatchers.argThat(
+				(UserPrincipal user) -> user.userId().equals(7L)), org.mockito.ArgumentMatchers.eq(8L));
 	}
 
 	@Test
@@ -341,12 +342,14 @@ class ProfileControllerTest {
 	@Test
 	void returnsDeletionBusinessErrors() throws Exception {
 		doThrow(new ApiException(HttpStatus.NOT_FOUND, ErrorCode.PROFILE_NOT_FOUND, "Profile not found"))
-				.when(profileService).delete(7L, 8L);
+				.when(profileService).delete(org.mockito.ArgumentMatchers.any(UserPrincipal.class),
+						org.mockito.ArgumentMatchers.eq(8L));
 		mockMvc.perform(delete("/api/profiles/8").with(principal())).andExpect(status().isNotFound())
 				.andExpect(jsonPath("$.errorCode").value("PROFILE_NOT_FOUND"));
 
 		doThrow(new ApiException(HttpStatus.CONFLICT, ErrorCode.PROFILE_LAST_ACTIVE_CANNOT_DELETE,
-				"The last active Profile cannot be deleted")).when(profileService).delete(7L, 9L);
+				"The last active Profile cannot be deleted")).when(profileService).delete(
+					org.mockito.ArgumentMatchers.any(UserPrincipal.class), org.mockito.ArgumentMatchers.eq(9L));
 		mockMvc.perform(delete("/api/profiles/9").with(principal())).andExpect(status().isConflict())
 				.andExpect(jsonPath("$.errorCode").value("PROFILE_LAST_ACTIVE_CANNOT_DELETE"));
 	}

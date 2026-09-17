@@ -20,6 +20,7 @@ import com.fpt.ibom.auth.entity.UserAccount;
 import com.fpt.ibom.auth.entity.UserRole;
 import com.fpt.ibom.auth.entity.UserStatus;
 import com.fpt.ibom.auth.repository.UserAccountRepository;
+import com.fpt.ibom.auth.security.UserPrincipal;
 import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.exception.ErrorCode;
 import com.fpt.ibom.master.entity.Language;
@@ -307,7 +308,7 @@ class ProfileChildVersionIntegrationTest extends MySqlIntegrationTest {
 			throws InterruptedException {
 		start.await();
 		try {
-			return profileService.update(user.getId(), profile.getId(), new ProfileUpdateRequest("Core Updated Profile",
+			return profileService.update(principal(user), profile.getId(), new ProfileUpdateRequest("Core Updated Profile",
 					"First", "Last", "Engineer", BigDecimal.ONE, "Personality", "Summary", 0L));
 		} catch (ApiException exception) {
 			return exception;
@@ -338,6 +339,10 @@ class ProfileChildVersionIntegrationTest extends MySqlIntegrationTest {
 				"Personality", "Summary");
 		ReflectionTestUtils.setField(profile, "hasPreviewed", hasPreviewed);
 		return profileRepository.saveAndFlush(profile);
+	}
+
+	private UserPrincipal principal(UserAccount user) {
+		return new UserPrincipal(user.getId(), user.getEmail(), user.getUsername(), user.getRole());
 	}
 
 	private Language language(String name) {

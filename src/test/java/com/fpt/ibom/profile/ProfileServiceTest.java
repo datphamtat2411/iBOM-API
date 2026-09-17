@@ -37,6 +37,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.hibernate.exception.ConstraintViolationException;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 class ProfileServiceTest {
 	private final ProfileRepository profiles = mock(ProfileRepository.class);
@@ -172,16 +175,18 @@ class ProfileServiceTest {
 
 	@Test
 	void updatesOwnedProfileAndResetsPreviewState() {
-		Profile profile = new Profile(user(), "Default", "First", "Last", "Engineer", new BigDecimal("3.5"),
+		UserAccount owner = user(7L);
+		Profile profile = new Profile(owner, "Default", "First", "Last", "Engineer", new BigDecimal("3.5"),
 				"Personality", "Summary");
+		UserPrincipal principal = principal(7L, UserRole.MEMBER);
 		Instant exportedAt = Instant.parse("2026-02-03T04:05:06Z");
 		profile.markExportedAt(exportedAt);
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(access.resolve(principal, 8L)).thenReturn(profile);
 		when(profiles.existsByUserIdAndDeletedAtIsNullAndProfileNameIgnoreCaseAndIdNot(7L, "Updated", 8L))
 				.thenReturn(false);
 		when(profiles.saveAndFlush(profile)).thenReturn(profile);
 
-		ProfileDetailResponse result = service.update(7L, 8L, updateRequest(0L));
+		ProfileDetailResponse result = service.update(principal, 8L, updateRequest(0L));
 
 		assertEquals("Updated", result.profileName());
 		assertEquals("First", result.firstName());
@@ -214,14 +219,16 @@ class ProfileServiceTest {
 
 	@Test
 	void clearsOptionalFieldsOnUpdate() {
-		Profile profile = new Profile(user(), "Default", "First", "Last", "Engineer", new BigDecimal("3.5"),
+		UserAccount owner = user(7L);
+		Profile profile = new Profile(owner, "Default", "First", "Last", "Engineer", new BigDecimal("3.5"),
 				"Personality", "Summary");
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		UserPrincipal principal = principal(7L, UserRole.MEMBER);
+		when(access.resolve(principal, 8L)).thenReturn(profile);
 		when(profiles.existsByUserIdAndDeletedAtIsNullAndProfileNameIgnoreCaseAndIdNot(7L, "Updated", 8L))
 				.thenReturn(false);
 		when(profiles.saveAndFlush(profile)).thenReturn(profile);
 
-		ProfileDetailResponse result = service.update(7L, 8L,
+		ProfileDetailResponse result = service.update(principal, 8L,
 				new ProfileUpdateRequest("Updated", "First", "Last", "Engineer", new BigDecimal("3.5"), null, "   ", 0L));
 
 		assertNull(result.personality());
@@ -230,11 +237,13 @@ class ProfileServiceTest {
 
 	@Test
 	void rejectsStaleProfileVersionBeforeMutation() {
-		Profile profile = new Profile(user(), "Default", "First", "Last", "Engineer", new BigDecimal("3.5"),
+		UserAccount owner = user(7L);
+		Profile profile = new Profile(owner, "Default", "First", "Last", "Engineer", new BigDecimal("3.5"),
 				"Personality", "Summary");
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		UserPrincipal principal = principal(7L, UserRole.MEMBER);
+		when(access.resolve(principal, 8L)).thenReturn(profile);
 
-		ApiException exception = assertThrows(ApiException.class, () -> service.update(7L, 8L, updateRequest(1L)));
+		ApiException exception = assertThrows(ApiException.class, () -> service.update(principal, 8L, updateRequest(1L)));
 
 		assertEquals(HttpStatus.CONFLICT, exception.getStatus());
 		assertEquals(ErrorCode.PROFILE_VERSION_CONFLICT, exception.getErrorCode());
@@ -243,14 +252,16 @@ class ProfileServiceTest {
 
 	@Test
 	void translatesConcurrentOptimisticLockFailure() {
-		Profile profile = new Profile(user(), "Default", "First", "Last", "Engineer", new BigDecimal("3.5"),
+		UserAccount owner = user(7L);
+		Profile profile = new Profile(owner, "Default", "First", "Last", "Engineer", new BigDecimal("3.5"),
 				"Personality", "Summary");
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		UserPrincipal principal = principal(7L, UserRole.MEMBER);
+		when(access.resolve(principal, 8L)).thenReturn(profile);
 		when(profiles.existsByUserIdAndDeletedAtIsNullAndProfileNameIgnoreCaseAndIdNot(7L, "Updated", 8L))
 				.thenReturn(false);
 		doThrow(new ObjectOptimisticLockingFailureException(Profile.class, 8L)).when(profiles).saveAndFlush(profile);
 
-		ApiException exception = assertThrows(ApiException.class, () -> service.update(7L, 8L, updateRequest(0L)));
+		ApiException exception = assertThrows(ApiException.class, () -> service.update(principal, 8L, updateRequest(0L)));
 
 		assertEquals(ErrorCode.PROFILE_VERSION_CONFLICT, exception.getErrorCode());
 	}
@@ -287,27 +298,31 @@ class ProfileServiceTest {
 
 	@Test
 	void rejectsDuplicateNameExcludingCurrentProfile() {
-		Profile profile = new Profile(user(), "Default", "First", "Last", "Engineer", new BigDecimal("3.5"),
+		UserAccount owner = user(7L);
+		Profile profile = new Profile(owner, "Default", "First", "Last", "Engineer", new BigDecimal("3.5"),
 				"Personality", "Summary");
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		UserPrincipal principal = principal(7L, UserRole.MEMBER);
+		when(access.resolve(principal, 8L)).thenReturn(profile);
 		when(profiles.existsByUserIdAndDeletedAtIsNullAndProfileNameIgnoreCaseAndIdNot(7L, "Updated", 8L))
 				.thenReturn(true);
 
-		ApiException exception = assertThrows(ApiException.class, () -> service.update(7L, 8L, updateRequest(0L)));
+		ApiException exception = assertThrows(ApiException.class, () -> service.update(principal, 8L, updateRequest(0L)));
 
 		assertEquals(ErrorCode.PROFILE_NAME_ALREADY_EXISTS, exception.getErrorCode());
 	}
 
 	@Test
 	void softDeletesOwnedActiveProfileWithoutPhysicalDeletion() {
-		UserAccount user = user();
+		UserAccount user = user(7L);
 		Profile profile = new Profile(user, "Default", "First", "Last", "Engineer", new BigDecimal("3.5"),
 				"Personality", "Summary");
+		UserPrincipal principal = principal(7L, UserRole.MEMBER);
+		when(access.resolve(principal, 8L)).thenReturn(profile);
 		when(users.findByIdForUpdate(7L)).thenReturn(Optional.of(user));
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
 		when(profiles.countByUserIdAndDeletedAtIsNull(7L)).thenReturn(2L);
 
-		service.delete(7L, 8L);
+		service.delete(principal, 8L);
 
 		assertEquals(false, profile.getDeletedAt() == null);
 		verify(profiles).saveAndFlush(profile);
@@ -316,14 +331,16 @@ class ProfileServiceTest {
 
 	@Test
 	void rejectsDeletingLastActiveProfile() {
-		UserAccount user = user();
+		UserAccount user = user(7L);
 		Profile profile = new Profile(user, "Default", "First", "Last", "Engineer", new BigDecimal("3.5"),
 				"Personality", "Summary");
+		UserPrincipal principal = principal(7L, UserRole.MEMBER);
+		when(access.resolve(principal, 8L)).thenReturn(profile);
 		when(users.findByIdForUpdate(7L)).thenReturn(Optional.of(user));
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
 		when(profiles.countByUserIdAndDeletedAtIsNull(7L)).thenReturn(1L);
 
-		ApiException exception = assertThrows(ApiException.class, () -> service.delete(7L, 8L));
+		ApiException exception = assertThrows(ApiException.class, () -> service.delete(principal, 8L));
 
 		assertEquals(HttpStatus.CONFLICT, exception.getStatus());
 		assertEquals(ErrorCode.PROFILE_LAST_ACTIVE_CANNOT_DELETE, exception.getErrorCode());
@@ -331,18 +348,85 @@ class ProfileServiceTest {
 	}
 
 	@Test
-	void rejectsMissingDeletedOrForeignProfileThroughActiveOwnedLookup() {
-		when(users.findByIdForUpdate(7L)).thenReturn(Optional.of(user()));
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.empty());
+	void rejectsMissingDeletedOrForeignProfileThroughProfileAccessResolution() {
+		UserPrincipal principal = principal(7L, UserRole.MEMBER);
+		when(access.resolve(principal, 8L)).thenThrow(new ApiException(HttpStatus.NOT_FOUND,
+				ErrorCode.PROFILE_NOT_FOUND, "Profile not found"));
 
-		ApiException exception = assertThrows(ApiException.class, () -> service.delete(7L, 8L));
+		ApiException exception = assertThrows(ApiException.class, () -> service.delete(principal, 8L));
 
 		assertEquals(ErrorCode.PROFILE_NOT_FOUND, exception.getErrorCode());
+		verify(users, never()).findByIdForUpdate(any());
 		verify(profiles, never()).countByUserIdAndDeletedAtIsNull(any());
+	}
+
+	@ParameterizedTest
+	@EnumSource(value = UserRole.class, names = { "MANAGER", "ADMIN" })
+	void managerAndAdminUpdateMemberProfileUsingTargetOwnerNameScope(UserRole role) {
+		UserAccount member = user(21L);
+		Profile profile = new Profile(member, "Default", "First", "Last", "Engineer", new BigDecimal("3.5"),
+				"Personality", "Summary");
+		UserPrincipal principal = principal(7L, role);
+		when(access.resolve(principal, 8L)).thenReturn(profile);
+		when(profiles.existsByUserIdAndDeletedAtIsNullAndProfileNameIgnoreCaseAndIdNot(21L, "Updated", 8L))
+				.thenReturn(false);
+		when(profiles.saveAndFlush(profile)).thenReturn(profile);
+
+		ProfileDetailResponse result = service.update(principal, 8L, updateRequest(0L));
+
+		assertEquals("Updated", result.profileName());
+		verify(profiles).existsByUserIdAndDeletedAtIsNullAndProfileNameIgnoreCaseAndIdNot(21L, "Updated", 8L);
+		verify(profiles, never()).existsByUserIdAndDeletedAtIsNullAndProfileNameIgnoreCaseAndIdNot(7L, "Updated", 8L);
+	}
+
+	@ParameterizedTest
+	@EnumSource(value = UserRole.class, names = { "MANAGER", "ADMIN" })
+	void managerAndAdminSoftDeleteMemberProfileUsingTargetOwnerLockAndCount(UserRole role) {
+		UserAccount member = user(21L);
+		Profile profile = new Profile(member, "Default", "First", "Last", "Engineer", new BigDecimal("3.5"),
+				"Personality", "Summary");
+		UserPrincipal principal = principal(7L, role);
+		when(access.resolve(principal, 8L)).thenReturn(profile);
+		when(users.findByIdForUpdate(21L)).thenReturn(Optional.of(member));
+		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 21L)).thenReturn(Optional.of(profile));
+		when(profiles.countByUserIdAndDeletedAtIsNull(21L)).thenReturn(2L);
+
+		service.delete(principal, 8L);
+
+		assertEquals(false, profile.getDeletedAt() == null);
+		verify(users).findByIdForUpdate(21L);
+		verify(users, never()).findByIdForUpdate(7L);
+		verify(profiles).countByUserIdAndDeletedAtIsNull(21L);
+		verify(profiles, never()).countByUserIdAndDeletedAtIsNull(7L);
+	}
+
+	@ParameterizedTest
+	@EnumSource(value = UserRole.class, names = { "MANAGER", "ADMIN" })
+	void managerAndAdminCannotDeleteLastMemberProfile(UserRole role) {
+		UserAccount member = user(21L);
+		Profile profile = new Profile(member, "Default", "First", "Last", "Engineer", new BigDecimal("3.5"),
+				"Personality", "Summary");
+		UserPrincipal principal = principal(7L, role);
+		when(access.resolve(principal, 8L)).thenReturn(profile);
+		when(users.findByIdForUpdate(21L)).thenReturn(Optional.of(member));
+		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 21L)).thenReturn(Optional.of(profile));
+		when(profiles.countByUserIdAndDeletedAtIsNull(21L)).thenReturn(1L);
+
+		ApiException exception = assertThrows(ApiException.class, () -> service.delete(principal, 8L));
+
+		assertEquals(ErrorCode.PROFILE_LAST_ACTIVE_CANNOT_DELETE, exception.getErrorCode());
+		verify(profiles, never()).saveAndFlush(any());
+		verify(profiles, never()).countByUserIdAndDeletedAtIsNull(7L);
 	}
 
 	private UserAccount user() {
 		return new UserAccount("user@example.com", "member", "hash", UserRole.MEMBER, UserStatus.ACTIVE);
+	}
+
+	private UserAccount user(Long id) {
+		UserAccount user = user();
+		ReflectionTestUtils.setField(user, "id", id);
+		return user;
 	}
 
 	private UserPrincipal principal(Long userId, UserRole role) {

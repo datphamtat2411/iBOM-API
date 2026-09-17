@@ -19,6 +19,7 @@ import com.fpt.ibom.auth.entity.UserAccount;
 import com.fpt.ibom.auth.entity.UserRole;
 import com.fpt.ibom.auth.entity.UserStatus;
 import com.fpt.ibom.auth.repository.UserAccountRepository;
+import com.fpt.ibom.auth.security.UserPrincipal;
 import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.exception.ErrorCode;
 import com.fpt.ibom.profile.entity.Profile;
@@ -98,7 +99,7 @@ class ProfileDeletionIntegrationTest extends MySqlIntegrationTest {
 		Profile deleted = profileRepository.saveAndFlush(profile(user, "Deleted"));
 		profileRepository.saveAndFlush(profile(user, "Active"));
 
-		profileService.delete(user.getId(), deleted.getId());
+		profileService.delete(principal(user), deleted.getId());
 
 		assertNotNull(profileRepository.findById(deleted.getId()).orElseThrow().getDeletedAt());
 		assertEquals(List.of("Active"), profileService.list(user.getId()).stream()
@@ -135,7 +136,7 @@ class ProfileDeletionIntegrationTest extends MySqlIntegrationTest {
 			ready.countDown();
 			start.await();
 			try {
-				profileService.delete(userId, profileId);
+				profileService.delete(new UserPrincipal(userId, "user@example.com", "user", UserRole.MEMBER), profileId);
 				return null;
 			} catch (ApiException exception) {
 				return exception.getErrorCode();
@@ -151,5 +152,9 @@ class ProfileDeletionIntegrationTest extends MySqlIntegrationTest {
 	private Profile profile(UserAccount user, String name) {
 		return new Profile(user, name, "First", "Last", "Engineer", new BigDecimal("3.5"), "Personality",
 				"Summary");
+	}
+
+	private UserPrincipal principal(UserAccount user) {
+		return new UserPrincipal(user.getId(), user.getEmail(), user.getUsername(), user.getRole());
 	}
 }

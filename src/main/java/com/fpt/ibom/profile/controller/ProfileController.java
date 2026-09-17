@@ -76,13 +76,13 @@ public class ProfileController {
 	public ResponseEntity<ApiResponse<ProfileDetailResponse>> update(@AuthenticationPrincipal UserPrincipal principal,
 			@PathVariable Long profileId, @Valid @RequestBody ProfileUpdateRequest request) {
 		return ResponseEntity.ok(new ApiResponse<>(200, "Success",
-				profileService.update(principal.userId(), profileId, request)));
+				profileService.update(principal, profileId, request)));
 	}
 
 	@DeleteMapping("/{profileId}")
 	public ResponseEntity<ApiResponse<Void>> delete(@AuthenticationPrincipal UserPrincipal principal,
 			@PathVariable Long profileId) {
-		profileService.delete(principal.userId(), profileId);
+		profileService.delete(principal, profileId);
 		return ResponseEntity.ok(new ApiResponse<>(200, "Success", null));
 	}
 }

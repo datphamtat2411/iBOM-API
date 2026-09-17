@@ -1,7 +1,11 @@
 package com.fpt.ibom.profile;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -22,6 +26,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -102,6 +107,69 @@ class MemberProfileAccessIntegrationTest extends MySqlIntegrationTest {
 				.andExpect(status().isNotFound()).andExpect(jsonPath("$.errorCode").value("PROFILE_NOT_FOUND"));
 	}
 
+	@Test
+	void managerAndAdminCanUpdateAndDeleteProfilesOwnedByInactiveMembers() throws Exception {
+		for (UserRole role : List.of(UserRole.MANAGER, UserRole.ADMIN)) {
+			UserAccount inactiveMember = saveUser(UserRole.MEMBER, UserStatus.INACTIVE);
+			Profile target = saveProfile(inactiveMember, "Target " + role);
+			Profile spare = saveProfile(inactiveMember, "Spare " + role);
+
+			mockMvc.perform(put("/api/profiles/{profileId}", target.getId())
+					.with(authentication(principal(30L, role))).contentType(MediaType.APPLICATION_JSON)
+					.content(updateJson("Updated " + role, 0)))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.data.profileName").value("Updated " + role))
+				.andExpect(jsonPath("$.data.version").value(1));
+
+			mockMvc.perform(delete("/api/profiles/{profileId}", spare.getId())
+					.with(authentication(principal(30L, role))))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.data").doesNotExist());
+
+			assertEquals("Updated " + role, profileRepository.findById(target.getId()).orElseThrow().getProfileName());
+			assertNotNull(profileRepository.findById(spare.getId()).orElseThrow().getDeletedAt());
+		}
+	}
+
+	@Test
+	void returnsNotFoundForUnauthorizedMissingAndSoftDeletedRootMutations() throws Exception {
+		UserAccount member = saveUser(UserRole.MEMBER, UserStatus.ACTIVE);
+		Profile memberProfile = saveProfile(member, "Member");
+		UserAccount foreignMember = saveUser(UserRole.MEMBER, UserStatus.ACTIVE);
+		Profile foreignProfile = saveProfile(foreignMember, "Foreign");
+		UserAccount manager = saveUser(UserRole.MANAGER, UserStatus.ACTIVE);
+		Profile managerProfile = saveProfile(manager, "Manager");
+		Profile deleted = saveProfile(member, "Deleted");
+		deleted.softDelete(Instant.now());
+		profileRepository.saveAndFlush(deleted);
+
+		mockMvc.perform(put("/api/profiles/{profileId}", foreignProfile.getId())
+				.with(authentication(principal(member.getId(), UserRole.MEMBER))).contentType(MediaType.APPLICATION_JSON)
+				.content(updateJson("Foreign Update", 0)))
+				.andExpect(status().isNotFound()).andExpect(jsonPath("$.errorCode").value("PROFILE_NOT_FOUND"));
+		mockMvc.perform(delete("/api/profiles/{profileId}", foreignProfile.getId())
+				.with(authentication(principal(member.getId(), UserRole.MEMBER))))
+				.andExpect(status().isNotFound()).andExpect(jsonPath("$.errorCode").value("PROFILE_NOT_FOUND"));
+
+		for (UserRole role : List.of(UserRole.MANAGER, UserRole.ADMIN)) {
+			mockMvc.perform(put("/api/profiles/{profileId}", managerProfile.getId())
+					.with(authentication(principal(30L, role))).contentType(MediaType.APPLICATION_JSON)
+					.content(updateJson("Manager Update", 0)))
+				.andExpect(status().isNotFound()).andExpect(jsonPath("$.errorCode").value("PROFILE_NOT_FOUND"));
+			mockMvc.perform(delete("/api/profiles/{profileId}", managerProfile.getId())
+					.with(authentication(principal(30L, role))))
+				.andExpect(status().isNotFound()).andExpect(jsonPath("$.errorCode").value("PROFILE_NOT_FOUND"));
+		}
+
+		mockMvc.perform(put("/api/profiles/{profileId}", deleted.getId())
+				.with(authentication(principal(30L, UserRole.ADMIN))).contentType(MediaType.APPLICATION_JSON)
+				.content(updateJson("Deleted Update", 0)))
+				.andExpect(status().isNotFound()).andExpect(jsonPath("$.errorCode").value("PROFILE_NOT_FOUND"));
+		mockMvc.perform(delete("/api/profiles/{profileId}", deleted.getId())
+				.with(authentication(principal(30L, UserRole.ADMIN))))
+				.andExpect(status().isNotFound()).andExpect(jsonPath("$.errorCode").value("PROFILE_NOT_FOUND"));
+		mockMvc.perform(delete("/api/profiles/999999999").with(authentication(principal(30L, UserRole.ADMIN))))
+				.andExpect(status().isNotFound()).andExpect(jsonPath("$.errorCode").value("PROFILE_NOT_FOUND"));
+	}
+
 	private UserAccount saveUser(UserRole role, UserStatus status) {
 		return userRepository.saveAndFlush(new UserAccount(UUID.randomUUID() + "@example.com",
 				"user-" + UUID.randomUUID(), "hash", role, status));
@@ -110,6 +178,13 @@ class MemberProfileAccessIntegrationTest extends MySqlIntegrationTest {
 	private Profile saveProfile(UserAccount user, String name) {
 		Profile profile = new Profile(user, name, "First", "Last", "Engineer", BigDecimal.ONE, "Personality", "Summary");
 		return profileRepository.saveAndFlush(profile);
+	}
+
+	private String updateJson(String profileName, long version) {
+		return "{\"profileName\":\"" + profileName
+				+ "\",\"firstName\":\"First\",\"lastName\":\"Last\",\"jobTitle\":\"Engineer\","
+				+ "\"yearsOfExperience\":1,\"personality\":\"Personality\",\"technicalSummary\":\"Summary\","
+				+ "\"version\":" + version + "}";
 	}
 
 	private UsernamePasswordAuthenticationToken principal(Long userId, UserRole role) {

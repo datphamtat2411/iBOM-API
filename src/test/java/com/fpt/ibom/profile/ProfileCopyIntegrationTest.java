@@ -19,6 +19,7 @@ import com.fpt.ibom.auth.entity.UserAccount;
 import com.fpt.ibom.auth.entity.UserRole;
 import com.fpt.ibom.auth.entity.UserStatus;
 import com.fpt.ibom.auth.repository.UserAccountRepository;
+import com.fpt.ibom.auth.security.UserPrincipal;
 import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.exception.ErrorCode;
 import com.fpt.ibom.master.entity.Language;
@@ -286,7 +287,7 @@ class ProfileCopyIntegrationTest extends MySqlIntegrationTest {
 		assertEquals(1, profileLanguageService.list(user.getId(), copied.getId()).size());
 		assertEquals(1, profileSkillService.list(user.getId(), copied.getId()).size());
 
-		ProfileDetailResponse copiedAfterProfileUpdate = profileService.update(user.getId(), copied.getId(),
+		ProfileDetailResponse copiedAfterProfileUpdate = profileService.update(principal(user), copied.getId(),
 				new ProfileUpdateRequest("Updated Copy", "Copy First", "Copy Last", "Developer", new BigDecimal("4.0"),
 						"Copy Personality", "Copy Summary", copiedBefore.version()));
 		assertEquals(1L, copiedAfterProfileUpdate.version());
@@ -305,7 +306,7 @@ class ProfileCopyIntegrationTest extends MySqlIntegrationTest {
 		long copiedVersionAfterLanguage = profileService.get(user.getId(), copied.getId()).version();
 		assertTrue(copiedVersionAfterLanguage > copiedVersionAfterEducation);
 
-		ProfileDetailResponse sourceAfterProfileUpdate = profileService.update(user.getId(), source.getId(),
+		ProfileDetailResponse sourceAfterProfileUpdate = profileService.update(principal(user), source.getId(),
 				new ProfileUpdateRequest("Updated Source", "Source First", "Source Last", "Architect",
 						new BigDecimal("5.0"), "Source Personality", "Source Summary", sourceBefore.version()));
 		Education sourceEducation = educationRepository.findByProfileIdOrderByIdAsc(source.getId()).get(0);
@@ -344,7 +345,7 @@ class ProfileCopyIntegrationTest extends MySqlIntegrationTest {
 		Profile source = aggregate.source();
 		Profile copied = aggregate.copied();
 
-		profileService.delete(user.getId(), source.getId());
+		profileService.delete(principal(user), source.getId());
 
 		assertThrowsWithCode(() -> profileService.get(user.getId(), source.getId()), ErrorCode.PROFILE_NOT_FOUND);
 		assertThrowsWithCode(() -> certificateService.list(user.getId(), source.getId()), ErrorCode.PROFILE_NOT_FOUND);
@@ -359,7 +360,7 @@ class ProfileCopyIntegrationTest extends MySqlIntegrationTest {
 		assertEquals(1, profileLanguageService.list(user.getId(), copied.getId()).size());
 		assertEquals(1, profileSkillService.list(user.getId(), copied.getId()).size());
 
-		ProfileDetailResponse copiedAfterProfileUpdate = profileService.update(user.getId(), copied.getId(),
+		ProfileDetailResponse copiedAfterProfileUpdate = profileService.update(principal(user), copied.getId(),
 				new ProfileUpdateRequest("After Source Delete", "Copy First", "Copy Last", "Developer",
 						new BigDecimal("4.0"), "Copy Personality", "Copy Summary", copiedBeforeUpdate.version()));
 		Education copiedEducation = educationRepository.findByProfileIdOrderByIdAsc(copied.getId()).get(0);
@@ -417,6 +418,10 @@ class ProfileCopyIntegrationTest extends MySqlIntegrationTest {
 	private Profile saveProfile(UserAccount user, String name) {
 		return profileRepository.saveAndFlush(new Profile(user, name, "First", "Last", "Engineer",
 				new BigDecimal("3.5"), "Personality", "Summary"));
+	}
+
+	private UserPrincipal principal(UserAccount user) {
+		return new UserPrincipal(user.getId(), user.getEmail(), user.getUsername(), user.getRole());
 	}
 
 	private CopiedAggregate savePopulatedAggregate(UserAccount user) {
