@@ -153,23 +153,31 @@ class CvPreviewServiceTest {
 	}
 
 	@Test
-	void activeProfileAccessAllowsMemberOwnerManagerAndAdminRulesAndHidesMissingProfiles() {
+	void activeProfileAccessAppliesOwnershipBeforeRoleDelegationAndHidesMissingProfiles() {
 		Profile memberProfile = profile(8L, 7L, UserRole.MEMBER, 0L);
 		Profile managerProfile = profile(9L, 8L, UserRole.MANAGER, 0L);
+		Profile adminProfile = profile(10L, 9L, UserRole.ADMIN, 0L);
 		ProfileRepository profiles = org.mockito.Mockito.mock(ProfileRepository.class);
 		CvProfileAccessService profileAccess = new CvProfileAccessService(profiles);
 		when(profiles.findByIdAndDeletedAtIsNull(8L)).thenReturn(Optional.of(memberProfile));
 		when(profiles.findByIdAndDeletedAtIsNull(9L)).thenReturn(Optional.of(managerProfile));
+		when(profiles.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(adminProfile));
 
 		assertEquals(memberProfile, profileAccess.resolve(principal(7L, UserRole.MEMBER), 8L));
+		assertEquals(managerProfile, profileAccess.resolve(principal(8L, UserRole.MANAGER), 9L));
+		assertEquals(adminProfile, profileAccess.resolve(principal(9L, UserRole.ADMIN), 10L));
 		assertEquals(memberProfile, profileAccess.resolve(principal(20L, UserRole.MANAGER), 8L));
 		assertEquals(memberProfile, profileAccess.resolve(principal(20L, UserRole.ADMIN), 8L));
 		assertEquals(HttpStatus.FORBIDDEN,
+				assertThrows(ApiException.class, () -> profileAccess.resolve(principal(20L, UserRole.MEMBER), 8L)).getStatus());
+		assertEquals(HttpStatus.FORBIDDEN,
 				assertThrows(ApiException.class, () -> profileAccess.resolve(principal(20L, UserRole.MANAGER), 9L)).getStatus());
+		assertEquals(HttpStatus.FORBIDDEN,
+				assertThrows(ApiException.class, () -> profileAccess.resolve(principal(20L, UserRole.ADMIN), 10L)).getStatus());
 
-		when(profiles.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.empty());
+		when(profiles.findByIdAndDeletedAtIsNull(11L)).thenReturn(Optional.empty());
 		ApiException missing = assertThrows(ApiException.class,
-				() -> profileAccess.resolve(principal(7L, UserRole.MEMBER), 10L));
+				() -> profileAccess.resolve(principal(7L, UserRole.MEMBER), 11L));
 		assertEquals(ErrorCode.PROFILE_NOT_FOUND, missing.getErrorCode());
 	}
 

@@ -22,10 +22,7 @@ public class CvProfileAccessService {
 	@Transactional(readOnly = true)
 	public Profile resolve(UserPrincipal principal, Long profileId) {
 		Profile profile = profileRepository.findByIdAndDeletedAtIsNull(profileId).orElseThrow(this::profileNotFound);
-		if (principal.role() == UserRole.MEMBER) {
-			if (!principal.userId().equals(profile.getUser().getId())) {
-				throw forbidden();
-			}
+		if (principal.userId().equals(profile.getUser().getId())) {
 			return profile;
 		}
 		if ((principal.role() == UserRole.MANAGER || principal.role() == UserRole.ADMIN)
