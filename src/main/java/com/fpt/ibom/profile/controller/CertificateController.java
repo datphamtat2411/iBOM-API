@@ -33,7 +33,7 @@ public class CertificateController {
 	@GetMapping
 	public ResponseEntity<ApiResponse<List<CertificateResponse>>> list(
 			@AuthenticationPrincipal UserPrincipal principal, @PathVariable Long profileId) {
-		return ResponseEntity.ok(new ApiResponse<>(200, "Success", certificateService.list(principal.userId(), profileId)));
+		return ResponseEntity.ok(new ApiResponse<>(200, "Success", certificateService.list(principal, profileId)));
 	}
 
 	@PostMapping
@@ -41,7 +41,7 @@ public class CertificateController {
 			@AuthenticationPrincipal UserPrincipal principal, @PathVariable Long profileId,
 			@Valid @RequestBody CertificateRequest request) {
 		return ResponseEntity.status(201).body(new ApiResponse<>(201, "Created",
-				certificateService.create(principal.userId(), profileId, request)));
+				certificateService.create(principal, profileId, request)));
 	}
 
 	@PutMapping("/{certificateId}")
@@ -49,7 +49,7 @@ public class CertificateController {
 			@AuthenticationPrincipal UserPrincipal principal, @PathVariable Long profileId,
 			@PathVariable Long certificateId, @Valid @RequestBody CertificateRequest request) {
 		return ResponseEntity.ok(new ApiResponse<>(200, "Success",
-				certificateService.update(principal.userId(), profileId, certificateId, request)));
+				certificateService.update(principal, profileId, certificateId, request)));
 	}
 
 	@DeleteMapping("/{certificateId}")
@@ -57,6 +57,6 @@ public class CertificateController {
 			@AuthenticationPrincipal UserPrincipal principal, @PathVariable Long profileId,
 			@PathVariable Long certificateId, @Valid @RequestBody ProfileVersionResponse request) {
 		return ResponseEntity.ok(new ApiResponse<>(200, "Success",
-				certificateService.delete(principal.userId(), profileId, certificateId, request.profileVersion())));
+				certificateService.delete(principal, profileId, certificateId, request.profileVersion())));
 	}
 }

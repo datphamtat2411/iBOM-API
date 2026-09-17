@@ -220,7 +220,7 @@ class ProfileSkillIntegrationTest extends MySqlIntegrationTest {
 		ProfileSkill secondAssociation = profileSkillRepository.saveAndFlush(
 				new ProfileSkill(secondProfile, skill, new BigDecimal("2.50"), null));
 		assertNotNull(secondAssociation.getId());
-		ApiException duplicate = assertThrows(ApiException.class, () -> profileSkillService.create(firstUser.getId(),
+		ApiException duplicate = assertThrows(ApiException.class, () -> profileSkillService.create(userPrincipalValue(firstUser),
 				firstProfile.getId(), new ProfileSkillRequest(skill.getId(), new BigDecimal("3.00"), null, 0L)));
 		assertEquals(ErrorCode.PROFILE_SKILL_ALREADY_EXISTS, duplicate.getErrorCode());
 		assertEquals(skill.getId(), reused.getSkill().getId());
@@ -238,16 +238,16 @@ class ProfileSkillIntegrationTest extends MySqlIntegrationTest {
 				new ProfileSkill(foreignProfile, skill, BigDecimal.ONE, null));
 
 		ApiException foreign = assertThrows(ApiException.class,
-				() -> profileSkillService.delete(owner.getId(), ownerProfile.getId(), foreignAssociation.getId(), 0L));
+				() -> profileSkillService.delete(userPrincipalValue(owner), ownerProfile.getId(), foreignAssociation.getId(), 0L));
 		assertEquals(ErrorCode.PROFILE_SKILL_NOT_FOUND, foreign.getErrorCode());
 
-		ApiException future = assertThrows(ApiException.class, () -> profileSkillService.create(owner.getId(),
+		ApiException future = assertThrows(ApiException.class, () -> profileSkillService.create(userPrincipalValue(owner),
 				ownerProfile.getId(), new ProfileSkillRequest(skill.getId(), BigDecimal.ONE, BUSINESS_DATE.plusDays(1), 0L)));
 		assertEquals(ErrorCode.PROFILE_SKILL_LAST_USED_IN_FUTURE, future.getErrorCode());
 
-		profileSkillService.create(owner.getId(), ownerProfile.getId(),
+		profileSkillService.create(userPrincipalValue(owner), ownerProfile.getId(),
 				new ProfileSkillRequest(skill.getId(), new BigDecimal("1.50"), null, 0L));
-		ApiException stale = assertThrows(ApiException.class, () -> profileSkillService.create(owner.getId(), ownerProfile.getId(),
+		ApiException stale = assertThrows(ApiException.class, () -> profileSkillService.create(userPrincipalValue(owner), ownerProfile.getId(),
 				new ProfileSkillRequest(saveSkill("stale-" + UUID.randomUUID(), "BACKEND").getId(), BigDecimal.ONE, null, 0L)));
 		assertEquals(ErrorCode.PROFILE_VERSION_CONFLICT, stale.getErrorCode());
 
@@ -255,7 +255,7 @@ class ProfileSkillIntegrationTest extends MySqlIntegrationTest {
 		deleted.softDelete(Instant.now());
 		profileRepository.saveAndFlush(deleted);
 		ApiException inactive = assertThrows(ApiException.class,
-				() -> profileSkillService.list(owner.getId(), ownerProfile.getId()));
+				() -> profileSkillService.list(userPrincipalValue(owner), ownerProfile.getId()));
 		assertEquals(ErrorCode.PROFILE_NOT_FOUND, inactive.getErrorCode());
 	}
 
@@ -318,8 +318,11 @@ class ProfileSkillIntegrationTest extends MySqlIntegrationTest {
 	}
 
 	private Authentication userPrincipal(UserAccount user) {
-		return new UsernamePasswordAuthenticationToken(
-				new UserPrincipal(user.getId(), user.getEmail(), user.getUsername(), user.getRole()), null, List.of());
+		return new UsernamePasswordAuthenticationToken(userPrincipalValue(user), null, List.of());
+	}
+
+	private UserPrincipal userPrincipalValue(UserAccount user) {
+		return new UserPrincipal(user.getId(), user.getEmail(), user.getUsername(), user.getRole());
 	}
 
 	private String requestJson(Long skillId, String experienceYears, String lastUsed, long version) {

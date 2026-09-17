@@ -33,21 +33,21 @@ public class ProjectController {
 	@GetMapping
 	public ResponseEntity<ApiResponse<List<ProjectResponse>>> list(@AuthenticationPrincipal UserPrincipal principal,
 			@PathVariable Long profileId) {
-		return ResponseEntity.ok(new ApiResponse<>(200, "Success", projectService.list(principal.userId(), profileId)));
+		return ResponseEntity.ok(new ApiResponse<>(200, "Success", projectService.list(principal, profileId)));
 	}
 
 	@PostMapping
 	public ResponseEntity<ApiResponse<ProjectMutationResponse>> create(@AuthenticationPrincipal UserPrincipal principal,
 			@PathVariable Long profileId, @Valid @RequestBody ProjectRequest request) {
 		return ResponseEntity.status(201).body(new ApiResponse<>(201, "Created",
-				projectService.create(principal.userId(), profileId, request)));
+				projectService.create(principal, profileId, request)));
 	}
 
 	@PutMapping("/{projectId}")
 	public ResponseEntity<ApiResponse<ProjectMutationResponse>> update(@AuthenticationPrincipal UserPrincipal principal,
 			@PathVariable Long profileId, @PathVariable Long projectId, @Valid @RequestBody ProjectRequest request) {
 		return ResponseEntity.ok(new ApiResponse<>(200, "Success",
-				projectService.update(principal.userId(), profileId, projectId, request)));
+				projectService.update(principal, profileId, projectId, request)));
 	}
 
 	@DeleteMapping("/{projectId}")
@@ -55,6 +55,6 @@ public class ProjectController {
 			@AuthenticationPrincipal UserPrincipal principal, @PathVariable Long profileId,
 			@PathVariable Long projectId, @Valid @RequestBody ProfileVersionResponse request) {
 		return ResponseEntity.ok(new ApiResponse<>(200, "Success",
-				projectService.delete(principal.userId(), profileId, projectId, request.profileVersion())));
+				projectService.delete(principal, profileId, projectId, request.profileVersion())));
 	}
 }

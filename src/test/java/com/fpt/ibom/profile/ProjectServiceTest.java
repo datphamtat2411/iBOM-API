@@ -18,6 +18,7 @@ import java.util.Optional;
 import com.fpt.ibom.auth.entity.UserAccount;
 import com.fpt.ibom.auth.entity.UserRole;
 import com.fpt.ibom.auth.entity.UserStatus;
+import com.fpt.ibom.auth.security.UserPrincipal;
 import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.exception.ErrorCode;
 import com.fpt.ibom.profile.dto.ProjectMutationResponse;
@@ -27,8 +28,8 @@ import com.fpt.ibom.profile.dto.ProfileVersionResponse;
 import com.fpt.ibom.profile.entity.Profile;
 import com.fpt.ibom.profile.entity.Project;
 import com.fpt.ibom.profile.entity.ProjectStatus;
-import com.fpt.ibom.profile.repository.ProfileRepository;
 import com.fpt.ibom.profile.repository.ProjectRepository;
+import com.fpt.ibom.profile.service.ProfileAccessService;
 import com.fpt.ibom.profile.service.ProjectService;
 import com.fpt.ibom.profile.service.ProfileVersionService;
 import jakarta.persistence.OptimisticLockException;
@@ -40,9 +41,10 @@ import org.springframework.test.util.ReflectionTestUtils;
 class ProjectServiceTest {
 
 	private final ProjectRepository projects = org.mockito.Mockito.mock(ProjectRepository.class);
-	private final ProfileRepository profiles = org.mockito.Mockito.mock(ProfileRepository.class);
+	private final ProfileAccessService profileAccess = org.mockito.Mockito.mock(ProfileAccessService.class);
 	private final ProfileVersionService profileVersions = org.mockito.Mockito.mock(ProfileVersionService.class);
-	private final ProjectService service = new ProjectService(projects, profiles, profileVersions);
+	private final UserPrincipal principal = new UserPrincipal(7L, "user@example.com", "member", UserRole.MEMBER);
+	private final ProjectService service = new ProjectService(projects, profileAccess, profileVersions);
 
 	@Test
 	void listsProjectsInApprovedOrder() {
@@ -50,10 +52,10 @@ class ProjectServiceTest {
 		Project ongoing = project(profile, 11L, "Ongoing", ProjectStatus.ONGOING, LocalDate.of(2024, 1, 1), null);
 		Project completed = project(profile, 12L, "Completed", ProjectStatus.COMPLETED, LocalDate.of(2020, 1, 1),
 				LocalDate.of(2023, 1, 1));
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile);
 		when(projects.findByProfileIdInDisplayOrder(8L)).thenReturn(List.of(ongoing, completed));
 
-		List<ProjectResponse> result = service.list(7L, 8L);
+		List<ProjectResponse> result = service.list(principal, 8L);
 
 		assertEquals(List.of("Ongoing", "Completed"), result.stream().map(ProjectResponse::name).toList());
 		verify(projects).findByProfileIdInDisplayOrder(8L);
@@ -63,11 +65,11 @@ class ProjectServiceTest {
 	void createsCanonicalOngoingProjectWithNullableFieldsAndInvalidatesPreview() {
 		Profile profile = profile();
 		ReflectionTestUtils.setField(profile, "hasPreviewed", true);
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile);
 		when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
 		simulateVersionIncrementOnAdvance(profile);
 
-		ProjectMutationResponse result = service.create(7L, 8L,
+		ProjectMutationResponse result = service.create(principal, 8L,
 				new ProjectRequest(" Project ", " Description ", null, LocalDate.of(2025, 1, 1), " ongoing ",
 						" Engineer ", null, null, " Java, SQL ", "   ", 0L));
 
@@ -91,9 +93,9 @@ class ProjectServiceTest {
 
 	@Test
 	void rejectsBlankRequiredTextAfterNormalization() {
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile()));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile());
 
-		ApiException exception = assertThrows(ApiException.class, () -> service.create(7L, 8L,
+		ApiException exception = assertThrows(ApiException.class, () -> service.create(principal, 8L,
 				new ProjectRequest("   ", "Description", LocalDate.of(2020, 1, 1), null, "ONGOING", "Engineer", 1,
 						"Responsibilities", null, null, 0L)));
 
@@ -104,9 +106,9 @@ class ProjectServiceTest {
 
 	@Test
 	void rejectsZeroTeamSize() {
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile()));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile());
 
-		ApiException exception = assertThrows(ApiException.class, () -> service.create(7L, 8L,
+		ApiException exception = assertThrows(ApiException.class, () -> service.create(principal, 8L,
 				request("ONGOING", LocalDate.of(2020, 1, 1), null, 0, "Responsibilities", 0L)));
 
 		assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
@@ -117,11 +119,11 @@ class ProjectServiceTest {
 	@Test
 	void acceptsCompletedProjectWithoutStartDate() {
 		Profile profile = profile();
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile);
 		when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
 		simulateVersionIncrementOnAdvance(profile);
 
-		ProjectMutationResponse result = service.create(7L, 8L,
+		ProjectMutationResponse result = service.create(principal, 8L,
 				request("COMPLETED", null, LocalDate.of(2023, 1, 1), 1, "Responsibilities", 0L));
 
 		ArgumentCaptor<Project> captor = ArgumentCaptor.forClass(Project.class);
@@ -135,17 +137,17 @@ class ProjectServiceTest {
 
 	@Test
 	void enforcesProjectStatusAndDateRules() {
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile()));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile());
 
-		ApiException missingEndDate = assertThrows(ApiException.class, () -> service.create(7L, 8L,
+		ApiException missingEndDate = assertThrows(ApiException.class, () -> service.create(principal, 8L,
 				request("COMPLETED", LocalDate.of(2020, 1, 1), null, 0L)));
 		assertEquals(ErrorCode.PROJECT_END_DATE_REQUIRED, missingEndDate.getErrorCode());
 
-		ApiException invalidRange = assertThrows(ApiException.class, () -> service.create(7L, 8L,
+		ApiException invalidRange = assertThrows(ApiException.class, () -> service.create(principal, 8L,
 				request("COMPLETED", LocalDate.of(2021, 1, 1), LocalDate.of(2020, 1, 1), 0L)));
 		assertEquals(ErrorCode.PROJECT_DATE_RANGE_INVALID, invalidRange.getErrorCode());
 
-		ApiException invalidStatus = assertThrows(ApiException.class, () -> service.create(7L, 8L,
+		ApiException invalidStatus = assertThrows(ApiException.class, () -> service.create(principal, 8L,
 				request("CANCELLED", LocalDate.of(2020, 1, 1), null, 0L)));
 		assertEquals(ErrorCode.PROJECT_INVALID_STATUS, invalidStatus.getErrorCode());
 		verify(profileVersions, never()).advance(any());
@@ -156,12 +158,12 @@ class ProjectServiceTest {
 		Profile profile = profile();
 		Project project = project(profile, 12L, "Original", ProjectStatus.COMPLETED, LocalDate.of(2020, 1, 1),
 				LocalDate.of(2022, 1, 1));
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile);
 		when(projects.findByIdAndProfileId(12L, 8L)).thenReturn(Optional.of(project));
 		when(projects.saveAndFlush(project)).thenReturn(project);
 		simulateVersionIncrementOnAdvance(profile);
 
-		ProjectMutationResponse result = service.update(7L, 8L, 12L,
+		ProjectMutationResponse result = service.update(principal, 8L, 12L,
 				request("ONGOING", LocalDate.of(2020, 1, 1), LocalDate.of(2025, 1, 1), 0L));
 
 		assertEquals(ProjectStatus.ONGOING, project.getStatus());
@@ -175,11 +177,11 @@ class ProjectServiceTest {
 	void physicallyDeletesOwnedProjectAndReturnsProfileVersion() {
 		Profile profile = profile();
 		Project project = project(profile, 12L, "Project", ProjectStatus.ONGOING, LocalDate.of(2020, 1, 1), null);
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile);
 		when(projects.findByIdAndProfileId(12L, 8L)).thenReturn(Optional.of(project));
 		simulateVersionIncrementOnAdvance(profile);
 
-		ProfileVersionResponse result = service.delete(7L, 8L, 12L, 0L);
+		ProfileVersionResponse result = service.delete(principal, 8L, 12L, 0L);
 
 		assertEquals(1L, result.profileVersion());
 		verify(projects).delete(project);
@@ -190,14 +192,14 @@ class ProjectServiceTest {
 	@Test
 	void rejectsForeignProjectIdsAndStaleVersions() {
 		Profile profile = profile();
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile);
 		when(projects.findByIdAndProfileId(12L, 8L)).thenReturn(Optional.empty());
 
-		ApiException foreign = assertThrows(ApiException.class, () -> service.delete(7L, 8L, 12L, 0L));
+		ApiException foreign = assertThrows(ApiException.class, () -> service.delete(principal, 8L, 12L, 0L));
 		assertEquals(ErrorCode.PROJECT_NOT_FOUND, foreign.getErrorCode());
 		verify(projects, never()).delete(any());
 
-		ApiException stale = assertThrows(ApiException.class, () -> service.create(7L, 8L,
+		ApiException stale = assertThrows(ApiException.class, () -> service.create(principal, 8L,
 				request("ONGOING", LocalDate.of(2020, 1, 1), null, 1L)));
 		assertEquals(ErrorCode.PROFILE_VERSION_CONFLICT, stale.getErrorCode());
 		verify(profileVersions, never()).advance(any());
@@ -206,11 +208,11 @@ class ProjectServiceTest {
 	@Test
 	void translatesOptimisticLockFailure() {
 		Profile profile = profile();
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile);
 		when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
 		doThrow(new OptimisticLockException()).when(profileVersions).advance(any());
 
-		ApiException exception = assertThrows(ApiException.class, () -> service.create(7L, 8L,
+		ApiException exception = assertThrows(ApiException.class, () -> service.create(principal, 8L,
 				request("ONGOING", LocalDate.of(2020, 1, 1), null, 0L)));
 
 		assertEquals(ErrorCode.PROFILE_VERSION_CONFLICT, exception.getErrorCode());

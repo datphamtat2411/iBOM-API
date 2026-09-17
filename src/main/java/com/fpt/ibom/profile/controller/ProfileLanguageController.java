@@ -34,7 +34,7 @@ public class ProfileLanguageController {
 	public ResponseEntity<ApiResponse<List<ProfileLanguageResponse>>> list(
 			@AuthenticationPrincipal UserPrincipal principal, @PathVariable Long profileId) {
 		return ResponseEntity.ok(new ApiResponse<>(200, "Success",
-				profileLanguageService.list(principal.userId(), profileId)));
+				profileLanguageService.list(principal, profileId)));
 	}
 
 	@PostMapping
@@ -42,7 +42,7 @@ public class ProfileLanguageController {
 			@AuthenticationPrincipal UserPrincipal principal, @PathVariable Long profileId,
 			@Valid @RequestBody ProfileLanguageRequest request) {
 		return ResponseEntity.status(201).body(new ApiResponse<>(201, "Created",
-				profileLanguageService.create(principal.userId(), profileId, request)));
+				profileLanguageService.create(principal, profileId, request)));
 	}
 
 	@PutMapping("/{profileLanguageId}")
@@ -50,14 +50,14 @@ public class ProfileLanguageController {
 			@AuthenticationPrincipal UserPrincipal principal, @PathVariable Long profileId,
 			@PathVariable Long profileLanguageId, @Valid @RequestBody ProfileLanguageRequest request) {
 		return ResponseEntity.ok(new ApiResponse<>(200,
-				"Success", profileLanguageService.update(principal.userId(), profileId, profileLanguageId, request)));
+				"Success", profileLanguageService.update(principal, profileId, profileLanguageId, request)));
 	}
 
 	@DeleteMapping("/{profileLanguageId}")
 	public ResponseEntity<ApiResponse<ProfileVersionResponse>> delete(
 			@AuthenticationPrincipal UserPrincipal principal, @PathVariable Long profileId,
 			@PathVariable Long profileLanguageId, @Valid @RequestBody ProfileVersionResponse request) {
-		return ResponseEntity.ok(new ApiResponse<>(200, "Success", profileLanguageService.delete(principal.userId(), profileId,
+		return ResponseEntity.ok(new ApiResponse<>(200, "Success", profileLanguageService.delete(principal, profileId,
 				profileLanguageId, request.profileVersion())));
 	}
 }

@@ -6,6 +6,7 @@ import java.util.Locale;
 
 import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.exception.ErrorCode;
+import com.fpt.ibom.auth.security.UserPrincipal;
 import com.fpt.ibom.profile.dto.ProjectMutationResponse;
 import com.fpt.ibom.profile.dto.ProjectRequest;
 import com.fpt.ibom.profile.dto.ProjectResponse;
@@ -13,7 +14,6 @@ import com.fpt.ibom.profile.dto.ProfileVersionResponse;
 import com.fpt.ibom.profile.entity.Profile;
 import com.fpt.ibom.profile.entity.Project;
 import com.fpt.ibom.profile.entity.ProjectStatus;
-import com.fpt.ibom.profile.repository.ProfileRepository;
 import com.fpt.ibom.profile.repository.ProjectRepository;
 import jakarta.persistence.OptimisticLockException;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -24,25 +24,25 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class ProjectService {
 	private final ProjectRepository projectRepository;
-	private final ProfileRepository profileRepository;
+	private final ProfileAccessService profileAccessService;
 	private final ProfileVersionService profileVersionService;
 
-	public ProjectService(ProjectRepository projectRepository, ProfileRepository profileRepository,
+	public ProjectService(ProjectRepository projectRepository, ProfileAccessService profileAccessService,
 			ProfileVersionService profileVersionService) {
 		this.projectRepository = projectRepository;
-		this.profileRepository = profileRepository;
+		this.profileAccessService = profileAccessService;
 		this.profileVersionService = profileVersionService;
 	}
 
 	@Transactional(readOnly = true)
-	public List<ProjectResponse> list(Long userId, Long profileId) {
-		findOwnedActiveProfile(userId, profileId);
+	public List<ProjectResponse> list(UserPrincipal principal, Long profileId) {
+		findAuthorizedProfile(principal, profileId);
 		return projectRepository.findByProfileIdInDisplayOrder(profileId).stream().map(ProjectResponse::from).toList();
 	}
 
 	@Transactional
-	public ProjectMutationResponse create(Long userId, Long profileId, ProjectRequest request) {
-		Profile profile = findOwnedActiveProfile(userId, profileId);
+	public ProjectMutationResponse create(UserPrincipal principal, Long profileId, ProjectRequest request) {
+		Profile profile = findAuthorizedProfile(principal, profileId);
 		CanonicalProject canonical = canonicalize(request);
 		checkVersion(profile, request.version());
 		try {
@@ -59,8 +59,8 @@ public class ProjectService {
 	}
 
 	@Transactional
-	public ProjectMutationResponse update(Long userId, Long profileId, Long projectId, ProjectRequest request) {
-		Profile profile = findOwnedActiveProfile(userId, profileId);
+	public ProjectMutationResponse update(UserPrincipal principal, Long profileId, Long projectId, ProjectRequest request) {
+		Profile profile = findAuthorizedProfile(principal, profileId);
 		Project project = projectRepository.findByIdAndProfileId(projectId, profileId).orElseThrow(this::projectNotFound);
 		CanonicalProject canonical = canonicalize(request);
 		checkVersion(profile, request.version());
@@ -78,8 +78,8 @@ public class ProjectService {
 	}
 
 	@Transactional
-	public ProfileVersionResponse delete(Long userId, Long profileId, Long projectId, Long version) {
-		Profile profile = findOwnedActiveProfile(userId, profileId);
+	public ProfileVersionResponse delete(UserPrincipal principal, Long profileId, Long projectId, Long version) {
+		Profile profile = findAuthorizedProfile(principal, profileId);
 		Project project = projectRepository.findByIdAndProfileId(projectId, profileId).orElseThrow(this::projectNotFound);
 		checkVersion(profile, version);
 		try {
@@ -92,9 +92,8 @@ public class ProjectService {
 		}
 	}
 
-	private Profile findOwnedActiveProfile(Long userId, Long profileId) {
-		return profileRepository.findByIdAndUserIdAndDeletedAtIsNull(profileId, userId)
-				.orElseThrow(this::profileNotFound);
+	private Profile findAuthorizedProfile(UserPrincipal principal, Long profileId) {
+		return profileAccessService.resolve(principal, profileId);
 	}
 
 	private void checkVersion(Profile profile, Long expectedVersion) {
@@ -152,10 +151,6 @@ public class ProjectService {
 		}
 		String normalized = value.trim();
 		return normalized.isBlank() ? null : normalized;
-	}
-
-	private ApiException profileNotFound() {
-		return new ApiException(HttpStatus.NOT_FOUND, ErrorCode.PROFILE_NOT_FOUND, "Profile not found");
 	}
 
 	private ApiException projectNotFound() {

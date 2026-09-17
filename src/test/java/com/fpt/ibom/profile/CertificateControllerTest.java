@@ -56,15 +56,17 @@ class CertificateControllerTest {
 	@MockitoBean
 	private UserAccountRepository userAccountRepository;
 
+	private final UserPrincipal principal = new UserPrincipal(7L, "user@example.com", "member", UserRole.MEMBER);
+
 	@Test
 	void mapsAllCertificateRoutesAndResponseWrappers() throws Exception {
 		CertificateResponse certificate = new CertificateResponse(12L, "AWS", LocalDate.of(2024, 1, 1));
-		when(certificateService.list(7L, 8L)).thenReturn(List.of(certificate));
-		when(certificateService.create(eq(7L), eq(8L), any()))
+		when(certificateService.list(principal, 8L)).thenReturn(List.of(certificate));
+		when(certificateService.create(eq(principal), eq(8L), any()))
 				.thenReturn(new CertificateMutationResponse(certificate, 1L));
-		when(certificateService.update(eq(7L), eq(8L), eq(12L), any()))
+		when(certificateService.update(eq(principal), eq(8L), eq(12L), any()))
 				.thenReturn(new CertificateMutationResponse(certificate, 2L));
-		when(certificateService.delete(7L, 8L, 12L, 2L)).thenReturn(new ProfileVersionResponse(3L));
+		when(certificateService.delete(principal, 8L, 12L, 2L)).thenReturn(new ProfileVersionResponse(3L));
 
 		mockMvc.perform(get("/api/profiles/8/certificates").with(principal())).andExpect(status().isOk())
 				.andExpect(jsonPath("$.code").value(200)).andExpect(jsonPath("$.data[0].id").value(12))
@@ -80,7 +82,7 @@ class CertificateControllerTest {
 				.contentType(MediaType.APPLICATION_JSON).content("{\"version\":2}"))
 				.andExpect(status().isOk()).andExpect(jsonPath("$.data.profileVersion").value(3));
 
-		verify(certificateService).delete(7L, 8L, 12L, 2L);
+		verify(certificateService).delete(principal, 8L, 12L, 2L);
 	}
 
 	@Test
@@ -97,7 +99,7 @@ class CertificateControllerTest {
 	@Test
 	void mapsCertificateBusinessErrorsAndRejectsInvalidFields() throws Exception {
 		doThrow(new ApiException(HttpStatus.CONFLICT, ErrorCode.CERTIFICATE_ALREADY_EXISTS, "Duplicate certificate"))
-				.when(certificateService).create(eq(7L), eq(8L), any());
+				.when(certificateService).create(eq(principal), eq(8L), any());
 
 		mockMvc.perform(post("/api/profiles/8/certificates").with(principal())
 				.contentType(MediaType.APPLICATION_JSON).content(requestJson(0)))
@@ -110,8 +112,7 @@ class CertificateControllerTest {
 	}
 
 	private org.springframework.test.web.servlet.request.RequestPostProcessor principal() {
-		return authentication(new UsernamePasswordAuthenticationToken(
-				new UserPrincipal(7L, "user@example.com", "member", UserRole.MEMBER), null, List.of()));
+		return authentication(new UsernamePasswordAuthenticationToken(principal, null, List.of()));
 	}
 
 	private String requestJson(long version) {

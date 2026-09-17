@@ -167,7 +167,7 @@ class ProjectIntegrationTest extends MySqlIntegrationTest {
 		ReflectionTestUtils.setField(profile, "hasPreviewed", true);
 		profileRepository.saveAndFlush(profile);
 
-		ProjectMutationResponse response = projectService.create(user.getId(), profile.getId(), new ProjectRequest(
+		ProjectMutationResponse response = projectService.create(userPrincipalValue(user), profile.getId(), new ProjectRequest(
 				"Completed Project", "Description", null, LocalDate.of(2024, 1, 1), "COMPLETED", "Engineer", null,
 				null, null, null, profile.getVersion()));
 		Project completed = projectRepository.findById(response.project().id()).orElseThrow();
@@ -194,7 +194,7 @@ class ProjectIntegrationTest extends MySqlIntegrationTest {
 		projectRepository.saveAndFlush(project(profile, "Completed Early", ProjectStatus.COMPLETED, LocalDate.of(2021, 1, 1),
 				LocalDate.of(2022, 1, 1)));
 
-		List<String> names = projectService.list(user.getId(), profile.getId()).stream().map(response -> response.name()).toList();
+		List<String> names = projectService.list(userPrincipalValue(user), profile.getId()).stream().map(response -> response.name()).toList();
 
 		assertEquals(List.of("Ongoing Newer", "Ongoing Older", "Completed Late", "Completed Same End Newer",
 				"Completed Same End Older", "Completed Early"), names);
@@ -210,11 +210,11 @@ class ProjectIntegrationTest extends MySqlIntegrationTest {
 				project(foreignProfile, "Foreign", ProjectStatus.ONGOING, LocalDate.of(2020, 1, 1), null));
 
 		ApiException foreign = assertThrows(ApiException.class,
-				() -> projectService.delete(owner.getId(), ownerProfile.getId(), foreignProject.getId(), 0L));
+				() -> projectService.delete(userPrincipalValue(owner), ownerProfile.getId(), foreignProject.getId(), 0L));
 		assertEquals(ErrorCode.PROJECT_NOT_FOUND, foreign.getErrorCode());
 
-		projectService.create(owner.getId(), ownerProfile.getId(), request("ONGOING", LocalDate.of(2020, 1, 1), null, 0L));
-		ApiException stale = assertThrows(ApiException.class, () -> projectService.create(owner.getId(), ownerProfile.getId(),
+		projectService.create(userPrincipalValue(owner), ownerProfile.getId(), request("ONGOING", LocalDate.of(2020, 1, 1), null, 0L));
+		ApiException stale = assertThrows(ApiException.class, () -> projectService.create(userPrincipalValue(owner), ownerProfile.getId(),
 				request("ONGOING", LocalDate.of(2021, 1, 1), null, 0L)));
 		assertEquals(ErrorCode.PROFILE_VERSION_CONFLICT, stale.getErrorCode());
 
@@ -222,7 +222,7 @@ class ProjectIntegrationTest extends MySqlIntegrationTest {
 		deleted.softDelete(java.time.Instant.now());
 		profileRepository.saveAndFlush(deleted);
 		ApiException inactive = assertThrows(ApiException.class,
-				() -> projectService.list(owner.getId(), ownerProfile.getId()));
+				() -> projectService.list(userPrincipalValue(owner), ownerProfile.getId()));
 		assertEquals(ErrorCode.PROFILE_NOT_FOUND, inactive.getErrorCode());
 	}
 
@@ -299,8 +299,11 @@ class ProjectIntegrationTest extends MySqlIntegrationTest {
 	}
 
 	private Authentication userPrincipal(UserAccount user) {
-		return new UsernamePasswordAuthenticationToken(
-				new UserPrincipal(user.getId(), user.getEmail(), user.getUsername(), user.getRole()), null, List.of());
+		return new UsernamePasswordAuthenticationToken(userPrincipalValue(user), null, List.of());
+	}
+
+	private UserPrincipal userPrincipalValue(UserAccount user) {
+		return new UserPrincipal(user.getId(), user.getEmail(), user.getUsername(), user.getRole());
 	}
 
 	private ProjectRequest request(String status, LocalDate startDate, LocalDate endDate, long version) {

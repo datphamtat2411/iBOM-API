@@ -153,7 +153,7 @@ class CertificateIntegrationTest extends MySqlIntegrationTest {
 		insertCertificate(profile.getId(), "AWS", LocalDate.of(2020, 1, 1));
 
 		assertDatabaseIntegrityViolation(() -> insertCertificate(profile.getId(), "AWS", LocalDate.of(2020, 1, 1)));
-		ApiException duplicate = assertThrows(ApiException.class, () -> certificateService.create(user.getId(), profile.getId(),
+		ApiException duplicate = assertThrows(ApiException.class, () -> certificateService.create(userPrincipalValue(user), profile.getId(),
 				new CertificateRequest(" AWS ", LocalDate.of(2020, 1, 1), 0L)));
 		assertEquals(ErrorCode.CERTIFICATE_ALREADY_EXISTS, duplicate.getErrorCode());
 		assertDatabaseIntegrityViolation(() -> insertCertificate(Long.MAX_VALUE, "Other", LocalDate.of(2020, 1, 1)));
@@ -169,12 +169,12 @@ class CertificateIntegrationTest extends MySqlIntegrationTest {
 				new Certificate(foreignProfile, "Foreign", LocalDate.of(2020, 1, 1)));
 
 		ApiException foreign = assertThrows(ApiException.class,
-				() -> certificateService.delete(owner.getId(), ownerProfile.getId(), foreignCertificate.getId(), 0L));
+				() -> certificateService.delete(userPrincipalValue(owner), ownerProfile.getId(), foreignCertificate.getId(), 0L));
 		assertEquals(ErrorCode.CERTIFICATE_NOT_FOUND, foreign.getErrorCode());
 
-		certificateService.create(owner.getId(), ownerProfile.getId(),
+		certificateService.create(userPrincipalValue(owner), ownerProfile.getId(),
 				new CertificateRequest("Owned", LocalDate.of(2020, 1, 1), 0L));
-		ApiException stale = assertThrows(ApiException.class, () -> certificateService.create(owner.getId(), ownerProfile.getId(),
+		ApiException stale = assertThrows(ApiException.class, () -> certificateService.create(userPrincipalValue(owner), ownerProfile.getId(),
 				new CertificateRequest("Another", LocalDate.of(2021, 1, 1), 0L)));
 		assertEquals(ErrorCode.PROFILE_VERSION_CONFLICT, stale.getErrorCode());
 
@@ -182,7 +182,7 @@ class CertificateIntegrationTest extends MySqlIntegrationTest {
 		deleted.softDelete(java.time.Instant.now());
 		profileRepository.saveAndFlush(deleted);
 		ApiException inactive = assertThrows(ApiException.class,
-				() -> certificateService.list(owner.getId(), ownerProfile.getId()));
+				() -> certificateService.list(userPrincipalValue(owner), ownerProfile.getId()));
 		assertEquals(ErrorCode.PROFILE_NOT_FOUND, inactive.getErrorCode());
 	}
 
@@ -191,7 +191,7 @@ class CertificateIntegrationTest extends MySqlIntegrationTest {
 		UserAccount user = saveUser();
 		Profile profile = saveProfile(user, "Future Certificate Profile");
 
-		ApiException exception = assertThrows(ApiException.class, () -> certificateService.create(user.getId(), profile.getId(),
+		ApiException exception = assertThrows(ApiException.class, () -> certificateService.create(userPrincipalValue(user), profile.getId(),
 				new CertificateRequest("Future", BUSINESS_DATE.plusDays(1), 0L)));
 
 		assertEquals(ErrorCode.CERTIFICATE_ISSUE_DATE_IN_FUTURE, exception.getErrorCode());
@@ -245,8 +245,11 @@ class CertificateIntegrationTest extends MySqlIntegrationTest {
 	}
 
 	private Authentication userPrincipal(UserAccount user) {
-		return new UsernamePasswordAuthenticationToken(
-				new UserPrincipal(user.getId(), user.getEmail(), user.getUsername(), user.getRole()), null, List.of());
+		return new UsernamePasswordAuthenticationToken(userPrincipalValue(user), null, List.of());
+	}
+
+	private UserPrincipal userPrincipalValue(UserAccount user) {
+		return new UserPrincipal(user.getId(), user.getEmail(), user.getUsername(), user.getRole());
 	}
 
 	private String requestJson(String name, String issueDate, long version) {

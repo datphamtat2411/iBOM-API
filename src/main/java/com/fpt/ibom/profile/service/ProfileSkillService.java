@@ -7,6 +7,7 @@ import java.util.List;
 
 import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.exception.ErrorCode;
+import com.fpt.ibom.auth.security.UserPrincipal;
 import com.fpt.ibom.master.entity.Skill;
 import com.fpt.ibom.master.repository.SkillRepository;
 import com.fpt.ibom.profile.dto.ProfileSkillMutationResponse;
@@ -15,7 +16,6 @@ import com.fpt.ibom.profile.dto.ProfileSkillResponse;
 import com.fpt.ibom.profile.dto.ProfileVersionResponse;
 import com.fpt.ibom.profile.entity.Profile;
 import com.fpt.ibom.profile.entity.ProfileSkill;
-import com.fpt.ibom.profile.repository.ProfileRepository;
 import com.fpt.ibom.profile.repository.ProfileSkillRepository;
 import jakarta.persistence.OptimisticLockException;
 import org.hibernate.exception.ConstraintViolationException;
@@ -30,31 +30,31 @@ public class ProfileSkillService {
 	private static final String PROFILE_SKILL_UNIQUE_CONSTRAINT = "uk_profile_skills_profile_skill";
 
 	private final ProfileSkillRepository profileSkillRepository;
-	private final ProfileRepository profileRepository;
+	private final ProfileAccessService profileAccessService;
 	private final SkillRepository skillRepository;
 	private final ProfileVersionService profileVersionService;
 	private final Clock clock;
 
-	public ProfileSkillService(ProfileSkillRepository profileSkillRepository, ProfileRepository profileRepository,
+	public ProfileSkillService(ProfileSkillRepository profileSkillRepository, ProfileAccessService profileAccessService,
 			SkillRepository skillRepository, ProfileVersionService profileVersionService, Clock clock) {
 		this.profileSkillRepository = profileSkillRepository;
-		this.profileRepository = profileRepository;
+		this.profileAccessService = profileAccessService;
 		this.skillRepository = skillRepository;
 		this.profileVersionService = profileVersionService;
 		this.clock = clock;
 	}
 
 	@Transactional(readOnly = true)
-	public List<ProfileSkillResponse> list(Long userId, Long profileId) {
-		findOwnedActiveProfile(userId, profileId);
+	public List<ProfileSkillResponse> list(UserPrincipal principal, Long profileId) {
+		findAuthorizedProfile(principal, profileId);
 		return profileSkillRepository.findByProfileId(profileId).stream()
 				.sorted(ProfileDisplayOrder.skillComparator())
 				.map(ProfileSkillResponse::from).toList();
 	}
 
 	@Transactional
-	public ProfileSkillMutationResponse create(Long userId, Long profileId, ProfileSkillRequest request) {
-		Profile profile = findOwnedActiveProfile(userId, profileId);
+	public ProfileSkillMutationResponse create(UserPrincipal principal, Long profileId, ProfileSkillRequest request) {
+		Profile profile = findAuthorizedProfile(principal, profileId);
 		CanonicalProfileSkill canonical = canonicalize(request);
 		checkVersion(profile, request.version());
 		Skill skill = findSkill(canonical.skillId());
@@ -78,9 +78,9 @@ public class ProfileSkillService {
 	}
 
 	@Transactional
-	public ProfileSkillMutationResponse update(Long userId, Long profileId, Long profileSkillId,
+	public ProfileSkillMutationResponse update(UserPrincipal principal, Long profileId, Long profileSkillId,
 			ProfileSkillRequest request) {
-		Profile profile = findOwnedActiveProfile(userId, profileId);
+		Profile profile = findAuthorizedProfile(principal, profileId);
 		ProfileSkill profileSkill = profileSkillRepository.findByIdAndProfileId(profileSkillId, profileId)
 				.orElseThrow(this::profileSkillNotFound);
 		CanonicalProfileSkill canonical = canonicalize(request);
@@ -106,8 +106,8 @@ public class ProfileSkillService {
 	}
 
 	@Transactional
-	public ProfileVersionResponse delete(Long userId, Long profileId, Long profileSkillId, Long version) {
-		Profile profile = findOwnedActiveProfile(userId, profileId);
+	public ProfileVersionResponse delete(UserPrincipal principal, Long profileId, Long profileSkillId, Long version) {
+		Profile profile = findAuthorizedProfile(principal, profileId);
 		ProfileSkill profileSkill = profileSkillRepository.findByIdAndProfileId(profileSkillId, profileId)
 				.orElseThrow(this::profileSkillNotFound);
 		checkVersion(profile, version);
@@ -121,9 +121,8 @@ public class ProfileSkillService {
 		}
 	}
 
-	private Profile findOwnedActiveProfile(Long userId, Long profileId) {
-		return profileRepository.findByIdAndUserIdAndDeletedAtIsNull(profileId, userId)
-				.orElseThrow(this::profileNotFound);
+	private Profile findAuthorizedProfile(UserPrincipal principal, Long profileId) {
+		return profileAccessService.resolve(principal, profileId);
 	}
 
 	private void checkVersion(Profile profile, Long expectedVersion) {
@@ -158,10 +157,6 @@ public class ProfileSkillService {
 			cause = cause.getCause();
 		}
 		return false;
-	}
-
-	private ApiException profileNotFound() {
-		return new ApiException(HttpStatus.NOT_FOUND, ErrorCode.PROFILE_NOT_FOUND, "Profile not found");
 	}
 
 	private ApiException skillNotFound() {

@@ -20,6 +20,7 @@ import java.util.Optional;
 import com.fpt.ibom.auth.entity.UserAccount;
 import com.fpt.ibom.auth.entity.UserRole;
 import com.fpt.ibom.auth.entity.UserStatus;
+import com.fpt.ibom.auth.security.UserPrincipal;
 import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.exception.ErrorCode;
 import com.fpt.ibom.profile.dto.CertificateMutationResponse;
@@ -29,7 +30,7 @@ import com.fpt.ibom.profile.dto.ProfileVersionResponse;
 import com.fpt.ibom.profile.entity.Certificate;
 import com.fpt.ibom.profile.entity.Profile;
 import com.fpt.ibom.profile.repository.CertificateRepository;
-import com.fpt.ibom.profile.repository.ProfileRepository;
+import com.fpt.ibom.profile.service.ProfileAccessService;
 import com.fpt.ibom.profile.service.CertificateService;
 import com.fpt.ibom.profile.service.ProfileVersionService;
 import jakarta.persistence.OptimisticLockException;
@@ -48,9 +49,10 @@ class CertificateServiceTest {
 	private static final LocalDate BUSINESS_DATE = LocalDate.of(2026, 9, 11);
 
 	private final CertificateRepository certificates = org.mockito.Mockito.mock(CertificateRepository.class);
-	private final ProfileRepository profiles = org.mockito.Mockito.mock(ProfileRepository.class);
+	private final ProfileAccessService profileAccess = org.mockito.Mockito.mock(ProfileAccessService.class);
 	private final ProfileVersionService profileVersions = org.mockito.Mockito.mock(ProfileVersionService.class);
-	private final CertificateService service = new CertificateService(certificates, profiles, profileVersions, FIXED_CLOCK);
+	private final UserPrincipal principal = new UserPrincipal(7L, "user@example.com", "member", UserRole.MEMBER);
+	private final CertificateService service = new CertificateService(certificates, profileAccess, profileVersions, FIXED_CLOCK);
 
 	@Test
 	void listsOwnedCertificatesInIssueDateDescendingAndIdAscendingOrder() {
@@ -58,11 +60,11 @@ class CertificateServiceTest {
 		Certificate newest = certificate(profile, 11L, "Newest", LocalDate.of(2024, 1, 1));
 		Certificate sameDate = certificate(profile, 12L, "Same date", LocalDate.of(2024, 1, 1));
 		Certificate older = certificate(profile, 13L, "Older", LocalDate.of(2023, 1, 1));
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile);
 		when(certificates.findByProfileIdOrderByIssueDateDescIdAsc(8L))
 				.thenReturn(List.of(newest, sameDate, older));
 
-		List<CertificateResponse> result = service.list(7L, 8L);
+		List<CertificateResponse> result = service.list(principal, 8L);
 
 		assertEquals(List.of("Newest", "Same date", "Older"),
 				result.stream().map(CertificateResponse::certificateName).toList());
@@ -74,12 +76,12 @@ class CertificateServiceTest {
 		Profile profile = profile();
 		ReflectionTestUtils.setField(profile, "hasPreviewed", true);
 		LocalDate issueDate = BUSINESS_DATE;
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile);
 		when(certificates.existsByProfileIdAndCertificateNameAndIssueDate(8L, "AWS", issueDate)).thenReturn(false);
 		when(certificates.saveAndFlush(any(Certificate.class))).thenAnswer(invocation -> invocation.getArgument(0));
 		simulateVersionIncrementOnAdvance(profile);
 
-		CertificateMutationResponse result = service.create(7L, 8L,
+		CertificateMutationResponse result = service.create(principal, 8L,
 				new CertificateRequest(" AWS ", issueDate, 0L));
 
 		ArgumentCaptor<Certificate> captor = ArgumentCaptor.forClass(Certificate.class);
@@ -95,9 +97,9 @@ class CertificateServiceTest {
 
 	@Test
 	void rejectsFutureIssueDateBeforeMutation() {
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile()));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile());
 
-		ApiException exception = assertThrows(ApiException.class, () -> service.create(7L, 8L,
+		ApiException exception = assertThrows(ApiException.class, () -> service.create(principal, 8L,
 				new CertificateRequest("AWS", BUSINESS_DATE.plusDays(1), 0L)));
 
 		assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
@@ -110,10 +112,10 @@ class CertificateServiceTest {
 	void rejectsDuplicateCertificateUsingTrimmedCasePreservingName() {
 		Profile profile = profile();
 		LocalDate issueDate = LocalDate.of(2024, 1, 1);
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile);
 		when(certificates.existsByProfileIdAndCertificateNameAndIssueDate(8L, "AWS", issueDate)).thenReturn(true);
 
-		ApiException exception = assertThrows(ApiException.class, () -> service.create(7L, 8L,
+		ApiException exception = assertThrows(ApiException.class, () -> service.create(principal, 8L,
 				new CertificateRequest(" AWS ", issueDate, 0L)));
 
 		assertEquals(HttpStatus.CONFLICT, exception.getStatus());
@@ -128,14 +130,14 @@ class CertificateServiceTest {
 		Profile profile = profile();
 		Certificate certificate = certificate(profile, 12L, "Original", LocalDate.of(2020, 1, 1));
 		LocalDate issueDate = LocalDate.of(2021, 1, 1);
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile);
 		when(certificates.findByIdAndProfileId(12L, 8L)).thenReturn(Optional.of(certificate));
 		when(certificates.existsByProfileIdAndCertificateNameAndIssueDateAndIdNot(8L, "Updated", issueDate, 12L))
 				.thenReturn(false);
 		when(certificates.saveAndFlush(certificate)).thenReturn(certificate);
 		simulateVersionIncrementOnAdvance(profile);
 
-		CertificateMutationResponse result = service.update(7L, 8L, 12L,
+		CertificateMutationResponse result = service.update(principal, 8L, 12L,
 				new CertificateRequest(" Updated ", issueDate, 0L));
 
 		assertEquals("Updated", certificate.getCertificateName());
@@ -151,12 +153,12 @@ class CertificateServiceTest {
 		Profile profile = profile();
 		Certificate certificate = certificate(profile, 12L, "Original", LocalDate.of(2020, 1, 1));
 		LocalDate issueDate = LocalDate.of(2021, 1, 1);
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile);
 		when(certificates.findByIdAndProfileId(12L, 8L)).thenReturn(Optional.of(certificate));
 		when(certificates.existsByProfileIdAndCertificateNameAndIssueDateAndIdNot(8L, "Existing", issueDate, 12L))
 				.thenReturn(true);
 
-		ApiException exception = assertThrows(ApiException.class, () -> service.update(7L, 8L, 12L,
+		ApiException exception = assertThrows(ApiException.class, () -> service.update(principal, 8L, 12L,
 				new CertificateRequest("Existing", issueDate, 0L)));
 
 		assertEquals(ErrorCode.CERTIFICATE_ALREADY_EXISTS, exception.getErrorCode());
@@ -168,11 +170,11 @@ class CertificateServiceTest {
 	void physicallyDeletesOwnedCertificateAndReturnsProfileVersion() {
 		Profile profile = profile();
 		Certificate certificate = certificate(profile, 12L, "AWS", LocalDate.of(2020, 1, 1));
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile);
 		when(certificates.findByIdAndProfileId(12L, 8L)).thenReturn(Optional.of(certificate));
 		simulateVersionIncrementOnAdvance(profile);
 
-		ProfileVersionResponse result = service.delete(7L, 8L, 12L, 0L);
+		ProfileVersionResponse result = service.delete(principal, 8L, 12L, 0L);
 
 		assertEquals(1L, result.profileVersion());
 		verify(certificates).delete(certificate);
@@ -183,24 +185,25 @@ class CertificateServiceTest {
 	@Test
 	void rejectsForeignCertificateIdAndMissingOwnerProfile() {
 		Profile profile = profile();
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile);
 		when(certificates.findByIdAndProfileId(12L, 8L)).thenReturn(Optional.empty());
 
-		ApiException foreign = assertThrows(ApiException.class, () -> service.delete(7L, 8L, 12L, 0L));
+		ApiException foreign = assertThrows(ApiException.class, () -> service.delete(principal, 8L, 12L, 0L));
 		assertEquals(ErrorCode.CERTIFICATE_NOT_FOUND, foreign.getErrorCode());
 		verify(certificates, never()).delete(any());
 
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(9L, 8L)).thenReturn(Optional.empty());
-		ApiException missing = assertThrows(ApiException.class, () -> service.list(8L, 9L));
+		when(profileAccess.resolve(principal, 9L)).thenThrow(new ApiException(HttpStatus.NOT_FOUND,
+				ErrorCode.PROFILE_NOT_FOUND, "Profile not found"));
+		ApiException missing = assertThrows(ApiException.class, () -> service.list(principal, 9L));
 		assertEquals(ErrorCode.PROFILE_NOT_FOUND, missing.getErrorCode());
 	}
 
 	@Test
 	void rejectsStaleProfileVersionBeforeChildMutation() {
 		Profile profile = profile();
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile);
 
-		ApiException exception = assertThrows(ApiException.class, () -> service.create(7L, 8L,
+		ApiException exception = assertThrows(ApiException.class, () -> service.create(principal, 8L,
 				new CertificateRequest("AWS", LocalDate.of(2020, 1, 1), 1L)));
 
 		assertEquals(ErrorCode.PROFILE_VERSION_CONFLICT, exception.getErrorCode());
@@ -212,24 +215,24 @@ class CertificateServiceTest {
 	void translatesDatabaseDuplicateAndOptimisticLockFailures() {
 		Profile profile = profile();
 		LocalDate issueDate = LocalDate.of(2020, 1, 1);
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile);
 		when(certificates.existsByProfileIdAndCertificateNameAndIssueDate(8L, "AWS", issueDate)).thenReturn(false);
 		when(certificates.saveAndFlush(any(Certificate.class))).thenAnswer(invocation -> invocation.getArgument(0));
 		ConstraintViolationException violation = new ConstraintViolationException("duplicate", null,
 				"uk_certificates_profile_name_issue_date");
 		doThrow(new DataIntegrityViolationException("duplicate", violation)).when(certificates).saveAndFlush(any());
 
-		ApiException duplicate = assertThrows(ApiException.class, () -> service.create(7L, 8L,
+		ApiException duplicate = assertThrows(ApiException.class, () -> service.create(principal, 8L,
 				new CertificateRequest("AWS", issueDate, 0L)));
 		assertEquals(ErrorCode.CERTIFICATE_ALREADY_EXISTS, duplicate.getErrorCode());
 
 		org.mockito.Mockito.reset(certificates, profileVersions);
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile);
 		when(certificates.existsByProfileIdAndCertificateNameAndIssueDate(8L, "AWS", issueDate)).thenReturn(false);
 		when(certificates.saveAndFlush(any(Certificate.class))).thenAnswer(invocation -> invocation.getArgument(0));
 		doThrow(new OptimisticLockException()).when(profileVersions).advance(any());
 
-		ApiException conflict = assertThrows(ApiException.class, () -> service.create(7L, 8L,
+		ApiException conflict = assertThrows(ApiException.class, () -> service.create(principal, 8L,
 				new CertificateRequest("AWS", issueDate, 0L)));
 		assertEquals(ErrorCode.PROFILE_VERSION_CONFLICT, conflict.getErrorCode());
 	}

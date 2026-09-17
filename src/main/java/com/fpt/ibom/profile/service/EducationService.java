@@ -6,6 +6,7 @@ import java.util.Locale;
 
 import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.exception.ErrorCode;
+import com.fpt.ibom.auth.security.UserPrincipal;
 import com.fpt.ibom.profile.dto.EducationMutationResponse;
 import com.fpt.ibom.profile.dto.EducationRequest;
 import com.fpt.ibom.profile.dto.EducationResponse;
@@ -14,7 +15,6 @@ import com.fpt.ibom.profile.entity.Education;
 import com.fpt.ibom.profile.entity.EducationStatus;
 import com.fpt.ibom.profile.entity.Profile;
 import com.fpt.ibom.profile.repository.EducationRepository;
-import com.fpt.ibom.profile.repository.ProfileRepository;
 import jakarta.persistence.OptimisticLockException;
 import org.springframework.http.HttpStatus;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -24,25 +24,25 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class EducationService {
 	private final EducationRepository educationRepository;
-	private final ProfileRepository profileRepository;
+	private final ProfileAccessService profileAccessService;
 	private final ProfileVersionService profileVersionService;
 
-	public EducationService(EducationRepository educationRepository, ProfileRepository profileRepository,
+	public EducationService(EducationRepository educationRepository, ProfileAccessService profileAccessService,
 			ProfileVersionService profileVersionService) {
 		this.educationRepository = educationRepository;
-		this.profileRepository = profileRepository;
+		this.profileAccessService = profileAccessService;
 		this.profileVersionService = profileVersionService;
 	}
 
 	@Transactional(readOnly = true)
-	public List<EducationResponse> list(Long userId, Long profileId) {
-		findOwnedActiveProfile(userId, profileId);
+	public List<EducationResponse> list(UserPrincipal principal, Long profileId) {
+		findAuthorizedProfile(principal, profileId);
 		return educationRepository.findByProfileIdOrderByIdAsc(profileId).stream().map(EducationResponse::from).toList();
 	}
 
 	@Transactional
-	public EducationMutationResponse create(Long userId, Long profileId, EducationRequest request) {
-		Profile profile = findOwnedActiveProfile(userId, profileId);
+	public EducationMutationResponse create(UserPrincipal principal, Long profileId, EducationRequest request) {
+		Profile profile = findAuthorizedProfile(principal, profileId);
 		CanonicalEducation canonical = canonicalize(request);
 		checkVersion(profile, request.version());
 		try {
@@ -58,8 +58,8 @@ public class EducationService {
 	}
 
 	@Transactional
-	public EducationMutationResponse update(Long userId, Long profileId, Long educationId, EducationRequest request) {
-		Profile profile = findOwnedActiveProfile(userId, profileId);
+	public EducationMutationResponse update(UserPrincipal principal, Long profileId, Long educationId, EducationRequest request) {
+		Profile profile = findAuthorizedProfile(principal, profileId);
 		Education education = educationRepository.findByIdAndProfileId(educationId, profileId)
 				.orElseThrow(this::educationNotFound);
 		CanonicalEducation canonical = canonicalize(request);
@@ -77,8 +77,8 @@ public class EducationService {
 	}
 
 	@Transactional
-	public ProfileVersionResponse delete(Long userId, Long profileId, Long educationId, Long version) {
-		Profile profile = findOwnedActiveProfile(userId, profileId);
+	public ProfileVersionResponse delete(UserPrincipal principal, Long profileId, Long educationId, Long version) {
+		Profile profile = findAuthorizedProfile(principal, profileId);
 		Education education = educationRepository.findByIdAndProfileId(educationId, profileId)
 				.orElseThrow(this::educationNotFound);
 		checkVersion(profile, version);
@@ -92,9 +92,8 @@ public class EducationService {
 		}
 	}
 
-	private Profile findOwnedActiveProfile(Long userId, Long profileId) {
-		return profileRepository.findByIdAndUserIdAndDeletedAtIsNull(profileId, userId)
-				.orElseThrow(this::profileNotFound);
+	private Profile findAuthorizedProfile(UserPrincipal principal, Long profileId) {
+		return profileAccessService.resolve(principal, profileId);
 	}
 
 	private void checkVersion(Profile profile, Long expectedVersion) {
@@ -133,10 +132,6 @@ public class EducationService {
 			return null;
 		}
 		return value.trim();
-	}
-
-	private ApiException profileNotFound() {
-		return new ApiException(HttpStatus.NOT_FOUND, ErrorCode.PROFILE_NOT_FOUND, "Profile not found");
 	}
 
 	private ApiException educationNotFound() {

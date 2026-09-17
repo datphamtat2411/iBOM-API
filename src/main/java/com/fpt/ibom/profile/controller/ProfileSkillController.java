@@ -33,7 +33,7 @@ public class ProfileSkillController {
 	@GetMapping
 	public ResponseEntity<ApiResponse<List<ProfileSkillResponse>>> list(
 			@AuthenticationPrincipal UserPrincipal principal, @PathVariable Long profileId) {
-		return ResponseEntity.ok(new ApiResponse<>(200, "Success", profileSkillService.list(principal.userId(), profileId)));
+		return ResponseEntity.ok(new ApiResponse<>(200, "Success", profileSkillService.list(principal, profileId)));
 	}
 
 	@PostMapping
@@ -41,7 +41,7 @@ public class ProfileSkillController {
 			@AuthenticationPrincipal UserPrincipal principal, @PathVariable Long profileId,
 			@Valid @RequestBody ProfileSkillRequest request) {
 		return ResponseEntity.status(201).body(new ApiResponse<>(201, "Created",
-				profileSkillService.create(principal.userId(), profileId, request)));
+				profileSkillService.create(principal, profileId, request)));
 	}
 
 	@PutMapping("/{profileSkillId}")
@@ -49,7 +49,7 @@ public class ProfileSkillController {
 			@AuthenticationPrincipal UserPrincipal principal, @PathVariable Long profileId,
 			@PathVariable Long profileSkillId, @Valid @RequestBody ProfileSkillRequest request) {
 		return ResponseEntity.ok(new ApiResponse<>(200, "Success",
-				profileSkillService.update(principal.userId(), profileId, profileSkillId, request)));
+				profileSkillService.update(principal, profileId, profileSkillId, request)));
 	}
 
 	@DeleteMapping("/{profileSkillId}")
@@ -57,6 +57,6 @@ public class ProfileSkillController {
 			@AuthenticationPrincipal UserPrincipal principal, @PathVariable Long profileId,
 			@PathVariable Long profileSkillId, @Valid @RequestBody ProfileVersionResponse request) {
 		return ResponseEntity.ok(new ApiResponse<>(200, "Success",
-				profileSkillService.delete(principal.userId(), profileId, profileSkillId, request.profileVersion())));
+				profileSkillService.delete(principal, profileId, profileSkillId, request.profileVersion())));
 	}
 }

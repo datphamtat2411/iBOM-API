@@ -57,14 +57,16 @@ class ProjectControllerTest {
 	@MockitoBean
 	private UserAccountRepository userAccountRepository;
 
+	private final UserPrincipal principal = new UserPrincipal(7L, "user@example.com", "member", UserRole.MEMBER);
+
 	@Test
 	void mapsApprovedProjectRoutesAndResponseWrappers() throws Exception {
 		ProjectResponse project = new ProjectResponse(12L, "Project", "Description", LocalDate.of(2020, 1, 1), null,
 				ProjectStatus.ONGOING, "Engineer", 3, "Responsibilities", "Java", "Docker");
-		when(projectService.list(7L, 8L)).thenReturn(List.of(project));
-		when(projectService.create(eq(7L), eq(8L), any())).thenReturn(new ProjectMutationResponse(project, 1L));
-		when(projectService.update(eq(7L), eq(8L), eq(12L), any())).thenReturn(new ProjectMutationResponse(project, 2L));
-		when(projectService.delete(7L, 8L, 12L, 2L)).thenReturn(new ProfileVersionResponse(3L));
+		when(projectService.list(principal, 8L)).thenReturn(List.of(project));
+		when(projectService.create(eq(principal), eq(8L), any())).thenReturn(new ProjectMutationResponse(project, 1L));
+		when(projectService.update(eq(principal), eq(8L), eq(12L), any())).thenReturn(new ProjectMutationResponse(project, 2L));
+		when(projectService.delete(principal, 8L, 12L, 2L)).thenReturn(new ProfileVersionResponse(3L));
 
 		mockMvc.perform(get("/api/profiles/8/projects").with(principal())).andExpect(status().isOk())
 				.andExpect(jsonPath("$.code").value(200)).andExpect(jsonPath("$.data[0].id").value(12))
@@ -80,7 +82,7 @@ class ProjectControllerTest {
 				.contentType(MediaType.APPLICATION_JSON).content("{\"version\":2}"))
 				.andExpect(status().isOk()).andExpect(jsonPath("$.data.profileVersion").value(3));
 
-		verify(projectService).delete(7L, 8L, 12L, 2L);
+		verify(projectService).delete(principal, 8L, 12L, 2L);
 	}
 
 	@Test
@@ -102,7 +104,7 @@ class ProjectControllerTest {
 	@Test
 	void mapsProjectBusinessErrors() throws Exception {
 		doThrow(new ApiException(HttpStatus.BAD_REQUEST, ErrorCode.PROJECT_INVALID_STATUS, "Invalid status"))
-				.when(projectService).create(eq(7L), eq(8L), any());
+				.when(projectService).create(eq(principal), eq(8L), any());
 
 		mockMvc.perform(post("/api/profiles/8/projects").with(principal()).contentType(MediaType.APPLICATION_JSON)
 				.content(requestJson(0))).andExpect(status().isBadRequest())
@@ -110,8 +112,7 @@ class ProjectControllerTest {
 	}
 
 	private org.springframework.test.web.servlet.request.RequestPostProcessor principal() {
-		return authentication(new UsernamePasswordAuthenticationToken(
-				new UserPrincipal(7L, "user@example.com", "member", UserRole.MEMBER), null, List.of()));
+		return authentication(new UsernamePasswordAuthenticationToken(principal, null, List.of()));
 	}
 
 	private String requestJson(long version) {

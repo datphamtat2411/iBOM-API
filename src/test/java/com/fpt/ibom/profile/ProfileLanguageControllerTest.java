@@ -56,15 +56,17 @@ class ProfileLanguageControllerTest {
 	@MockitoBean
 	private UserAccountRepository userAccountRepository;
 
+	private final UserPrincipal principal = new UserPrincipal(7L, "user@example.com", "member", UserRole.MEMBER);
+
 	@Test
 	void mapsAllProfileLanguageRoutesAndResponseWrappers() throws Exception {
 		ProfileLanguageResponse language = new ProfileLanguageResponse(12L, 22L, "English", LanguageLevel.NATIVE);
-		when(profileLanguageService.list(7L, 8L)).thenReturn(List.of(language));
-		when(profileLanguageService.create(eq(7L), eq(8L), any()))
+		when(profileLanguageService.list(principal, 8L)).thenReturn(List.of(language));
+		when(profileLanguageService.create(eq(principal), eq(8L), any()))
 				.thenReturn(new ProfileLanguageMutationResponse(language, 1L));
-		when(profileLanguageService.update(eq(7L), eq(8L), eq(12L), any()))
+		when(profileLanguageService.update(eq(principal), eq(8L), eq(12L), any()))
 				.thenReturn(new ProfileLanguageMutationResponse(language, 2L));
-		when(profileLanguageService.delete(7L, 8L, 12L, 2L)).thenReturn(new ProfileVersionResponse(3L));
+		when(profileLanguageService.delete(principal, 8L, 12L, 2L)).thenReturn(new ProfileVersionResponse(3L));
 
 		mockMvc.perform(get("/api/profiles/8/languages").with(principal())).andExpect(status().isOk())
 				.andExpect(jsonPath("$.code").value(200)).andExpect(jsonPath("$.data[0].profileLanguageId").value(12))
@@ -82,7 +84,7 @@ class ProfileLanguageControllerTest {
 				.contentType(MediaType.APPLICATION_JSON).content("{\"version\":2}"))
 				.andExpect(status().isOk()).andExpect(jsonPath("$.data.profileVersion").value(3));
 
-		verify(profileLanguageService).delete(7L, 8L, 12L, 2L);
+		verify(profileLanguageService).delete(principal, 8L, 12L, 2L);
 	}
 
 	@Test
@@ -99,7 +101,7 @@ class ProfileLanguageControllerTest {
 	@Test
 	void mapsProfileLanguageBusinessErrors() throws Exception {
 		doThrow(new ApiException(HttpStatus.BAD_REQUEST, ErrorCode.PROFILE_LANGUAGE_INVALID_LEVEL, "Invalid level"))
-				.when(profileLanguageService).create(eq(7L), eq(8L), any());
+				.when(profileLanguageService).create(eq(principal), eq(8L), any());
 
 		mockMvc.perform(post("/api/profiles/8/languages").with(principal()).contentType(MediaType.APPLICATION_JSON)
 				.content(requestJson(0))).andExpect(status().isBadRequest())
@@ -117,8 +119,7 @@ class ProfileLanguageControllerTest {
 	}
 
 	private org.springframework.test.web.servlet.request.RequestPostProcessor principal() {
-		return authentication(new UsernamePasswordAuthenticationToken(
-				new UserPrincipal(7L, "user@example.com", "member", UserRole.MEMBER), null, List.of()));
+		return authentication(new UsernamePasswordAuthenticationToken(principal, null, List.of()));
 	}
 
 	private String requestJson(long version) {

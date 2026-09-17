@@ -17,6 +17,7 @@ import java.util.Optional;
 import com.fpt.ibom.auth.entity.UserAccount;
 import com.fpt.ibom.auth.entity.UserRole;
 import com.fpt.ibom.auth.entity.UserStatus;
+import com.fpt.ibom.auth.security.UserPrincipal;
 import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.exception.ErrorCode;
 import com.fpt.ibom.profile.dto.EducationMutationResponse;
@@ -27,7 +28,7 @@ import com.fpt.ibom.profile.entity.Education;
 import com.fpt.ibom.profile.entity.EducationStatus;
 import com.fpt.ibom.profile.entity.Profile;
 import com.fpt.ibom.profile.repository.EducationRepository;
-import com.fpt.ibom.profile.repository.ProfileRepository;
+import com.fpt.ibom.profile.service.ProfileAccessService;
 import com.fpt.ibom.profile.service.EducationService;
 import com.fpt.ibom.profile.service.ProfileVersionService;
 import jakarta.persistence.OptimisticLockException;
@@ -39,9 +40,10 @@ import org.springframework.test.util.ReflectionTestUtils;
 class EducationServiceTest {
 
 	private final EducationRepository educations = org.mockito.Mockito.mock(EducationRepository.class);
-	private final ProfileRepository profiles = org.mockito.Mockito.mock(ProfileRepository.class);
+	private final ProfileAccessService profileAccess = org.mockito.Mockito.mock(ProfileAccessService.class);
 	private final ProfileVersionService profileVersions = org.mockito.Mockito.mock(ProfileVersionService.class);
-	private final EducationService service = new EducationService(educations, profiles, profileVersions);
+	private final UserPrincipal principal = new UserPrincipal(7L, "user@example.com", "member", UserRole.MEMBER);
+	private final EducationService service = new EducationService(educations, profileAccess, profileVersions);
 
 	@Test
 	void listsEducationForActiveOwnedProfileInIdOrder() {
@@ -49,10 +51,10 @@ class EducationServiceTest {
 		Education first = education(profile, "First School", EducationStatus.ONGOING, LocalDate.of(2020, 1, 1), null);
 		Education second = education(profile, "Second School", EducationStatus.COMPLETED, LocalDate.of(2018, 1, 1),
 				LocalDate.of(2019, 1, 1));
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile);
 		when(educations.findByProfileIdOrderByIdAsc(8L)).thenReturn(List.of(first, second));
 
-		List<EducationResponse> result = service.list(7L, 8L);
+		List<EducationResponse> result = service.list(principal, 8L);
 
 		assertEquals(List.of("First School", "Second School"), result.stream().map(EducationResponse::schoolName).toList());
 		verify(educations).findByProfileIdOrderByIdAsc(8L);
@@ -61,11 +63,11 @@ class EducationServiceTest {
 	@Test
 	void createsOngoingEducationWithCanonicalTextAndNullEndDate() {
 		Profile profile = profile();
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile);
 		when(educations.saveAndFlush(any(Education.class))).thenAnswer(invocation -> invocation.getArgument(0));
 		simulateVersionIncrementOnAdvance(profile);
 
-		EducationMutationResponse result = service.create(7L, 8L,
+		EducationMutationResponse result = service.create(principal, 8L,
 				new EducationRequest(" School ", " Degree ", "   ", LocalDate.of(2020, 1, 1),
 						LocalDate.of(2025, 1, 1), " ongoing ", 0L));
 
@@ -83,9 +85,9 @@ class EducationServiceTest {
 
 	@Test
 	void rejectsCompletedEducationWithoutEndDate() {
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile()));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile());
 
-		ApiException exception = assertThrows(ApiException.class, () -> service.create(7L, 8L,
+		ApiException exception = assertThrows(ApiException.class, () -> service.create(principal, 8L,
 				request("COMPLETED", LocalDate.of(2020, 1, 1), null, 0L)));
 
 		assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
@@ -95,9 +97,9 @@ class EducationServiceTest {
 
 	@Test
 	void rejectsEducationWithInvalidDateRange() {
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile()));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile());
 
-		ApiException exception = assertThrows(ApiException.class, () -> service.create(7L, 8L,
+		ApiException exception = assertThrows(ApiException.class, () -> service.create(principal, 8L,
 				request("COMPLETED", LocalDate.of(2021, 1, 1), LocalDate.of(2020, 1, 1), 0L)));
 
 		assertEquals(ErrorCode.EDUCATION_DATE_RANGE_INVALID, exception.getErrorCode());
@@ -106,9 +108,9 @@ class EducationServiceTest {
 
 	@Test
 	void rejectsUnsupportedEducationStatus() {
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile()));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile());
 
-		ApiException exception = assertThrows(ApiException.class, () -> service.create(7L, 8L,
+		ApiException exception = assertThrows(ApiException.class, () -> service.create(principal, 8L,
 				request("WITHDRAWN", LocalDate.of(2020, 1, 1), null, 0L)));
 
 		assertEquals(ErrorCode.EDUCATION_INVALID_STATUS, exception.getErrorCode());
@@ -119,12 +121,12 @@ class EducationServiceTest {
 	void updatesEducationOnlyWhenOwnedBySuppliedProfile() {
 		Profile profile = profile();
 		Education education = education(profile, "Original", EducationStatus.ONGOING, LocalDate.of(2020, 1, 1), null);
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile);
 		when(educations.findByIdAndProfileId(12L, 8L)).thenReturn(Optional.of(education));
 		when(educations.saveAndFlush(education)).thenReturn(education);
 		simulateVersionIncrementOnAdvance(profile);
 
-		EducationMutationResponse result = service.update(7L, 8L, 12L,
+		EducationMutationResponse result = service.update(principal, 8L, 12L,
 				request("COMPLETED", LocalDate.of(2020, 1, 1), LocalDate.of(2022, 1, 1), 0L));
 
 		assertEquals(EducationStatus.COMPLETED, result.education().status());
@@ -139,11 +141,11 @@ class EducationServiceTest {
 	void physicallyDeletesOwnedEducationAndReturnsProfileVersion() {
 		Profile profile = profile();
 		Education education = education(profile, "School", EducationStatus.ONGOING, LocalDate.of(2020, 1, 1), null);
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile);
 		when(educations.findByIdAndProfileId(12L, 8L)).thenReturn(Optional.of(education));
 		simulateVersionIncrementOnAdvance(profile);
 
-		ProfileVersionResponse result = service.delete(7L, 8L, 12L, 0L);
+		ProfileVersionResponse result = service.delete(principal, 8L, 12L, 0L);
 
 		assertEquals(1L, result.profileVersion());
 		verify(educations).delete(education);
@@ -154,9 +156,9 @@ class EducationServiceTest {
 	@Test
 	void rejectsStaleVersionBeforeChildMutation() {
 		Profile profile = profile();
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile);
 
-		ApiException exception = assertThrows(ApiException.class, () -> service.create(7L, 8L,
+		ApiException exception = assertThrows(ApiException.class, () -> service.create(principal, 8L,
 				request("ONGOING", LocalDate.of(2020, 1, 1), null, 1L)));
 
 		assertEquals(ErrorCode.PROFILE_VERSION_CONFLICT, exception.getErrorCode());
@@ -167,11 +169,11 @@ class EducationServiceTest {
 	@Test
 	void translatesOptimisticLockFailure() {
 		Profile profile = profile();
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile);
 		when(educations.saveAndFlush(any(Education.class))).thenAnswer(invocation -> invocation.getArgument(0));
 		doThrow(new OptimisticLockException()).when(profileVersions).advance(any());
 
-		ApiException exception = assertThrows(ApiException.class, () -> service.create(7L, 8L,
+		ApiException exception = assertThrows(ApiException.class, () -> service.create(principal, 8L,
 				request("ONGOING", LocalDate.of(2020, 1, 1), null, 0L)));
 
 		assertEquals(ErrorCode.PROFILE_VERSION_CONFLICT, exception.getErrorCode());
@@ -179,10 +181,10 @@ class EducationServiceTest {
 
 	@Test
 	void returnsNotFoundForForeignEducationId() {
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile()));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile());
 		when(educations.findByIdAndProfileId(12L, 8L)).thenReturn(Optional.empty());
 
-		ApiException exception = assertThrows(ApiException.class, () -> service.delete(7L, 8L, 12L, 0L));
+		ApiException exception = assertThrows(ApiException.class, () -> service.delete(principal, 8L, 12L, 0L));
 
 		assertEquals(ErrorCode.EDUCATION_NOT_FOUND, exception.getErrorCode());
 		verify(educations, never()).delete(any());

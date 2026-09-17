@@ -18,6 +18,7 @@ import com.fpt.ibom.MySqlIntegrationTest;
 import com.fpt.ibom.auth.entity.UserAccount;
 import com.fpt.ibom.auth.entity.UserRole;
 import com.fpt.ibom.auth.entity.UserStatus;
+import com.fpt.ibom.auth.security.UserPrincipal;
 import com.fpt.ibom.auth.repository.UserAccountRepository;
 import com.fpt.ibom.auth.security.UserPrincipal;
 import com.fpt.ibom.exception.ApiException;
@@ -281,11 +282,11 @@ class ProfileCopyIntegrationTest extends MySqlIntegrationTest {
 		ProfileDetailResponse copiedBefore = profileService.get(user.getId(), copied.getId());
 		assertTrue(sourceBefore.hasPreviewed());
 		assertTrue(copiedBefore.hasPreviewed());
-		assertEquals(1, educationService.list(user.getId(), copied.getId()).size());
-		assertEquals(1, certificateService.list(user.getId(), copied.getId()).size());
-		assertEquals(1, projectService.list(user.getId(), copied.getId()).size());
-		assertEquals(1, profileLanguageService.list(user.getId(), copied.getId()).size());
-		assertEquals(1, profileSkillService.list(user.getId(), copied.getId()).size());
+		assertEquals(1, educationService.list(userPrincipal(user), copied.getId()).size());
+		assertEquals(1, certificateService.list(userPrincipal(user), copied.getId()).size());
+		assertEquals(1, projectService.list(userPrincipal(user), copied.getId()).size());
+		assertEquals(1, profileLanguageService.list(userPrincipal(user), copied.getId()).size());
+		assertEquals(1, profileSkillService.list(userPrincipal(user), copied.getId()).size());
 
 		ProfileDetailResponse copiedAfterProfileUpdate = profileService.update(principal(user), copied.getId(),
 				new ProfileUpdateRequest("Updated Copy", "Copy First", "Copy Last", "Developer", new BigDecimal("4.0"),
@@ -294,14 +295,14 @@ class ProfileCopyIntegrationTest extends MySqlIntegrationTest {
 		assertFalse(copiedAfterProfileUpdate.hasPreviewed());
 
 		Education copiedEducation = educationRepository.findByProfileIdOrderByIdAsc(copied.getId()).get(0);
-		educationService.update(user.getId(), copied.getId(), copiedEducation.getId(),
+		educationService.update(userPrincipal(user), copied.getId(), copiedEducation.getId(),
 				new EducationRequest("Updated Copy School", "Degree", "Field", LocalDate.of(2021, 1, 1), null,
 						"ONGOING", copiedAfterProfileUpdate.version()));
 		long copiedVersionAfterEducation = profileService.get(user.getId(), copied.getId()).version();
 		assertTrue(copiedVersionAfterEducation > copiedAfterProfileUpdate.version());
 
 		ProfileLanguage copiedLanguage = profileLanguageRepository.findByProfileId(copied.getId()).get(0);
-		profileLanguageService.update(user.getId(), copied.getId(), copiedLanguage.getId(),
+		profileLanguageService.update(userPrincipal(user), copied.getId(), copiedLanguage.getId(),
 				new ProfileLanguageRequest(aggregate.language().getId(), "ADVANCED", copiedVersionAfterEducation));
 		long copiedVersionAfterLanguage = profileService.get(user.getId(), copied.getId()).version();
 		assertTrue(copiedVersionAfterLanguage > copiedVersionAfterEducation);
@@ -310,7 +311,7 @@ class ProfileCopyIntegrationTest extends MySqlIntegrationTest {
 				new ProfileUpdateRequest("Updated Source", "Source First", "Source Last", "Architect",
 						new BigDecimal("5.0"), "Source Personality", "Source Summary", sourceBefore.version()));
 		Education sourceEducation = educationRepository.findByProfileIdOrderByIdAsc(source.getId()).get(0);
-		educationService.update(user.getId(), source.getId(), sourceEducation.getId(),
+		educationService.update(userPrincipal(user), source.getId(), sourceEducation.getId(),
 				new EducationRequest("Updated Source School", "Degree", "Field", LocalDate.of(2021, 1, 1),
 						LocalDate.of(2025, 1, 1), "COMPLETED", sourceAfterProfileUpdate.version()));
 
@@ -322,10 +323,10 @@ class ProfileCopyIntegrationTest extends MySqlIntegrationTest {
 		assertEquals("Updated Source", sourceAfterMutations.profileName());
 		assertTrue(sourceAfterMutations.version() > sourceAfterProfileUpdate.version());
 		assertFalse(sourceAfterMutations.hasPreviewed());
-		assertEquals("Updated Copy School", educationService.list(user.getId(), copied.getId()).get(0).schoolName());
-		assertEquals("Updated Source School", educationService.list(user.getId(), source.getId()).get(0).schoolName());
-		assertEquals(LanguageLevel.ADVANCED, profileLanguageService.list(user.getId(), copied.getId()).get(0).level());
-		assertEquals(LanguageLevel.NATIVE, profileLanguageService.list(user.getId(), source.getId()).get(0).level());
+		assertEquals("Updated Copy School", educationService.list(userPrincipal(user), copied.getId()).get(0).schoolName());
+		assertEquals("Updated Source School", educationService.list(userPrincipal(user), source.getId()).get(0).schoolName());
+		assertEquals(LanguageLevel.ADVANCED, profileLanguageService.list(userPrincipal(user), copied.getId()).get(0).level());
+		assertEquals(LanguageLevel.NATIVE, profileLanguageService.list(userPrincipal(user), source.getId()).get(0).level());
 
 		ProfileLanguage sourceLanguage = profileLanguageRepository.findByProfileId(source.getId()).get(0);
 		ProfileSkill copiedSkill = profileSkillRepository.findByProfileId(copied.getId()).get(0);
@@ -348,23 +349,23 @@ class ProfileCopyIntegrationTest extends MySqlIntegrationTest {
 		profileService.delete(principal(user), source.getId());
 
 		assertThrowsWithCode(() -> profileService.get(user.getId(), source.getId()), ErrorCode.PROFILE_NOT_FOUND);
-		assertThrowsWithCode(() -> certificateService.list(user.getId(), source.getId()), ErrorCode.PROFILE_NOT_FOUND);
+		assertThrowsWithCode(() -> certificateService.list(userPrincipal(user), source.getId()), ErrorCode.PROFILE_NOT_FOUND);
 		assertEquals(List.of(copied.getId()), profileService.list(user.getId()).stream().map(response -> response.id()).toList());
 
 		ProfileDetailResponse copiedBeforeUpdate = profileService.get(user.getId(), copied.getId());
 		assertEquals(0L, copiedBeforeUpdate.version());
 		assertFalse(copiedBeforeUpdate.hasPreviewed());
-		assertEquals(1, educationService.list(user.getId(), copied.getId()).size());
-		assertEquals(1, certificateService.list(user.getId(), copied.getId()).size());
-		assertEquals(1, projectService.list(user.getId(), copied.getId()).size());
-		assertEquals(1, profileLanguageService.list(user.getId(), copied.getId()).size());
-		assertEquals(1, profileSkillService.list(user.getId(), copied.getId()).size());
+		assertEquals(1, educationService.list(userPrincipal(user), copied.getId()).size());
+		assertEquals(1, certificateService.list(userPrincipal(user), copied.getId()).size());
+		assertEquals(1, projectService.list(userPrincipal(user), copied.getId()).size());
+		assertEquals(1, profileLanguageService.list(userPrincipal(user), copied.getId()).size());
+		assertEquals(1, profileSkillService.list(userPrincipal(user), copied.getId()).size());
 
 		ProfileDetailResponse copiedAfterProfileUpdate = profileService.update(principal(user), copied.getId(),
 				new ProfileUpdateRequest("After Source Delete", "Copy First", "Copy Last", "Developer",
 						new BigDecimal("4.0"), "Copy Personality", "Copy Summary", copiedBeforeUpdate.version()));
 		Education copiedEducation = educationRepository.findByProfileIdOrderByIdAsc(copied.getId()).get(0);
-		educationService.update(user.getId(), copied.getId(), copiedEducation.getId(),
+		educationService.update(userPrincipal(user), copied.getId(), copiedEducation.getId(),
 				new EducationRequest("After Delete School", "Degree", "Field", LocalDate.of(2021, 1, 1), null,
 						"ONGOING", copiedAfterProfileUpdate.version()));
 		ProfileDetailResponse copiedAfterEducationUpdate = profileService.get(user.getId(), copied.getId());
@@ -446,5 +447,9 @@ class ProfileCopyIntegrationTest extends MySqlIntegrationTest {
 	}
 
 	private record CopiedAggregate(Profile source, Profile copied, Language language, Skill skill) {
+	}
+
+	private UserPrincipal userPrincipal(UserAccount user) {
+		return new UserPrincipal(user.getId(), user.getEmail(), user.getUsername(), user.getRole());
 	}
 }

@@ -116,23 +116,24 @@ class EducationIntegrationTest extends MySqlIntegrationTest {
 				null, java.time.LocalDate.of(2020, 1, 1), null, EducationStatus.ONGOING));
 
 		ApiException foreign = assertThrows(ApiException.class,
-				() -> educationService.delete(owner.getId(), profile.getId(), foreignEducation.getId(), 0L));
+				() -> educationService.delete(userPrincipalValue(owner), profile.getId(), foreignEducation.getId(), 0L));
 		assertEquals(ErrorCode.EDUCATION_NOT_FOUND, foreign.getErrorCode());
 
 		ApiException stale = assertThrows(ApiException.class,
-				() -> educationService.create(owner.getId(), profile.getId(),
+				() -> educationService.create(userPrincipalValue(owner), profile.getId(),
 						new com.fpt.ibom.profile.dto.EducationRequest("School", "Degree", null,
 								java.time.LocalDate.of(2020, 1, 1), null, "ONGOING", 1L)));
 		assertEquals(ErrorCode.PROFILE_VERSION_CONFLICT, stale.getErrorCode());
 
 		Profile otherActive = saveProfile(owner, "Other Active");
-		educationService.delete(owner.getId(), otherActive.getId(),
+		educationService.delete(userPrincipalValue(owner), otherActive.getId(),
 				educationRepository.saveAndFlush(new Education(otherActive, "School", "Degree", null,
 					java.time.LocalDate.of(2020, 1, 1), null, EducationStatus.ONGOING)).getId(), 0L);
 		Profile deletedProfile = profileRepository.findById(profile.getId()).orElseThrow();
 		deletedProfile.softDelete(java.time.Instant.now());
 		profileRepository.saveAndFlush(deletedProfile);
-		ApiException deleted = assertThrows(ApiException.class, () -> educationService.list(owner.getId(), profile.getId()));
+		ApiException deleted = assertThrows(ApiException.class,
+				() -> educationService.list(userPrincipalValue(owner), profile.getId()));
 		assertEquals(ErrorCode.PROFILE_NOT_FOUND, deleted.getErrorCode());
 	}
 
@@ -165,8 +166,11 @@ class EducationIntegrationTest extends MySqlIntegrationTest {
 	}
 
 	private Authentication userPrincipal(UserAccount user) {
-		return new UsernamePasswordAuthenticationToken(
-				new UserPrincipal(user.getId(), user.getEmail(), user.getUsername(), user.getRole()), null, List.of());
+		return new UsernamePasswordAuthenticationToken(userPrincipalValue(user), null, List.of());
+	}
+
+	private UserPrincipal userPrincipalValue(UserAccount user) {
+		return new UserPrincipal(user.getId(), user.getEmail(), user.getUsername(), user.getRole());
 	}
 
 	private String requestJson(String schoolName, String status, String startDate, String endDate, long version) {

@@ -57,15 +57,17 @@ class EducationControllerTest {
 	@MockitoBean
 	private UserAccountRepository userAccountRepository;
 
+	private final UserPrincipal principal = new UserPrincipal(7L, "user@example.com", "member", UserRole.MEMBER);
+
 	@Test
 	void mapsEducationCrudRoutesAndResponseWrappers() throws Exception {
 		EducationResponse education = new EducationResponse(12L, "School", "Degree", "Field",
 				LocalDate.of(2020, 1, 1), null, EducationStatus.ONGOING);
-		when(educationService.list(7L, 8L)).thenReturn(List.of(education));
-		when(educationService.create(eq(7L), eq(8L), any())).thenReturn(new EducationMutationResponse(education, 1L));
-		when(educationService.update(eq(7L), eq(8L), eq(12L), any()))
+		when(educationService.list(principal, 8L)).thenReturn(List.of(education));
+		when(educationService.create(eq(principal), eq(8L), any())).thenReturn(new EducationMutationResponse(education, 1L));
+		when(educationService.update(eq(principal), eq(8L), eq(12L), any()))
 				.thenReturn(new EducationMutationResponse(education, 2L));
-		when(educationService.delete(7L, 8L, 12L, 2L)).thenReturn(new ProfileVersionResponse(3L));
+		when(educationService.delete(principal, 8L, 12L, 2L)).thenReturn(new ProfileVersionResponse(3L));
 
 		mockMvc.perform(get("/api/profiles/8/educations").with(principal())).andExpect(status().isOk())
 				.andExpect(jsonPath("$.code").value(200)).andExpect(jsonPath("$.data[0].id").value(12))
@@ -79,7 +81,7 @@ class EducationControllerTest {
 				.contentType(MediaType.APPLICATION_JSON).content("{\"version\":2}"))
 				.andExpect(status().isOk()).andExpect(jsonPath("$.data.profileVersion").value(3));
 
-		verify(educationService).delete(7L, 8L, 12L, 2L);
+		verify(educationService).delete(principal, 8L, 12L, 2L);
 	}
 
 	@Test
@@ -96,7 +98,7 @@ class EducationControllerTest {
 	@Test
 	void mapsEducationBusinessErrors() throws Exception {
 		doThrow(new ApiException(HttpStatus.BAD_REQUEST, ErrorCode.EDUCATION_INVALID_STATUS, "Invalid status"))
-				.when(educationService).create(eq(7L), eq(8L), any());
+				.when(educationService).create(eq(principal), eq(8L), any());
 
 		mockMvc.perform(post("/api/profiles/8/educations").with(principal()).contentType(MediaType.APPLICATION_JSON)
 				.content(requestJson(0))).andExpect(status().isBadRequest())
@@ -106,7 +108,7 @@ class EducationControllerTest {
 	@Test
 	void rejectsUnsupportedStatusAsEducationError() throws Exception {
 		doThrow(new ApiException(HttpStatus.BAD_REQUEST, ErrorCode.EDUCATION_INVALID_STATUS, "Invalid status"))
-				.when(educationService).create(eq(7L), eq(8L), any());
+				.when(educationService).create(eq(principal), eq(8L), any());
 
 		mockMvc.perform(post("/api/profiles/8/educations").with(principal()).contentType(MediaType.APPLICATION_JSON)
 				.content("{\"schoolName\":\"School\",\"degree\":\"Degree\",\"startDate\":\"2020-01-01\","
@@ -115,8 +117,7 @@ class EducationControllerTest {
 	}
 
 	private org.springframework.test.web.servlet.request.RequestPostProcessor principal() {
-		return authentication(new UsernamePasswordAuthenticationToken(
-				new UserPrincipal(7L, "user@example.com", "member", UserRole.MEMBER), null, List.of()));
+		return authentication(new UsernamePasswordAuthenticationToken(principal, null, List.of()));
 	}
 
 	private String requestJson(long version) {

@@ -33,14 +33,14 @@ public class EducationController {
 	@GetMapping
 	public ResponseEntity<ApiResponse<List<EducationResponse>>> list(@AuthenticationPrincipal UserPrincipal principal,
 			@PathVariable Long profileId) {
-		return ResponseEntity.ok(new ApiResponse<>(200, "Success", educationService.list(principal.userId(), profileId)));
+		return ResponseEntity.ok(new ApiResponse<>(200, "Success", educationService.list(principal, profileId)));
 	}
 
 	@PostMapping
 	public ResponseEntity<ApiResponse<EducationMutationResponse>> create(@AuthenticationPrincipal UserPrincipal principal,
 			@PathVariable Long profileId, @Valid @RequestBody EducationRequest request) {
 		return ResponseEntity.status(201).body(new ApiResponse<>(201, "Created",
-				educationService.create(principal.userId(), profileId, request)));
+				educationService.create(principal, profileId, request)));
 	}
 
 	@PutMapping("/{educationId}")
@@ -48,7 +48,7 @@ public class EducationController {
 			@AuthenticationPrincipal UserPrincipal principal, @PathVariable Long profileId,
 			@PathVariable Long educationId, @Valid @RequestBody EducationRequest request) {
 		return ResponseEntity.ok(new ApiResponse<>(200, "Success",
-				educationService.update(principal.userId(), profileId, educationId, request)));
+				educationService.update(principal, profileId, educationId, request)));
 	}
 
 	@DeleteMapping("/{educationId}")
@@ -56,6 +56,6 @@ public class EducationController {
 			@AuthenticationPrincipal UserPrincipal principal, @PathVariable Long profileId,
 			@PathVariable Long educationId, @Valid @RequestBody ProfileVersionResponse request) {
 		return ResponseEntity.ok(new ApiResponse<>(200, "Success",
-				educationService.delete(principal.userId(), profileId, educationId, request.profileVersion())));
+				educationService.delete(principal, profileId, educationId, request.profileVersion())));
 	}
 }

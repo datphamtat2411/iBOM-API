@@ -13,6 +13,7 @@ import com.fpt.ibom.MySqlIntegrationTest;
 import com.fpt.ibom.auth.entity.UserAccount;
 import com.fpt.ibom.auth.entity.UserRole;
 import com.fpt.ibom.auth.entity.UserStatus;
+import com.fpt.ibom.auth.security.UserPrincipal;
 import com.fpt.ibom.auth.repository.UserAccountRepository;
 import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.exception.ErrorCode;
@@ -78,7 +79,7 @@ class ProfileChildConstraintIntegrationTest extends MySqlIntegrationTest {
 		doReturn(false).when(certificateRepository)
 				.existsByProfileIdAndCertificateNameAndIssueDate(profile.getId(), "AWS", issueDate);
 
-		ApiException exception = assertThrows(ApiException.class, () -> certificateService.create(user.getId(), profile.getId(),
+		ApiException exception = assertThrows(ApiException.class, () -> certificateService.create(userPrincipal(user), profile.getId(),
 				new CertificateRequest("AWS", issueDate, 0L)));
 
 		assertEquals(ErrorCode.CERTIFICATE_ALREADY_EXISTS, exception.getErrorCode());
@@ -98,7 +99,7 @@ class ProfileChildConstraintIntegrationTest extends MySqlIntegrationTest {
 				.existsByProfileIdAndCertificateNameAndIssueDateAndIdNot(profile.getId(), "AWS", duplicateDate,
 						first.getId());
 
-		ApiException exception = assertThrows(ApiException.class, () -> certificateService.update(user.getId(), profile.getId(),
+		ApiException exception = assertThrows(ApiException.class, () -> certificateService.update(userPrincipal(user), profile.getId(),
 				first.getId(), new CertificateRequest("AWS", duplicateDate, 0L)));
 
 		assertEquals(ErrorCode.CERTIFICATE_ALREADY_EXISTS, exception.getErrorCode());
@@ -117,7 +118,7 @@ class ProfileChildConstraintIntegrationTest extends MySqlIntegrationTest {
 		doReturn(false).when(profileLanguageRepository).existsByProfileIdAndLanguageId(profile.getId(), english.getId());
 
 		ApiException exception = assertThrows(ApiException.class,
-				() -> profileLanguageService.create(user.getId(), profile.getId(),
+				() -> profileLanguageService.create(userPrincipal(user), profile.getId(),
 						new ProfileLanguageRequest(english.getId(), "ADVANCED", 0L)));
 
 		assertEquals(ErrorCode.PROFILE_LANGUAGE_ALREADY_EXISTS, exception.getErrorCode());
@@ -134,7 +135,7 @@ class ProfileChildConstraintIntegrationTest extends MySqlIntegrationTest {
 		doReturn(false).when(profileSkillRepository).existsByProfileIdAndSkillId(profile.getId(), skill.getId());
 
 		ApiException exception = assertThrows(ApiException.class,
-				() -> profileSkillService.create(user.getId(), profile.getId(),
+				() -> profileSkillService.create(userPrincipal(user), profile.getId(),
 						new ProfileSkillRequest(skill.getId(), BigDecimal.TEN, null, 0L)));
 
 		assertEquals(ErrorCode.PROFILE_SKILL_ALREADY_EXISTS, exception.getErrorCode());
@@ -167,5 +168,9 @@ class ProfileChildConstraintIntegrationTest extends MySqlIntegrationTest {
 	private Skill saveSkill(String name) {
 		SkillCategory category = skillCategoryRepository.findByCode("BACKEND").orElseThrow();
 		return skillRepository.saveAndFlush(new Skill(name, category));
+	}
+
+	private UserPrincipal userPrincipal(UserAccount user) {
+		return new UserPrincipal(user.getId(), user.getEmail(), user.getUsername(), user.getRole());
 	}
 }

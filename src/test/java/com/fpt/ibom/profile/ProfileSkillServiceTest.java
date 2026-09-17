@@ -20,6 +20,7 @@ import java.util.Optional;
 import com.fpt.ibom.auth.entity.UserAccount;
 import com.fpt.ibom.auth.entity.UserRole;
 import com.fpt.ibom.auth.entity.UserStatus;
+import com.fpt.ibom.auth.security.UserPrincipal;
 import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.exception.ErrorCode;
 import com.fpt.ibom.master.entity.Skill;
@@ -31,8 +32,8 @@ import com.fpt.ibom.profile.dto.ProfileSkillResponse;
 import com.fpt.ibom.profile.dto.ProfileVersionResponse;
 import com.fpt.ibom.profile.entity.Profile;
 import com.fpt.ibom.profile.entity.ProfileSkill;
-import com.fpt.ibom.profile.repository.ProfileRepository;
 import com.fpt.ibom.profile.repository.ProfileSkillRepository;
+import com.fpt.ibom.profile.service.ProfileAccessService;
 import com.fpt.ibom.profile.service.ProfileSkillService;
 import com.fpt.ibom.profile.service.ProfileVersionService;
 import jakarta.persistence.OptimisticLockException;
@@ -51,10 +52,11 @@ class ProfileSkillServiceTest {
 	private static final LocalDate BUSINESS_DATE = LocalDate.of(2026, 9, 11);
 
 	private final ProfileSkillRepository profileSkills = org.mockito.Mockito.mock(ProfileSkillRepository.class);
-	private final ProfileRepository profiles = org.mockito.Mockito.mock(ProfileRepository.class);
+	private final ProfileAccessService profileAccess = org.mockito.Mockito.mock(ProfileAccessService.class);
 	private final SkillRepository skills = org.mockito.Mockito.mock(SkillRepository.class);
 	private final ProfileVersionService profileVersions = org.mockito.Mockito.mock(ProfileVersionService.class);
-	private final ProfileSkillService service = new ProfileSkillService(profileSkills, profiles, skills, profileVersions,
+	private final UserPrincipal principal = new UserPrincipal(7L, "user@example.com", "member", UserRole.MEMBER);
+	private final ProfileSkillService service = new ProfileSkillService(profileSkills, profileAccess, skills, profileVersions,
 			FIXED_CLOCK);
 
 	@Test
@@ -63,10 +65,10 @@ class ProfileSkillServiceTest {
 		ProfileSkill zulu = profileSkill(profile, skill(12L, "Zulu"), 12L, "3.50", null);
 		ProfileSkill alpha = profileSkill(profile, skill(13L, "alpha"), 13L, "3.50", null);
 		ProfileSkill beta = profileSkill(profile, skill(14L, "Beta"), 14L, "2.25", null);
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile);
 		when(profileSkills.findByProfileId(8L)).thenReturn(List.of(beta, zulu, alpha));
 
-		List<ProfileSkillResponse> result = service.list(7L, 8L);
+		List<ProfileSkillResponse> result = service.list(principal, 8L);
 
 		assertEquals(List.of("alpha", "Zulu", "Beta"), result.stream().map(ProfileSkillResponse::skillName).toList());
 		assertEquals(List.of(new BigDecimal("3.50"), new BigDecimal("3.50"), new BigDecimal("2.25")),
@@ -79,12 +81,12 @@ class ProfileSkillServiceTest {
 		ReflectionTestUtils.setField(profile, "hasPreviewed", true);
 		Skill skill = skill(22L, "Java");
 		LocalDate lastUsed = BUSINESS_DATE;
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile);
 		when(skills.findById(22L)).thenReturn(Optional.of(skill));
 		when(profileSkills.saveAndFlush(any(ProfileSkill.class))).thenAnswer(invocation -> invocation.getArgument(0));
 		simulateVersionIncrementOnAdvance(profile);
 
-		ProfileSkillMutationResponse result = service.create(7L, 8L,
+		ProfileSkillMutationResponse result = service.create(principal, 8L,
 				new ProfileSkillRequest(22L, new BigDecimal("2.75"), lastUsed, 0L));
 
 		ArgumentCaptor<ProfileSkill> captor = ArgumentCaptor.forClass(ProfileSkill.class);
@@ -103,12 +105,12 @@ class ProfileSkillServiceTest {
 	void allowsFractionalExperienceWithoutComparingProfileExperience() {
 		Profile profile = profile();
 		Skill skill = skill(22L, "Java");
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile);
 		when(skills.findById(22L)).thenReturn(Optional.of(skill));
 		when(profileSkills.saveAndFlush(any(ProfileSkill.class))).thenAnswer(invocation -> invocation.getArgument(0));
 		simulateVersionIncrementOnAdvance(profile);
 
-		ProfileSkillMutationResponse result = service.create(7L, 8L,
+		ProfileSkillMutationResponse result = service.create(principal, 8L,
 				new ProfileSkillRequest(22L, new BigDecimal("10.25"), null, 0L));
 
 		assertEquals(new BigDecimal("10.25"), result.profileSkill().experienceYears());
@@ -117,11 +119,11 @@ class ProfileSkillServiceTest {
 	@Test
 	void rejectsMissingOrNegativeExperienceBeforeMutation() {
 		Profile profile = profile();
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile);
 
-		ApiException negative = assertThrows(ApiException.class, () -> service.create(7L, 8L,
+		ApiException negative = assertThrows(ApiException.class, () -> service.create(principal, 8L,
 				new ProfileSkillRequest(22L, new BigDecimal("-0.01"), null, 0L)));
-		ApiException missing = assertThrows(ApiException.class, () -> service.create(7L, 8L,
+		ApiException missing = assertThrows(ApiException.class, () -> service.create(principal, 8L,
 				new ProfileSkillRequest(22L, null, null, 0L)));
 
 		assertEquals(HttpStatus.BAD_REQUEST, negative.getStatus());
@@ -133,9 +135,9 @@ class ProfileSkillServiceTest {
 
 	@Test
 	void rejectsFutureLastUsedDateBeforeMutation() {
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile()));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile());
 
-		ApiException exception = assertThrows(ApiException.class, () -> service.create(7L, 8L,
+		ApiException exception = assertThrows(ApiException.class, () -> service.create(principal, 8L,
 				new ProfileSkillRequest(22L, new BigDecimal("1.00"), BUSINESS_DATE.plusDays(1), 0L)));
 
 		assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
@@ -148,16 +150,16 @@ class ProfileSkillServiceTest {
 	void rejectsMissingSkillAndDuplicateAssignment() {
 		Profile profile = profile();
 		Skill skill = skill(22L, "Java");
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile);
 		when(skills.findById(22L)).thenReturn(Optional.empty());
 
-		ApiException missing = assertThrows(ApiException.class, () -> service.create(7L, 8L,
+		ApiException missing = assertThrows(ApiException.class, () -> service.create(principal, 8L,
 				new ProfileSkillRequest(22L, new BigDecimal("1.00"), null, 0L)));
 		assertEquals(ErrorCode.SKILL_NOT_FOUND, missing.getErrorCode());
 
 		when(skills.findById(22L)).thenReturn(Optional.of(skill));
 		when(profileSkills.existsByProfileIdAndSkillId(8L, 22L)).thenReturn(true);
-		ApiException duplicate = assertThrows(ApiException.class, () -> service.create(7L, 8L,
+		ApiException duplicate = assertThrows(ApiException.class, () -> service.create(principal, 8L,
 				new ProfileSkillRequest(22L, new BigDecimal("1.00"), null, 0L)));
 		assertEquals(ErrorCode.PROFILE_SKILL_ALREADY_EXISTS, duplicate.getErrorCode());
 		verify(profileSkills, never()).saveAndFlush(any());
@@ -169,14 +171,14 @@ class ProfileSkillServiceTest {
 		ProfileSkill association = profileSkill(profile, skill(22L, "Java"), 12L, "1.00", null);
 		Skill replacement = skill(23L, "Spring");
 		LocalDate lastUsed = LocalDate.of(2024, 12, 1);
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile);
 		when(profileSkills.findByIdAndProfileId(12L, 8L)).thenReturn(Optional.of(association));
 		when(skills.findById(23L)).thenReturn(Optional.of(replacement));
 		when(profileSkills.existsByProfileIdAndSkillIdAndIdNot(8L, 23L, 12L)).thenReturn(false);
 		when(profileSkills.saveAndFlush(association)).thenReturn(association);
 		simulateVersionIncrementOnAdvance(profile);
 
-		ProfileSkillMutationResponse result = service.update(7L, 8L, 12L,
+		ProfileSkillMutationResponse result = service.update(principal, 8L, 12L,
 				new ProfileSkillRequest(23L, new BigDecimal("4.25"), lastUsed, 0L));
 
 		assertEquals(replacement, association.getSkill());
@@ -191,12 +193,12 @@ class ProfileSkillServiceTest {
 	void rejectsDuplicateReplacementDuringUpdate() {
 		Profile profile = profile();
 		ProfileSkill association = profileSkill(profile, skill(22L, "Java"), 12L, "1.00", null);
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile);
 		when(profileSkills.findByIdAndProfileId(12L, 8L)).thenReturn(Optional.of(association));
 		when(skills.findById(23L)).thenReturn(Optional.of(skill(23L, "Spring")));
 		when(profileSkills.existsByProfileIdAndSkillIdAndIdNot(8L, 23L, 12L)).thenReturn(true);
 
-		ApiException exception = assertThrows(ApiException.class, () -> service.update(7L, 8L, 12L,
+		ApiException exception = assertThrows(ApiException.class, () -> service.update(principal, 8L, 12L,
 				new ProfileSkillRequest(23L, new BigDecimal("4.25"), null, 0L)));
 
 		assertEquals(ErrorCode.PROFILE_SKILL_ALREADY_EXISTS, exception.getErrorCode());
@@ -208,11 +210,11 @@ class ProfileSkillServiceTest {
 	void physicallyDeletesOwnedAssociationAndReturnsVersion() {
 		Profile profile = profile();
 		ProfileSkill association = profileSkill(profile, skill(22L, "Java"), 12L, "1.00", null);
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile);
 		when(profileSkills.findByIdAndProfileId(12L, 8L)).thenReturn(Optional.of(association));
 		simulateVersionIncrementOnAdvance(profile);
 
-		ProfileVersionResponse result = service.delete(7L, 8L, 12L, 0L);
+		ProfileVersionResponse result = service.delete(principal, 8L, 12L, 0L);
 
 		assertEquals(1L, result.profileVersion());
 		verify(profileSkills).delete(association);
@@ -223,13 +225,13 @@ class ProfileSkillServiceTest {
 	@Test
 	void rejectsForeignAssociationAndStaleProfileVersion() {
 		Profile profile = profile();
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile);
 		when(profileSkills.findByIdAndProfileId(12L, 8L)).thenReturn(Optional.empty());
 
-		ApiException foreign = assertThrows(ApiException.class, () -> service.delete(7L, 8L, 12L, 0L));
+		ApiException foreign = assertThrows(ApiException.class, () -> service.delete(principal, 8L, 12L, 0L));
 		assertEquals(ErrorCode.PROFILE_SKILL_NOT_FOUND, foreign.getErrorCode());
 
-		ApiException stale = assertThrows(ApiException.class, () -> service.create(7L, 8L,
+		ApiException stale = assertThrows(ApiException.class, () -> service.create(principal, 8L,
 				new ProfileSkillRequest(22L, new BigDecimal("1.00"), null, 1L)));
 		assertEquals(ErrorCode.PROFILE_VERSION_CONFLICT, stale.getErrorCode());
 		verify(profileVersions, never()).advance(any());
@@ -239,33 +241,34 @@ class ProfileSkillServiceTest {
 	void translatesDatabaseDuplicateAndOptimisticLockFailures() {
 		Profile profile = profile();
 		Skill skill = skill(22L, "Java");
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile);
 		when(skills.findById(22L)).thenReturn(Optional.of(skill));
 		when(profileSkills.saveAndFlush(any(ProfileSkill.class))).thenAnswer(invocation -> invocation.getArgument(0));
 		ConstraintViolationException violation = new ConstraintViolationException("duplicate", null,
 				"uk_profile_skills_profile_skill");
 		doThrow(new DataIntegrityViolationException("duplicate", violation)).when(profileSkills).saveAndFlush(any());
 
-		ApiException duplicate = assertThrows(ApiException.class, () -> service.create(7L, 8L,
+		ApiException duplicate = assertThrows(ApiException.class, () -> service.create(principal, 8L,
 				new ProfileSkillRequest(22L, new BigDecimal("1.00"), null, 0L)));
 		assertEquals(ErrorCode.PROFILE_SKILL_ALREADY_EXISTS, duplicate.getErrorCode());
 
 		org.mockito.Mockito.reset(profileSkills, profileVersions);
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		when(profileAccess.resolve(principal, 8L)).thenReturn(profile);
 		when(skills.findById(22L)).thenReturn(Optional.of(skill));
 		when(profileSkills.saveAndFlush(any(ProfileSkill.class))).thenAnswer(invocation -> invocation.getArgument(0));
 		doThrow(new OptimisticLockException()).when(profileVersions).advance(any());
 
-		ApiException conflict = assertThrows(ApiException.class, () -> service.create(7L, 8L,
+		ApiException conflict = assertThrows(ApiException.class, () -> service.create(principal, 8L,
 				new ProfileSkillRequest(22L, new BigDecimal("1.00"), null, 0L)));
 		assertEquals(ErrorCode.PROFILE_VERSION_CONFLICT, conflict.getErrorCode());
 	}
 
 	@Test
 	void returnsProfileNotFoundForMissingActiveOwnerProfile() {
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.empty());
+		when(profileAccess.resolve(principal, 8L)).thenThrow(new ApiException(HttpStatus.NOT_FOUND,
+				ErrorCode.PROFILE_NOT_FOUND, "Profile not found"));
 
-		ApiException exception = assertThrows(ApiException.class, () -> service.list(7L, 8L));
+		ApiException exception = assertThrows(ApiException.class, () -> service.list(principal, 8L));
 
 		assertEquals(ErrorCode.PROFILE_NOT_FOUND, exception.getErrorCode());
 		verify(profileSkills, never()).findByProfileId(any());

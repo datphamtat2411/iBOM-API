@@ -57,16 +57,18 @@ class ProfileSkillControllerTest {
 	@MockitoBean
 	private UserAccountRepository userAccountRepository;
 
+	private final UserPrincipal principal = new UserPrincipal(7L, "user@example.com", "member", UserRole.MEMBER);
+
 	@Test
 	void mapsAllProfileSkillRoutesAndResponseWrappers() throws Exception {
 		ProfileSkillResponse skill = new ProfileSkillResponse(12L, 22L, "Java", 4L, "BACKEND", "Backend",
 				new BigDecimal("2.75"), LocalDate.of(2025, 1, 15));
-		when(profileSkillService.list(7L, 8L)).thenReturn(List.of(skill));
-		when(profileSkillService.create(eq(7L), eq(8L), any()))
+		when(profileSkillService.list(principal, 8L)).thenReturn(List.of(skill));
+		when(profileSkillService.create(eq(principal), eq(8L), any()))
 				.thenReturn(new ProfileSkillMutationResponse(skill, 1L));
-		when(profileSkillService.update(eq(7L), eq(8L), eq(12L), any()))
+		when(profileSkillService.update(eq(principal), eq(8L), eq(12L), any()))
 				.thenReturn(new ProfileSkillMutationResponse(skill, 2L));
-		when(profileSkillService.delete(7L, 8L, 12L, 2L)).thenReturn(new ProfileVersionResponse(3L));
+		when(profileSkillService.delete(principal, 8L, 12L, 2L)).thenReturn(new ProfileVersionResponse(3L));
 
 		mockMvc.perform(get("/api/profiles/8/skills").with(principal())).andExpect(status().isOk())
 				.andExpect(jsonPath("$.code").value(200)).andExpect(jsonPath("$.data[0].profileSkillId").value(12))
@@ -88,7 +90,7 @@ class ProfileSkillControllerTest {
 				.contentType(MediaType.APPLICATION_JSON).content("{\"version\":2}"))
 				.andExpect(status().isOk()).andExpect(jsonPath("$.data.profileVersion").value(3));
 
-		verify(profileSkillService).delete(7L, 8L, 12L, 2L);
+		verify(profileSkillService).delete(principal, 8L, 12L, 2L);
 	}
 
 	@Test
@@ -105,7 +107,7 @@ class ProfileSkillControllerTest {
 	@Test
 	void mapsProfileSkillBusinessErrorsAndRejectsInvalidFields() throws Exception {
 		doThrow(new ApiException(HttpStatus.BAD_REQUEST, ErrorCode.PROFILE_SKILL_LAST_USED_IN_FUTURE, "Future date"))
-				.when(profileSkillService).create(eq(7L), eq(8L), any());
+				.when(profileSkillService).create(eq(principal), eq(8L), any());
 
 		mockMvc.perform(post("/api/profiles/8/skills").with(principal()).contentType(MediaType.APPLICATION_JSON)
 				.content(requestJson(0))).andExpect(status().isBadRequest())
@@ -117,8 +119,7 @@ class ProfileSkillControllerTest {
 	}
 
 	private org.springframework.test.web.servlet.request.RequestPostProcessor principal() {
-		return authentication(new UsernamePasswordAuthenticationToken(
-				new UserPrincipal(7L, "user@example.com", "member", UserRole.MEMBER), null, List.of()));
+		return authentication(new UsernamePasswordAuthenticationToken(principal, null, List.of()));
 	}
 
 	private String requestJson(long version) {

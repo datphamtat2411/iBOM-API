@@ -177,16 +177,16 @@ class ProfileLanguageIntegrationTest extends MySqlIntegrationTest {
 				.saveAndFlush(new ProfileLanguage(foreignProfile, english, LanguageLevel.NATIVE));
 
 		ApiException foreign = assertThrows(ApiException.class,
-				() -> profileLanguageService.delete(owner.getId(), ownerProfile.getId(), foreignAssociation.getId(), 0L));
+				() -> profileLanguageService.delete(userPrincipalValue(owner), ownerProfile.getId(), foreignAssociation.getId(), 0L));
 		assertEquals(ErrorCode.PROFILE_LANGUAGE_NOT_FOUND, foreign.getErrorCode());
 
-		profileLanguageService.create(owner.getId(), ownerProfile.getId(),
+		profileLanguageService.create(userPrincipalValue(owner), ownerProfile.getId(),
 				new ProfileLanguageRequest(english.getId(), "BEGINNER", 0L));
-		ApiException duplicate = assertThrows(ApiException.class, () -> profileLanguageService.create(owner.getId(),
+		ApiException duplicate = assertThrows(ApiException.class, () -> profileLanguageService.create(userPrincipalValue(owner),
 				ownerProfile.getId(), new ProfileLanguageRequest(english.getId(), "ADVANCED", 1L)));
 		assertEquals(ErrorCode.PROFILE_LANGUAGE_ALREADY_EXISTS, duplicate.getErrorCode());
 
-		ApiException stale = assertThrows(ApiException.class, () -> profileLanguageService.create(owner.getId(),
+		ApiException stale = assertThrows(ApiException.class, () -> profileLanguageService.create(userPrincipalValue(owner),
 				ownerProfile.getId(), new ProfileLanguageRequest(findSeedLanguage("Vietnamese").getId(), "NATIVE", 0L)));
 		assertEquals(ErrorCode.PROFILE_VERSION_CONFLICT, stale.getErrorCode());
 
@@ -194,7 +194,7 @@ class ProfileLanguageIntegrationTest extends MySqlIntegrationTest {
 		deleted.softDelete(java.time.Instant.now());
 		profileRepository.saveAndFlush(deleted);
 		ApiException inactive = assertThrows(ApiException.class,
-				() -> profileLanguageService.list(owner.getId(), ownerProfile.getId()));
+				() -> profileLanguageService.list(userPrincipalValue(owner), ownerProfile.getId()));
 		assertEquals(ErrorCode.PROFILE_NOT_FOUND, inactive.getErrorCode());
 	}
 
@@ -229,8 +229,11 @@ class ProfileLanguageIntegrationTest extends MySqlIntegrationTest {
 	}
 
 	private Authentication userPrincipal(UserAccount user) {
-		return new UsernamePasswordAuthenticationToken(
-				new UserPrincipal(user.getId(), user.getEmail(), user.getUsername(), user.getRole()), null, List.of());
+		return new UsernamePasswordAuthenticationToken(userPrincipalValue(user), null, List.of());
+	}
+
+	private UserPrincipal userPrincipalValue(UserAccount user) {
+		return new UserPrincipal(user.getId(), user.getEmail(), user.getUsername(), user.getRole());
 	}
 
 	private String requestJson(Long languageId, String level, long version) {

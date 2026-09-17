@@ -6,6 +6,7 @@ import java.util.List;
 
 import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.exception.ErrorCode;
+import com.fpt.ibom.auth.security.UserPrincipal;
 import com.fpt.ibom.profile.dto.CertificateMutationResponse;
 import com.fpt.ibom.profile.dto.CertificateRequest;
 import com.fpt.ibom.profile.dto.CertificateResponse;
@@ -13,7 +14,6 @@ import com.fpt.ibom.profile.dto.ProfileVersionResponse;
 import com.fpt.ibom.profile.entity.Certificate;
 import com.fpt.ibom.profile.entity.Profile;
 import com.fpt.ibom.profile.repository.CertificateRepository;
-import com.fpt.ibom.profile.repository.ProfileRepository;
 import jakarta.persistence.OptimisticLockException;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -27,28 +27,28 @@ public class CertificateService {
 	private static final String CERTIFICATE_UNIQUE_CONSTRAINT = "uk_certificates_profile_name_issue_date";
 
 	private final CertificateRepository certificateRepository;
-	private final ProfileRepository profileRepository;
+	private final ProfileAccessService profileAccessService;
 	private final ProfileVersionService profileVersionService;
 	private final Clock clock;
 
-	public CertificateService(CertificateRepository certificateRepository, ProfileRepository profileRepository,
+	public CertificateService(CertificateRepository certificateRepository, ProfileAccessService profileAccessService,
 			ProfileVersionService profileVersionService, Clock clock) {
 		this.certificateRepository = certificateRepository;
-		this.profileRepository = profileRepository;
+		this.profileAccessService = profileAccessService;
 		this.profileVersionService = profileVersionService;
 		this.clock = clock;
 	}
 
 	@Transactional(readOnly = true)
-	public List<CertificateResponse> list(Long userId, Long profileId) {
-		findOwnedActiveProfile(userId, profileId);
+	public List<CertificateResponse> list(UserPrincipal principal, Long profileId) {
+		findAuthorizedProfile(principal, profileId);
 		return certificateRepository.findByProfileIdOrderByIssueDateDescIdAsc(profileId).stream()
 				.map(CertificateResponse::from).toList();
 	}
 
 	@Transactional
-	public CertificateMutationResponse create(Long userId, Long profileId, CertificateRequest request) {
-		Profile profile = findOwnedActiveProfile(userId, profileId);
+	public CertificateMutationResponse create(UserPrincipal principal, Long profileId, CertificateRequest request) {
+		Profile profile = findAuthorizedProfile(principal, profileId);
 		CanonicalCertificate canonical = canonicalize(request);
 		checkVersion(profile, request.version());
 		if (certificateRepository.existsByProfileIdAndCertificateNameAndIssueDate(profileId, canonical.certificateName(),
@@ -72,9 +72,9 @@ public class CertificateService {
 	}
 
 	@Transactional
-	public CertificateMutationResponse update(Long userId, Long profileId, Long certificateId,
+	public CertificateMutationResponse update(UserPrincipal principal, Long profileId, Long certificateId,
 			CertificateRequest request) {
-		Profile profile = findOwnedActiveProfile(userId, profileId);
+		Profile profile = findAuthorizedProfile(principal, profileId);
 		Certificate certificate = certificateRepository.findByIdAndProfileId(certificateId, profileId)
 				.orElseThrow(this::certificateNotFound);
 		CanonicalCertificate canonical = canonicalize(request);
@@ -100,8 +100,8 @@ public class CertificateService {
 	}
 
 	@Transactional
-	public ProfileVersionResponse delete(Long userId, Long profileId, Long certificateId, Long version) {
-		Profile profile = findOwnedActiveProfile(userId, profileId);
+	public ProfileVersionResponse delete(UserPrincipal principal, Long profileId, Long certificateId, Long version) {
+		Profile profile = findAuthorizedProfile(principal, profileId);
 		Certificate certificate = certificateRepository.findByIdAndProfileId(certificateId, profileId)
 				.orElseThrow(this::certificateNotFound);
 		checkVersion(profile, version);
@@ -115,9 +115,8 @@ public class CertificateService {
 		}
 	}
 
-	private Profile findOwnedActiveProfile(Long userId, Long profileId) {
-		return profileRepository.findByIdAndUserIdAndDeletedAtIsNull(profileId, userId)
-				.orElseThrow(this::profileNotFound);
+	private Profile findAuthorizedProfile(UserPrincipal principal, Long profileId) {
+		return profileAccessService.resolve(principal, profileId);
 	}
 
 	private void checkVersion(Profile profile, Long expectedVersion) {
@@ -144,10 +143,6 @@ public class CertificateService {
 			cause = cause.getCause();
 		}
 		return false;
-	}
-
-	private ApiException profileNotFound() {
-		return new ApiException(HttpStatus.NOT_FOUND, ErrorCode.PROFILE_NOT_FOUND, "Profile not found");
 	}
 
 	private ApiException certificateNotFound() {

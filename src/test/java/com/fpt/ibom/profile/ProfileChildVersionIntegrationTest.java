@@ -19,6 +19,7 @@ import com.fpt.ibom.MySqlIntegrationTest;
 import com.fpt.ibom.auth.entity.UserAccount;
 import com.fpt.ibom.auth.entity.UserRole;
 import com.fpt.ibom.auth.entity.UserStatus;
+import com.fpt.ibom.auth.security.UserPrincipal;
 import com.fpt.ibom.auth.repository.UserAccountRepository;
 import com.fpt.ibom.auth.security.UserPrincipal;
 import com.fpt.ibom.exception.ApiException;
@@ -110,58 +111,58 @@ class ProfileChildVersionIntegrationTest extends MySqlIntegrationTest {
 		Skill spring = saveSkill("Spring-" + UUID.randomUUID());
 		long version = 0L;
 
-		EducationMutationResponse education = educationService.create(user.getId(), profile.getId(),
+		EducationMutationResponse education = educationService.create(userPrincipal(user), profile.getId(),
 				new EducationRequest("School", "Degree", "Field", LocalDate.of(2020, 1, 1), null, "ONGOING", version));
 		version = assertPersistedVersion(profile, version, education.profileVersion());
-		EducationMutationResponse updatedEducation = educationService.update(user.getId(), profile.getId(),
+		EducationMutationResponse updatedEducation = educationService.update(userPrincipal(user), profile.getId(),
 				education.education().id(), new EducationRequest("Updated School", "Degree", "Field",
 						LocalDate.of(2020, 1, 1), LocalDate.of(2022, 1, 1), "COMPLETED", version));
 		version = assertPersistedVersion(profile, version, updatedEducation.profileVersion());
-		ProfileVersionResponse deletedEducation = educationService.delete(user.getId(), profile.getId(),
+		ProfileVersionResponse deletedEducation = educationService.delete(userPrincipal(user), profile.getId(),
 				education.education().id(), version);
 		version = assertPersistedVersion(profile, version, deletedEducation.profileVersion());
 		assertTrue(educationRepository.findById(education.education().id()).isEmpty());
 
-		ProfileLanguageMutationResponse profileLanguage = profileLanguageService.create(user.getId(), profile.getId(),
+		ProfileLanguageMutationResponse profileLanguage = profileLanguageService.create(userPrincipal(user), profile.getId(),
 				new ProfileLanguageRequest(english.getId(), "NATIVE", version));
 		version = assertPersistedVersion(profile, version, profileLanguage.profileVersion());
-		ProfileLanguageMutationResponse updatedProfileLanguage = profileLanguageService.update(user.getId(), profile.getId(),
+		ProfileLanguageMutationResponse updatedProfileLanguage = profileLanguageService.update(userPrincipal(user), profile.getId(),
 				profileLanguage.profileLanguage().profileLanguageId(),
 				new ProfileLanguageRequest(vietnamese.getId(), "ADVANCED", version));
 		version = assertPersistedVersion(profile, version, updatedProfileLanguage.profileVersion());
-		ProfileVersionResponse deletedProfileLanguage = profileLanguageService.delete(user.getId(), profile.getId(),
+		ProfileVersionResponse deletedProfileLanguage = profileLanguageService.delete(userPrincipal(user), profile.getId(),
 				profileLanguage.profileLanguage().profileLanguageId(), version);
 		version = assertPersistedVersion(profile, version, deletedProfileLanguage.profileVersion());
 		assertTrue(profileLanguageRepository.findById(profileLanguage.profileLanguage().profileLanguageId()).isEmpty());
 
-		CertificateMutationResponse certificate = certificateService.create(user.getId(), profile.getId(),
+		CertificateMutationResponse certificate = certificateService.create(userPrincipal(user), profile.getId(),
 				new CertificateRequest("AWS", LocalDate.of(2024, 1, 1), version));
 		version = assertPersistedVersion(profile, version, certificate.profileVersion());
-		CertificateMutationResponse updatedCertificate = certificateService.update(user.getId(), profile.getId(),
+		CertificateMutationResponse updatedCertificate = certificateService.update(userPrincipal(user), profile.getId(),
 				certificate.certificate().id(), new CertificateRequest("GCP", LocalDate.of(2024, 2, 1), version));
 		version = assertPersistedVersion(profile, version, updatedCertificate.profileVersion());
-		ProfileVersionResponse deletedCertificate = certificateService.delete(user.getId(), profile.getId(),
+		ProfileVersionResponse deletedCertificate = certificateService.delete(userPrincipal(user), profile.getId(),
 				certificate.certificate().id(), version);
 		version = assertPersistedVersion(profile, version, deletedCertificate.profileVersion());
 		assertTrue(certificateRepository.findById(certificate.certificate().id()).isEmpty());
 
-		ProjectMutationResponse project = projectService.create(user.getId(), profile.getId(), projectRequest("ONGOING", version));
+		ProjectMutationResponse project = projectService.create(userPrincipal(user), profile.getId(), projectRequest("ONGOING", version));
 		version = assertPersistedVersion(profile, version, project.profileVersion());
-		ProjectMutationResponse updatedProject = projectService.update(user.getId(), profile.getId(), project.project().id(),
+		ProjectMutationResponse updatedProject = projectService.update(userPrincipal(user), profile.getId(), project.project().id(),
 				projectRequest("COMPLETED", version));
 		version = assertPersistedVersion(profile, version, updatedProject.profileVersion());
-		ProfileVersionResponse deletedProject = projectService.delete(user.getId(), profile.getId(), project.project().id(), version);
+		ProfileVersionResponse deletedProject = projectService.delete(userPrincipal(user), profile.getId(), project.project().id(), version);
 		version = assertPersistedVersion(profile, version, deletedProject.profileVersion());
 		assertTrue(projectRepository.findById(project.project().id()).isEmpty());
 
-		ProfileSkillMutationResponse profileSkill = profileSkillService.create(user.getId(), profile.getId(),
+		ProfileSkillMutationResponse profileSkill = profileSkillService.create(userPrincipal(user), profile.getId(),
 				new ProfileSkillRequest(java.getId(), new BigDecimal("2.50"), LocalDate.of(2024, 1, 1), version));
 		version = assertPersistedVersion(profile, version, profileSkill.profileVersion());
-		ProfileSkillMutationResponse updatedProfileSkill = profileSkillService.update(user.getId(), profile.getId(),
+		ProfileSkillMutationResponse updatedProfileSkill = profileSkillService.update(userPrincipal(user), profile.getId(),
 				profileSkill.profileSkill().profileSkillId(),
 				new ProfileSkillRequest(spring.getId(), new BigDecimal("3.50"), LocalDate.of(2025, 1, 1), version));
 		version = assertPersistedVersion(profile, version, updatedProfileSkill.profileVersion());
-		ProfileVersionResponse deletedProfileSkill = profileSkillService.delete(user.getId(), profile.getId(),
+		ProfileVersionResponse deletedProfileSkill = profileSkillService.delete(userPrincipal(user), profile.getId(),
 				profileSkill.profileSkill().profileSkillId(), version);
 		version = assertPersistedVersion(profile, version, deletedProfileSkill.profileVersion());
 		assertTrue(profileSkillRepository.findById(profileSkill.profileSkill().profileSkillId()).isEmpty());
@@ -179,12 +180,12 @@ class ProfileChildVersionIntegrationTest extends MySqlIntegrationTest {
 		profile.markExportedAt(exportedAt);
 		profile = profileRepository.saveAndFlush(profile);
 
-		EducationMutationResponse first = educationService.create(user.getId(), profile.getId(),
+		EducationMutationResponse first = educationService.create(userPrincipal(user), profile.getId(),
 				new EducationRequest("First School", "Degree", null, LocalDate.of(2020, 1, 1), null, "ONGOING", 0L));
 		assertEquals(1L, first.profileVersion());
 		assertEquals(1L, profileRepository.findById(profile.getId()).orElseThrow().getVersion());
 
-		EducationMutationResponse second = educationService.create(user.getId(), profile.getId(),
+		EducationMutationResponse second = educationService.create(userPrincipal(user), profile.getId(),
 				new EducationRequest("Second School", "Degree", null, LocalDate.of(2021, 1, 1), null, "ONGOING",
 						first.profileVersion()));
 		assertEquals(2L, second.profileVersion());
@@ -201,14 +202,14 @@ class ProfileChildVersionIntegrationTest extends MySqlIntegrationTest {
 		TransactionTemplate transaction = new TransactionTemplate(transactionManager);
 
 		Long finalVersion = transaction.execute(status -> {
-			EducationMutationResponse first = educationService.create(user.getId(), profile.getId(),
+			EducationMutationResponse first = educationService.create(userPrincipal(user), profile.getId(),
 					new EducationRequest("Transactional School", "Degree", null, LocalDate.of(2020, 1, 1), null,
 							"ONGOING", 0L));
 			Profile managedAfterFirstMutation = profileRepository.findById(profile.getId()).orElseThrow();
 			assertEquals(first.profileVersion(), managedAfterFirstMutation.getVersion());
 			assertFalse(managedAfterFirstMutation.isHasPreviewed());
 
-			CertificateMutationResponse second = certificateService.create(user.getId(), profile.getId(),
+			CertificateMutationResponse second = certificateService.create(userPrincipal(user), profile.getId(),
 					new CertificateRequest("Transactional Certificate", LocalDate.of(2024, 1, 1),
 							first.profileVersion()));
 			assertEquals(first.profileVersion() + 1, second.profileVersion());
@@ -228,7 +229,7 @@ class ProfileChildVersionIntegrationTest extends MySqlIntegrationTest {
 		Profile profile = saveProfile(user, true);
 
 		ApiException conflict = org.junit.jupiter.api.Assertions.assertThrows(ApiException.class,
-				() -> educationService.create(user.getId(), profile.getId(), new EducationRequest("Stale School", "Degree",
+				() -> educationService.create(userPrincipal(user), profile.getId(), new EducationRequest("Stale School", "Degree",
 						null, LocalDate.of(2020, 1, 1), null, "ONGOING", 1L)));
 
 		assertEquals(ErrorCode.PROFILE_VERSION_CONFLICT, conflict.getErrorCode());
@@ -297,7 +298,7 @@ class ProfileChildVersionIntegrationTest extends MySqlIntegrationTest {
 			throws InterruptedException {
 		start.await();
 		try {
-			return educationService.create(user.getId(), profile.getId(), new EducationRequest(schoolName, "Degree", null,
+			return educationService.create(userPrincipal(user), profile.getId(), new EducationRequest(schoolName, "Degree", null,
 					LocalDate.of(2020, 1, 1), null, "ONGOING", 0L));
 		} catch (ApiException exception) {
 			return exception;
@@ -313,6 +314,10 @@ class ProfileChildVersionIntegrationTest extends MySqlIntegrationTest {
 		} catch (ApiException exception) {
 			return exception;
 		}
+	}
+
+	private UserPrincipal userPrincipal(UserAccount user) {
+		return new UserPrincipal(user.getId(), user.getEmail(), user.getUsername(), user.getRole());
 	}
 
 	private long assertPersistedVersion(Profile profile, long previousVersion, long responseVersion) {

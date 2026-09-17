@@ -5,6 +5,7 @@ import java.util.Locale;
 
 import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.exception.ErrorCode;
+import com.fpt.ibom.auth.security.UserPrincipal;
 import com.fpt.ibom.master.entity.Language;
 import com.fpt.ibom.master.repository.LanguageRepository;
 import com.fpt.ibom.profile.dto.ProfileLanguageMutationResponse;
@@ -15,7 +16,6 @@ import com.fpt.ibom.profile.entity.LanguageLevel;
 import com.fpt.ibom.profile.entity.Profile;
 import com.fpt.ibom.profile.entity.ProfileLanguage;
 import com.fpt.ibom.profile.repository.ProfileLanguageRepository;
-import com.fpt.ibom.profile.repository.ProfileRepository;
 import jakarta.persistence.OptimisticLockException;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -29,21 +29,21 @@ public class ProfileLanguageService {
 	private static final String PROFILE_LANGUAGE_UNIQUE_CONSTRAINT = "uk_profile_languages_profile_language";
 
 	private final ProfileLanguageRepository profileLanguageRepository;
-	private final ProfileRepository profileRepository;
+	private final ProfileAccessService profileAccessService;
 	private final LanguageRepository languageRepository;
 	private final ProfileVersionService profileVersionService;
 
-	public ProfileLanguageService(ProfileLanguageRepository profileLanguageRepository, ProfileRepository profileRepository,
+	public ProfileLanguageService(ProfileLanguageRepository profileLanguageRepository, ProfileAccessService profileAccessService,
 			LanguageRepository languageRepository, ProfileVersionService profileVersionService) {
 		this.profileLanguageRepository = profileLanguageRepository;
-		this.profileRepository = profileRepository;
+		this.profileAccessService = profileAccessService;
 		this.languageRepository = languageRepository;
 		this.profileVersionService = profileVersionService;
 	}
 
 	@Transactional(readOnly = true)
-	public List<ProfileLanguageResponse> list(Long userId, Long profileId) {
-		findOwnedActiveProfile(userId, profileId);
+	public List<ProfileLanguageResponse> list(UserPrincipal principal, Long profileId) {
+		findAuthorizedProfile(principal, profileId);
 		return profileLanguageRepository.findByProfileId(profileId).stream()
 				.sorted(ProfileDisplayOrder.languageComparator())
 				.map(ProfileLanguageResponse::from).toList();
@@ -55,8 +55,8 @@ public class ProfileLanguageService {
 	}
 
 	@Transactional
-	public ProfileLanguageMutationResponse create(Long userId, Long profileId, ProfileLanguageRequest request) {
-		Profile profile = findOwnedActiveProfile(userId, profileId);
+	public ProfileLanguageMutationResponse create(UserPrincipal principal, Long profileId, ProfileLanguageRequest request) {
+		Profile profile = findAuthorizedProfile(principal, profileId);
 		CanonicalProfileLanguage canonical = canonicalize(request);
 		checkVersion(profile, request.version());
 		Language language = findLanguage(canonical.languageId());
@@ -80,9 +80,9 @@ public class ProfileLanguageService {
 	}
 
 	@Transactional
-	public ProfileLanguageMutationResponse update(Long userId, Long profileId, Long profileLanguageId,
+	public ProfileLanguageMutationResponse update(UserPrincipal principal, Long profileId, Long profileLanguageId,
 			ProfileLanguageRequest request) {
-		Profile profile = findOwnedActiveProfile(userId, profileId);
+		Profile profile = findAuthorizedProfile(principal, profileId);
 		ProfileLanguage profileLanguage = profileLanguageRepository.findByIdAndProfileId(profileLanguageId, profileId)
 				.orElseThrow(this::profileLanguageNotFound);
 		CanonicalProfileLanguage canonical = canonicalize(request);
@@ -109,8 +109,8 @@ public class ProfileLanguageService {
 	}
 
 	@Transactional
-	public ProfileVersionResponse delete(Long userId, Long profileId, Long profileLanguageId, Long version) {
-		Profile profile = findOwnedActiveProfile(userId, profileId);
+	public ProfileVersionResponse delete(UserPrincipal principal, Long profileId, Long profileLanguageId, Long version) {
+		Profile profile = findAuthorizedProfile(principal, profileId);
 		ProfileLanguage profileLanguage = profileLanguageRepository.findByIdAndProfileId(profileLanguageId, profileId)
 				.orElseThrow(this::profileLanguageNotFound);
 		checkVersion(profile, version);
@@ -124,9 +124,8 @@ public class ProfileLanguageService {
 		}
 	}
 
-	private Profile findOwnedActiveProfile(Long userId, Long profileId) {
-		return profileRepository.findByIdAndUserIdAndDeletedAtIsNull(profileId, userId)
-				.orElseThrow(this::profileNotFound);
+	private Profile findAuthorizedProfile(UserPrincipal principal, Long profileId) {
+		return profileAccessService.resolve(principal, profileId);
 	}
 
 	private void checkVersion(Profile profile, Long expectedVersion) {
@@ -163,10 +162,6 @@ public class ProfileLanguageService {
 			cause = cause.getCause();
 		}
 		return false;
-	}
-
-	private ApiException profileNotFound() {
-		return new ApiException(HttpStatus.NOT_FOUND, ErrorCode.PROFILE_NOT_FOUND, "Profile not found");
 	}
 
 	private ApiException languageNotFound() {
