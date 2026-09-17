@@ -116,6 +116,29 @@ class SkillIntegrationTest extends MySqlIntegrationTest {
 	}
 
 	@Test
+	void authenticatedCategoryReadReturnsAllSeededCategoriesInSeedOrder() throws Exception {
+		UserAccount member = saveUser(UserRole.MEMBER);
+
+		mockMvc.perform(get("/api/master/skill-categories").with(authentication(userPrincipal(member))))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.length()").value(7))
+				.andExpect(jsonPath("$.data[0].code").value("PROGRAMMING_LANGUAGE"))
+				.andExpect(jsonPath("$.data[0].name").value("Programming Language"))
+				.andExpect(jsonPath("$.data[1].code").value("FRONTEND"))
+				.andExpect(jsonPath("$.data[1].name").value("Frontend"))
+				.andExpect(jsonPath("$.data[2].code").value("BACKEND"))
+				.andExpect(jsonPath("$.data[2].name").value("Backend"))
+				.andExpect(jsonPath("$.data[3].code").value("MOBILE_GAME"))
+				.andExpect(jsonPath("$.data[3].name").value("Mobile & Game"))
+				.andExpect(jsonPath("$.data[4].code").value("DATABASE_DATA"))
+				.andExpect(jsonPath("$.data[4].name").value("Database & Data"))
+				.andExpect(jsonPath("$.data[5].code").value("CLOUD_DEVOPS"))
+				.andExpect(jsonPath("$.data[5].name").value("Cloud & DevOps"))
+				.andExpect(jsonPath("$.data[6].code").value("API_MESSAGING_TESTING"))
+				.andExpect(jsonPath("$.data[6].name").value("API, Messaging & Testing"));
+	}
+
+	@Test
 	void databaseEnforcesTrimmedNamesCaseInsensitiveUniquenessAndCategoryForeignKey() {
 		SkillCategory category = skillCategoryRepository.findByCode("BACKEND").orElseThrow();
 		String marker = "skill-" + UUID.randomUUID();
