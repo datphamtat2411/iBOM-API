@@ -38,6 +38,7 @@ public class SeniorityService {
 	@Transactional
 	public SeniorityResponse create(SeniorityMutationRequest request) {
 		CanonicalRange candidate = canonicalize(request);
+		seniorityRepository.lockMutationSection();
 		if (seniorityRepository.existsByNameIgnoreCase(candidate.name())) {
 			throw duplicateName();
 		}
@@ -55,6 +56,7 @@ public class SeniorityService {
 
 	@Transactional
 	public SeniorityResponse update(Long seniorityId, SeniorityMutationRequest request) {
+		seniorityRepository.lockMutationSection();
 		Seniority seniority = seniorityRepository.findById(seniorityId).orElseThrow(this::notFound);
 		CanonicalRange candidate = canonicalize(request);
 		if (seniorityRepository.existsByNameIgnoreCaseAndIdNot(candidate.name(), seniorityId)) {

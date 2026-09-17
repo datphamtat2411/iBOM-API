@@ -12,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 
 import com.fpt.ibom.auth.entity.UserRole;
@@ -51,7 +52,8 @@ class SeniorityControllerTest {
 
 	@Test
 	void mapsAllCrudRoutesAndCommonResponseStructure() throws Exception {
-		SeniorityResponse response = new SeniorityResponse(12L, "Junior", new BigDecimal("0.00"), new BigDecimal("2.00"));
+		SeniorityResponse response = new SeniorityResponse(12L, "Junior", new BigDecimal("0.00"), new BigDecimal("2.00"),
+				Instant.parse("2026-01-01T00:00:00Z"), Instant.parse("2026-01-02T00:00:00Z"));
 		when(seniorityService.list()).thenReturn(List.of(response));
 		when(seniorityService.create(any())).thenReturn(response);
 		when(seniorityService.update(any(Long.class), any())).thenReturn(response);
@@ -60,13 +62,19 @@ class SeniorityControllerTest {
 				.andExpect(status().isOk()).andExpect(jsonPath("$.code").value(200))
 				.andExpect(jsonPath("$.data[0].id").value(12)).andExpect(jsonPath("$.data[0].name").value("Junior"))
 				.andExpect(jsonPath("$.data[0].fromExperience").value(0.0))
-				.andExpect(jsonPath("$.data[0].toExperience").value(2.0));
+				.andExpect(jsonPath("$.data[0].toExperience").value(2.0))
+				.andExpect(jsonPath("$.data[0].createdAt").value("2026-01-01T00:00:00Z"))
+				.andExpect(jsonPath("$.data[0].updatedAt").value("2026-01-02T00:00:00Z"));
 		mockMvc.perform(post("/api/master/seniority").with(principal(UserRole.MANAGER)).contentType(MediaType.APPLICATION_JSON)
 				.content(requestJson("Junior", "0", "2"))).andExpect(status().isCreated())
-				.andExpect(jsonPath("$.code").value(201));
+				.andExpect(jsonPath("$.code").value(201))
+				.andExpect(jsonPath("$.data.createdAt").value("2026-01-01T00:00:00Z"))
+				.andExpect(jsonPath("$.data.updatedAt").value("2026-01-02T00:00:00Z"));
 		mockMvc.perform(put("/api/master/seniority/12").with(principal(UserRole.ADMIN)).contentType(MediaType.APPLICATION_JSON)
 				.content(requestJson("Junior", "0", "2"))).andExpect(status().isOk())
-				.andExpect(jsonPath("$.data.id").value(12));
+				.andExpect(jsonPath("$.data.id").value(12))
+				.andExpect(jsonPath("$.data.createdAt").value("2026-01-01T00:00:00Z"))
+				.andExpect(jsonPath("$.data.updatedAt").value("2026-01-02T00:00:00Z"));
 		mockMvc.perform(delete("/api/master/seniority/12").with(principal(UserRole.MANAGER)))
 				.andExpect(status().isOk()).andExpect(jsonPath("$.code").value(200));
 	}
