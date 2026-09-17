@@ -70,4 +70,13 @@ class FileNameFormatIntegrationTest extends MySqlIntegrationTest {
 		assertThrows(DataIntegrityViolationException.class, () -> fileNameFormatRepository.saveAndFlush(
 				new FileNameFormat("Second default " + UUID.randomUUID(), "{FirstName}_{Date}", true)));
 	}
+
+	@Test
+	void enforcesCaseInsensitiveFormatNameUniqueness() {
+		String name = "Unique Format " + UUID.randomUUID();
+		fileNameFormatRepository.saveAndFlush(new FileNameFormat(name, "{LastName}_{Date}", false));
+
+		assertThrows(DataIntegrityViolationException.class, () -> fileNameFormatRepository.saveAndFlush(
+				new FileNameFormat(name.toLowerCase(), "{FirstName}_{Date}", false)));
+	}
 }

@@ -51,4 +51,9 @@ public class FileNameFormat {
 	public boolean isDefault() { return isDefault; }
 	public Instant getCreatedAt() { return createdAt; }
 	public Instant getUpdatedAt() { return updatedAt; }
+
+	public void update(String name, String pattern) {
+		this.name = name.trim();
+		this.pattern = pattern.trim();
+	}
 }
