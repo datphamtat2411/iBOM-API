@@ -11,8 +11,10 @@ import org.springframework.web.ErrorResponseException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -33,6 +35,12 @@ public class GlobalExceptionHandler {
 		return ResponseEntity.badRequest()
 				.body(new ApiResponse<>(HttpStatus.BAD_REQUEST.value(), ErrorCode.VALIDATION_ERROR, "Validation failed",
 						validationErrors));
+	}
+
+	@ExceptionHandler({ MissingServletRequestParameterException.class, MethodArgumentTypeMismatchException.class })
+	public ResponseEntity<ApiResponse<Object>> handleRequestBindingException(Exception exception) {
+		return ResponseEntity.badRequest()
+				.body(new ApiResponse<>(HttpStatus.BAD_REQUEST.value(), ErrorCode.VALIDATION_ERROR, "Validation failed", null));
 	}
 
 	@ExceptionHandler(ErrorResponseException.class)

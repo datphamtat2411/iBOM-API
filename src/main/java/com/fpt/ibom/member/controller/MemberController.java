@@ -1,8 +1,12 @@
 package com.fpt.ibom.member.controller;
 
+import java.util.List;
+
 import com.fpt.ibom.auth.entity.UserStatus;
 import com.fpt.ibom.common.ApiResponse;
 import com.fpt.ibom.common.PageResponse;
+import com.fpt.ibom.member.dto.MemberSkillSearchRequest;
+import com.fpt.ibom.member.dto.MemberSkillSearchResponse;
 import com.fpt.ibom.member.dto.MemberSummaryResponse;
 import com.fpt.ibom.member.service.MemberService;
 import org.springframework.http.ResponseEntity;
@@ -29,6 +33,16 @@ public class MemberController {
 			@RequestParam(required = false) String status) {
 		UserStatus statusFilter = status == null ? null : parseStatus(status);
 		return ResponseEntity.ok(new ApiResponse<>(200, "Success", memberService.list(page, size, search, statusFilter)));
+	}
+
+	@GetMapping("/search-by-skill")
+	public ResponseEntity<ApiResponse<PageResponse<MemberSkillSearchResponse>>> searchBySkill(
+			@RequestParam List<Long> skillIds, @RequestParam List<Long> seniorityIds,
+			@RequestParam(required = false) String status, @RequestParam(defaultValue = "0") int page,
+			@RequestParam(defaultValue = "10") int size) {
+		UserStatus statusFilter = status == null ? null : parseStatus(status);
+		MemberSkillSearchRequest request = new MemberSkillSearchRequest(skillIds, seniorityIds, statusFilter, page, size);
+		return ResponseEntity.ok(new ApiResponse<>(200, "Success", memberService.searchBySkill(request)));
 	}
 
 	private UserStatus parseStatus(String status) {
