@@ -6,6 +6,8 @@ import java.util.Optional;
 import com.fpt.ibom.profile.entity.ProfileLanguage;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface ProfileLanguageRepository extends JpaRepository<ProfileLanguage, Long> {
 
@@ -21,4 +23,10 @@ public interface ProfileLanguageRepository extends JpaRepository<ProfileLanguage
 	boolean existsByProfileIdAndLanguageIdAndIdNot(Long profileId, Long languageId, Long profileLanguageId);
 
 	boolean existsByLanguageId(Long languageId);
+
+	@EntityGraph(attributePaths = { "profile", "language" })
+	@Query("select profileLanguage from ProfileLanguage profileLanguage "
+			+ "where profileLanguage.profile.deletedAt is null "
+			+ "and profileLanguage.language.id in :languageIds")
+	List<ProfileLanguage> findActiveByLanguageIds(@Param("languageIds") List<Long> languageIds);
 }
