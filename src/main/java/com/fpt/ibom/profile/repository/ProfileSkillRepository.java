@@ -2,6 +2,7 @@ package com.fpt.ibom.profile.repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.math.BigDecimal;
 
 import com.fpt.ibom.profile.entity.ProfileSkill;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -21,4 +22,9 @@ public interface ProfileSkillRepository extends JpaRepository<ProfileSkill, Long
 	boolean existsBySkillId(Long skillId);
 
 	boolean existsByProfileIdAndSkillIdAndIdNot(Long profileId, Long skillId, Long profileSkillId);
+
+	boolean existsByExperienceYearsGreaterThanEqualAndExperienceYearsLessThan(BigDecimal fromExperience,
+			BigDecimal toExperience);
+
+	boolean existsByExperienceYearsGreaterThanEqual(BigDecimal fromExperience);
 }

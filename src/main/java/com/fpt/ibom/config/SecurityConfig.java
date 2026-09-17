@@ -96,6 +96,12 @@ public class SecurityConfig {
 							.hasAnyRole("MANAGER", "ADMIN")
 						.requestMatchers(HttpMethod.DELETE, "/api/master/languages/*")
 							.hasAnyRole("MANAGER", "ADMIN")
+						.requestMatchers(HttpMethod.POST, "/api/master/seniority")
+						.hasAnyRole("MANAGER", "ADMIN")
+						.requestMatchers(HttpMethod.PUT, "/api/master/seniority/**")
+						.hasAnyRole("MANAGER", "ADMIN")
+						.requestMatchers(HttpMethod.DELETE, "/api/master/seniority/**")
+						.hasAnyRole("MANAGER", "ADMIN")
 						.anyRequest().authenticated()
 				)
 				.exceptionHandling(exceptions -> exceptions
