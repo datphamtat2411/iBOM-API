@@ -2,6 +2,8 @@ package com.fpt.ibom.master;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.security.core.authority.AuthorityUtils.createAuthorityList;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -20,6 +22,7 @@ import com.fpt.ibom.auth.repository.UserAccountRepository;
 import com.fpt.ibom.auth.security.UserPrincipal;
 import com.fpt.ibom.config.SecurityConfig;
 import com.fpt.ibom.master.controller.SeniorityController;
+import com.fpt.ibom.master.dto.SeniorityMutationRequest;
 import com.fpt.ibom.master.dto.SeniorityResponse;
 import com.fpt.ibom.master.service.SeniorityService;
 import org.junit.jupiter.api.Test;
@@ -99,6 +102,41 @@ class SeniorityControllerTest {
 		mockMvc.perform(get("/api/master/seniority")).andExpect(status().isUnauthorized());
 		mockMvc.perform(post("/api/master/seniority").with(principal(UserRole.MANAGER)).contentType(MediaType.APPLICATION_JSON)
 				.content("{}")).andExpect(status().isBadRequest()).andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"));
+	}
+
+	@Test
+	void rejectsDecimalValuesOutsideDatabasePrecisionBeforeService() throws Exception {
+		mockMvc.perform(post("/api/master/seniority").with(principal(UserRole.MANAGER))
+				.contentType(MediaType.APPLICATION_JSON).content(requestJson("Large from", "1000.00", "1001.00")))
+				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"));
+		mockMvc.perform(post("/api/master/seniority").with(principal(UserRole.MANAGER))
+				.contentType(MediaType.APPLICATION_JSON).content(requestJson("Precise from", "0.001", "1.00")))
+				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"));
+		mockMvc.perform(put("/api/master/seniority/12").with(principal(UserRole.MANAGER))
+				.contentType(MediaType.APPLICATION_JSON).content(requestJson("Large to", "0.00", "1000.00")))
+				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"));
+		mockMvc.perform(put("/api/master/seniority/12").with(principal(UserRole.MANAGER))
+				.contentType(MediaType.APPLICATION_JSON).content(requestJson("Precise to", "0.00", "1.001")))
+				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"));
+
+		verifyNoInteractions(seniorityService);
+	}
+
+	@Test
+	void acceptsDecimalBoundariesAndNullableUnlimitedOnMutations() throws Exception {
+		SeniorityMutationRequest unlimited = new SeniorityMutationRequest("Maximum", new BigDecimal("999.99"), null);
+		SeniorityMutationRequest finite = new SeniorityMutationRequest("Minimum", new BigDecimal("0.00"),
+				new BigDecimal("999.99"));
+
+		mockMvc.perform(post("/api/master/seniority").with(principal(UserRole.MANAGER))
+				.contentType(MediaType.APPLICATION_JSON).content(requestJson("Maximum", "999.99", null)))
+				.andExpect(status().isCreated());
+		mockMvc.perform(put("/api/master/seniority/12").with(principal(UserRole.ADMIN))
+				.contentType(MediaType.APPLICATION_JSON).content(requestJson("Minimum", "0.00", "999.99")))
+				.andExpect(status().isOk());
+
+		verify(seniorityService).create(unlimited);
+		verify(seniorityService).update(12L, finite);
 	}
 
 	private org.springframework.test.web.servlet.request.RequestPostProcessor principal(UserRole role) {

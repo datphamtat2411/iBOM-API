@@ -36,6 +36,7 @@ import com.fpt.ibom.master.repository.SeniorityRepository;
 import com.fpt.ibom.master.service.SeniorityService;
 import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.exception.ErrorCode;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -68,6 +69,11 @@ class SeniorityIntegrationTest extends MySqlIntegrationTest {
 
 	@Autowired
 	private JdbcTemplate jdbcTemplate;
+
+	@BeforeEach
+	void clearSeniorityData() {
+		seniorityRepository.deleteAllInBatch();
+	}
 
 	@Test
 	void migrationCreatesSenioritySchemaAndConstraints() {
