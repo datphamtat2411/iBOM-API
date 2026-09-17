@@ -30,6 +30,7 @@ import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.exception.ErrorCode;
 import com.fpt.ibom.profile.entity.Profile;
 import com.fpt.ibom.profile.repository.ProfileRepository;
+import com.fpt.ibom.profile.service.ProfileAccessService;
 import com.fpt.ibom.profile.service.ProfileVersionService;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
@@ -158,7 +159,7 @@ class CvPreviewServiceTest {
 		Profile managerProfile = profile(9L, 8L, UserRole.MANAGER, 0L);
 		Profile adminProfile = profile(10L, 9L, UserRole.ADMIN, 0L);
 		ProfileRepository profiles = org.mockito.Mockito.mock(ProfileRepository.class);
-		CvProfileAccessService profileAccess = new CvProfileAccessService(profiles);
+		CvProfileAccessService profileAccess = new CvProfileAccessService(new ProfileAccessService(profiles));
 		when(profiles.findByIdAndDeletedAtIsNull(8L)).thenReturn(Optional.of(memberProfile));
 		when(profiles.findByIdAndDeletedAtIsNull(9L)).thenReturn(Optional.of(managerProfile));
 		when(profiles.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(adminProfile));

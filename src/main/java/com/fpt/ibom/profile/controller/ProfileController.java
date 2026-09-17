@@ -62,7 +62,7 @@ public class ProfileController {
 	@GetMapping("/{profileId}")
 	public ResponseEntity<ApiResponse<ProfileDetailResponse>> get(@AuthenticationPrincipal UserPrincipal principal,
 			@PathVariable Long profileId) {
-		return ResponseEntity.ok(new ApiResponse<>(200, "Success", profileService.get(principal.userId(), profileId)));
+		return ResponseEntity.ok(new ApiResponse<>(200, "Success", profileService.get(principal, profileId)));
 	}
 
 	@GetMapping("/{profileId}/completeness")

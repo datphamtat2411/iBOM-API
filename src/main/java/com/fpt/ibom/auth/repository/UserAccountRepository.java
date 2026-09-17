@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import com.fpt.ibom.auth.entity.UserAccount;
+import com.fpt.ibom.auth.entity.UserRole;
 
 public interface UserAccountRepository extends JpaRepository<UserAccount, Long> {
 	Optional<UserAccount> findByEmailIgnoreCase(String email);
@@ -24,4 +25,6 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, Long> 
 	boolean existsByEmailIgnoreCase(String email);
 	boolean existsByUsernameIgnoreCase(String username);
 	boolean existsByUsernameIgnoreCaseAndIdNot(String username, Long id);
+
+	Optional<UserAccount> findByIdAndRole(Long id, UserRole role);
 }

@@ -269,7 +269,8 @@ class ProfileControllerTest {
 
 	@Test
 	void returnsProfileDetailAndNotFoundContract() throws Exception {
-		when(profileService.get(7L, 8L)).thenReturn(new ProfileDetailResponse(8L, "Default", "First", "Last",
+		when(profileService.get(org.mockito.ArgumentMatchers.any(UserPrincipal.class), org.mockito.ArgumentMatchers.eq(8L)))
+				.thenReturn(new ProfileDetailResponse(8L, "Default", "First", "Last",
 				"Engineer", null, "Personality", "Summary", false, 3L, null, null, null, null));
 
 		mockMvc.perform(get("/api/profiles/8").with(principal())).andExpect(status().isOk())
@@ -285,10 +286,22 @@ class ProfileControllerTest {
 				.andExpect(jsonPath("$.data.phoneNumber").doesNotExist())
 				.andExpect(jsonPath("$.data.address").doesNotExist());
 
-		when(profileService.get(7L, 9L)).thenThrow(new ApiException(HttpStatus.NOT_FOUND, ErrorCode.PROFILE_NOT_FOUND,
+		when(profileService.get(org.mockito.ArgumentMatchers.any(UserPrincipal.class), org.mockito.ArgumentMatchers.eq(9L)))
+				.thenThrow(new ApiException(HttpStatus.NOT_FOUND, ErrorCode.PROFILE_NOT_FOUND,
 				"Profile not found"));
 		mockMvc.perform(get("/api/profiles/9").with(principal())).andExpect(status().isNotFound())
 				.andExpect(jsonPath("$.errorCode").value("PROFILE_NOT_FOUND"));
+	}
+
+	@Test
+	void preservesOwnerSelfServiceProfileDetailReads() throws Exception {
+		when(profileService.get(org.mockito.ArgumentMatchers.any(UserPrincipal.class), org.mockito.ArgumentMatchers.eq(8L)))
+				.thenReturn(new ProfileDetailResponse(8L, "Default", "First", "Last", "Engineer", null, null, null,
+						false, 0L, null, null, null, null));
+
+		mockMvc.perform(get("/api/profiles/8").with(principal())).andExpect(status().isOk());
+		verify(profileService).get(org.mockito.ArgumentMatchers.argThat((UserPrincipal user) -> user.userId().equals(7L)),
+				org.mockito.ArgumentMatchers.eq(8L));
 	}
 
 	@Test

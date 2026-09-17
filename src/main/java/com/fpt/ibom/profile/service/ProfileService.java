@@ -1,6 +1,8 @@
 package com.fpt.ibom.profile.service;
 
 import com.fpt.ibom.auth.entity.UserAccount;
+import com.fpt.ibom.auth.entity.UserRole;
+import com.fpt.ibom.auth.security.UserPrincipal;
 import com.fpt.ibom.auth.repository.UserAccountRepository;
 import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.exception.ErrorCode;
@@ -26,10 +28,13 @@ public class ProfileService {
 	private static final String ACTIVE_PROFILE_NAME_CONSTRAINT = "uk_profiles_user_active_name";
 	private final ProfileRepository profileRepository;
 	private final UserAccountRepository userAccountRepository;
+	private final ProfileAccessService profileAccessService;
 
-	public ProfileService(ProfileRepository profileRepository, UserAccountRepository userAccountRepository) {
+	public ProfileService(ProfileRepository profileRepository, UserAccountRepository userAccountRepository,
+			ProfileAccessService profileAccessService) {
 		this.profileRepository = profileRepository;
 		this.userAccountRepository = userAccountRepository;
+		this.profileAccessService = profileAccessService;
 	}
 
 	@Transactional
@@ -59,9 +64,19 @@ public class ProfileService {
 	}
 
 	@Transactional(readOnly = true)
+	public List<ProfileSummaryResponse> listMemberProfiles(Long memberId) {
+		userAccountRepository.findByIdAndRole(memberId, UserRole.MEMBER).orElseThrow(this::profileNotFound);
+		return list(memberId);
+	}
+
+	@Transactional(readOnly = true)
+	public ProfileDetailResponse get(UserPrincipal principal, Long profileId) {
+		return ProfileDetailResponse.from(profileAccessService.resolve(principal, profileId));
+	}
+
+	@Transactional(readOnly = true)
 	public ProfileDetailResponse get(Long userId, Long profileId) {
-		return profileRepository.findByIdAndUserIdAndDeletedAtIsNull(profileId, userId)
-				.map(ProfileDetailResponse::from).orElseThrow(this::profileNotFound);
+		return get(new UserPrincipal(userId, "", "", UserRole.MEMBER), profileId);
 	}
 
 	@Transactional

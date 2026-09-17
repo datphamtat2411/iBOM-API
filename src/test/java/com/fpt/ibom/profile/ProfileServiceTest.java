@@ -20,6 +20,7 @@ import com.fpt.ibom.auth.entity.UserAccount;
 import com.fpt.ibom.auth.entity.UserRole;
 import com.fpt.ibom.auth.entity.UserStatus;
 import com.fpt.ibom.auth.repository.UserAccountRepository;
+import com.fpt.ibom.auth.security.UserPrincipal;
 import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.exception.ErrorCode;
 import com.fpt.ibom.profile.dto.ProfileRequest;
@@ -28,6 +29,7 @@ import com.fpt.ibom.profile.dto.ProfileDetailResponse;
 import com.fpt.ibom.profile.dto.ProfileSummaryResponse;
 import com.fpt.ibom.profile.entity.Profile;
 import com.fpt.ibom.profile.repository.ProfileRepository;
+import com.fpt.ibom.profile.service.ProfileAccessService;
 import com.fpt.ibom.profile.service.ProfileService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -39,7 +41,8 @@ import org.hibernate.exception.ConstraintViolationException;
 class ProfileServiceTest {
 	private final ProfileRepository profiles = mock(ProfileRepository.class);
 	private final UserAccountRepository users = mock(UserAccountRepository.class);
-	private final ProfileService service = new ProfileService(profiles, users);
+	private final ProfileAccessService access = mock(ProfileAccessService.class);
+	private final ProfileService service = new ProfileService(profiles, users, access);
 
 	@Test
 	void createsProfileForPrincipalUserAndInitializesPreviewState() {
@@ -114,12 +117,37 @@ class ProfileServiceTest {
 	}
 
 	@Test
+	void listsActiveProfilesForAnExistingMemberRegardlessOfStatus() {
+		UserAccount inactiveMember = new UserAccount("member@example.com", "member", "hash", UserRole.MEMBER,
+				UserStatus.INACTIVE);
+		Profile profile = new Profile(inactiveMember, "Member Profile", "First", "Last", "Engineer", BigDecimal.ONE,
+				"Personality", "Summary");
+		when(users.findByIdAndRole(7L, UserRole.MEMBER)).thenReturn(Optional.of(inactiveMember));
+		when(profiles.findByUserIdAndDeletedAtIsNullOrderByUpdatedAtDescIdDesc(7L)).thenReturn(List.of(profile));
+
+		assertEquals(List.of("Member Profile"), service.listMemberProfiles(7L).stream()
+				.map(ProfileSummaryResponse::profileName).toList());
+	}
+
+	@Test
+	void rejectsMissingOrNonMemberListingTargetsBeforeProfileLookup() {
+		when(users.findByIdAndRole(7L, UserRole.MEMBER)).thenReturn(Optional.empty());
+
+		ApiException exception = assertThrows(ApiException.class, () -> service.listMemberProfiles(7L));
+
+		assertEquals(HttpStatus.NOT_FOUND, exception.getStatus());
+		assertEquals(ErrorCode.PROFILE_NOT_FOUND, exception.getErrorCode());
+		verify(profiles, never()).findByUserIdAndDeletedAtIsNullOrderByUpdatedAtDescIdDesc(any());
+	}
+
+	@Test
 	void mapsOwnedProfileDetailsIncludingVersion() {
 		Profile profile = new Profile(user(), "Default", "First", "Last", "Engineer", new BigDecimal("3.5"),
 				"Personality", "Summary");
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+		UserPrincipal principal = principal(7L, UserRole.MEMBER);
+		when(access.resolve(principal, 8L)).thenReturn(profile);
 
-		ProfileDetailResponse result = service.get(7L, 8L);
+		ProfileDetailResponse result = service.get(principal, 8L);
 
 		assertEquals("Default", result.profileName());
 		assertEquals("First", result.firstName());
@@ -132,9 +160,11 @@ class ProfileServiceTest {
 
 	@Test
 	void raisesProfileNotFoundWhenOwnedLookupIsAbsent() {
-		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.empty());
+		UserPrincipal principal = principal(7L, UserRole.MEMBER);
+		when(access.resolve(principal, 8L)).thenThrow(new ApiException(HttpStatus.NOT_FOUND,
+				ErrorCode.PROFILE_NOT_FOUND, "Profile not found"));
 
-		ApiException exception = assertThrows(ApiException.class, () -> service.get(7L, 8L));
+		ApiException exception = assertThrows(ApiException.class, () -> service.get(principal, 8L));
 
 		assertEquals(HttpStatus.NOT_FOUND, exception.getStatus());
 		assertEquals(ErrorCode.PROFILE_NOT_FOUND, exception.getErrorCode());
@@ -313,6 +343,10 @@ class ProfileServiceTest {
 
 	private UserAccount user() {
 		return new UserAccount("user@example.com", "member", "hash", UserRole.MEMBER, UserStatus.ACTIVE);
+	}
+
+	private UserPrincipal principal(Long userId, UserRole role) {
+		return new UserPrincipal(userId, "user@example.com", "user", role);
 	}
 
 	private ProfileRequest request() {
