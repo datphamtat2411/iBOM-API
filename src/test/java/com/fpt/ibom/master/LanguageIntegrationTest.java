@@ -6,8 +6,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.http.MediaType.APPLICATION_JSON;
 
 import java.util.List;
 import java.util.Locale;
@@ -21,6 +25,11 @@ import com.fpt.ibom.auth.repository.UserAccountRepository;
 import com.fpt.ibom.auth.security.UserPrincipal;
 import com.fpt.ibom.master.entity.Language;
 import com.fpt.ibom.master.repository.LanguageRepository;
+import com.fpt.ibom.profile.entity.LanguageLevel;
+import com.fpt.ibom.profile.entity.Profile;
+import com.fpt.ibom.profile.entity.ProfileLanguage;
+import com.fpt.ibom.profile.repository.ProfileLanguageRepository;
+import com.fpt.ibom.profile.repository.ProfileRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -30,6 +39,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.orm.jpa.JpaSystemException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest
@@ -44,6 +54,12 @@ class LanguageIntegrationTest extends MySqlIntegrationTest {
 
 	@Autowired
 	private UserAccountRepository userRepository;
+
+	@Autowired
+	private ProfileRepository profileRepository;
+
+	@Autowired
+	private ProfileLanguageRepository profileLanguageRepository;
 
 	@Autowired
 	private JdbcTemplate jdbcTemplate;
@@ -108,14 +124,73 @@ class LanguageIntegrationTest extends MySqlIntegrationTest {
 				.andExpect(jsonPath("$.data.content[0].name").value(prefix + "-Zulu"));
 	}
 
+	@Test
+	void languageCrudTrimsNamesAndRestrictsMemberMutations() throws Exception {
+		UserAccount manager = saveUser(UserRole.MANAGER);
+		UserAccount member = saveUser(UserRole.MEMBER);
+
+		String name = "Managed-" + UUID.randomUUID();
+		var created = mockMvc.perform(post("/api/master/languages").with(authentication(userPrincipal(manager)))
+				.contentType(APPLICATION_JSON).content("{\"name\":\"  " + name + "  \"}"))
+				.andExpect(status().isCreated()).andExpect(jsonPath("$.data.name").value(name))
+				.andReturn();
+		long languageId = com.fasterxml.jackson.databind.json.JsonMapper.builder().build()
+				.readTree(created.getResponse().getContentAsString()).get("data").get("id").asLong();
+
+		mockMvc.perform(put("/api/master/languages/" + languageId).with(authentication(userPrincipal(manager)))
+				.contentType(APPLICATION_JSON).content("{\"name\":\"  Updated-" + name + "  \"}"))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.data.name").value("Updated-" + name));
+		mockMvc.perform(delete("/api/master/languages/" + languageId).with(authentication(userPrincipal(member))))
+				.andExpect(status().isForbidden());
+		mockMvc.perform(delete("/api/master/languages/" + languageId).with(authentication(userPrincipal(manager))))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.data").doesNotExist());
+		assertTrue(languageRepository.findById(languageId).isEmpty());
+	}
+
+	@Test
+	void languageCrudRejectsDuplicateAndUnknownIds() throws Exception {
+		UserAccount manager = saveUser(UserRole.MANAGER);
+		String name = "Duplicate-" + UUID.randomUUID();
+		mockMvc.perform(post("/api/master/languages").with(authentication(userPrincipal(manager))).contentType(APPLICATION_JSON)
+				.content("{\"name\":\"" + name + "\"}"))
+				.andExpect(status().isCreated());
+		mockMvc.perform(post("/api/master/languages").with(authentication(userPrincipal(manager))).contentType(APPLICATION_JSON)
+				.content("{\"name\":\"  " + name.toUpperCase(Locale.ROOT) + "  \"}"))
+				.andExpect(status().isConflict()).andExpect(jsonPath("$.errorCode").value("LANGUAGE_ALREADY_EXISTS"));
+		mockMvc.perform(put("/api/master/languages/999999999").with(authentication(userPrincipal(manager)))
+				.contentType(APPLICATION_JSON).content("{\"name\":\"English\"}"))
+				.andExpect(status().isNotFound()).andExpect(jsonPath("$.errorCode").value("LANGUAGE_NOT_FOUND"));
+	}
+
+	@Test
+	void referencedLanguageCannotBeDeletedAndProfileLanguageRemains() throws Exception {
+		UserAccount manager = saveUser(UserRole.MANAGER);
+		UserAccount owner = saveUser(UserRole.MEMBER);
+		Profile profile = profileRepository.saveAndFlush(new Profile(owner, "profile-" + UUID.randomUUID(), "First",
+				"Last", "Developer", java.math.BigDecimal.ZERO, null, null));
+		Language language = languageRepository.saveAndFlush(new Language("Referenced-" + UUID.randomUUID()));
+		ProfileLanguage profileLanguage = profileLanguageRepository.saveAndFlush(
+				new ProfileLanguage(profile, language, LanguageLevel.BEGINNER));
+
+		mockMvc.perform(delete("/api/master/languages/" + language.getId()).with(authentication(userPrincipal(manager))))
+				.andExpect(status().isConflict()).andExpect(jsonPath("$.errorCode").value("LANGUAGE_IN_USE"));
+		assertTrue(profileLanguageRepository.findById(profileLanguage.getId()).isPresent());
+		assertTrue(languageRepository.findById(language.getId()).isPresent());
+	}
+
 	private UserAccount saveUser() {
+		return saveUser(UserRole.MEMBER);
+	}
+
+	private UserAccount saveUser(UserRole role) {
 		return userRepository.saveAndFlush(new UserAccount(UUID.randomUUID() + "@example.com",
-				"language-user-" + UUID.randomUUID(), "hash", UserRole.MEMBER, UserStatus.ACTIVE));
+				"language-user-" + UUID.randomUUID(), "hash", role, UserStatus.ACTIVE));
 	}
 
 	private Authentication userPrincipal(UserAccount user) {
 		return new UsernamePasswordAuthenticationToken(
-				new UserPrincipal(user.getId(), user.getEmail(), user.getUsername(), user.getRole()), null, List.of());
+				new UserPrincipal(user.getId(), user.getEmail(), user.getUsername(), user.getRole()), null,
+				List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name())));
 	}
 
 	private void assertDatabaseIntegrityViolation(Runnable action) {

@@ -49,6 +49,11 @@ public class ProfileLanguageService {
 				.map(ProfileLanguageResponse::from).toList();
 	}
 
+	@Transactional(readOnly = true)
+	public boolean existsByLanguageId(Long languageId) {
+		return profileLanguageRepository.existsByLanguageId(languageId);
+	}
+
 	@Transactional
 	public ProfileLanguageMutationResponse create(Long userId, Long profileId, ProfileLanguageRequest request) {
 		Profile profile = findOwnedActiveProfile(userId, profileId);

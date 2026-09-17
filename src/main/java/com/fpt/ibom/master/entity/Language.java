@@ -34,11 +34,19 @@ public class Language {
 	}
 
 	public Language(String name) {
-		this.name = name;
+		this.name = canonicalize(name);
 	}
 
 	public Long getId() { return id; }
 	public String getName() { return name; }
 	public Instant getCreatedAt() { return createdAt; }
 	public Instant getUpdatedAt() { return updatedAt; }
+
+	public void update(String name) {
+		this.name = canonicalize(name);
+	}
+
+	private String canonicalize(String name) {
+		return name == null ? null : name.trim();
+	}
 }

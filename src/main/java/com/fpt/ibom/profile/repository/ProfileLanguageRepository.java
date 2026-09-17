@@ -19,4 +19,6 @@ public interface ProfileLanguageRepository extends JpaRepository<ProfileLanguage
 	boolean existsByProfileIdAndLanguageId(Long profileId, Long languageId);
 
 	boolean existsByProfileIdAndLanguageIdAndIdNot(Long profileId, Long languageId, Long profileLanguageId);
+
+	boolean existsByLanguageId(Long languageId);
 }
