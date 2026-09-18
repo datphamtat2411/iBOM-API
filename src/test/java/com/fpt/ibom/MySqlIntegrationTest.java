@@ -22,7 +22,8 @@ public abstract class MySqlIntegrationTest {
 			return new MySQLContainer<>("mysql:8.0.46")
 					.withDatabaseName("ibom_test")
 					.withUsername("ibom_test")
-					.withPassword("ibom_test_password");
+					.withPassword("ibom_test_password")
+					.withUrlParam("serverTimezone", "UTC");
 		}
 	}
 }

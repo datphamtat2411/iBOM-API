@@ -34,6 +34,8 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 class MemberIntegrationTest extends MySqlIntegrationTest {
 
+	private static final Instant LATEST_PROFILE_UPDATE = Instant.parse("2026-01-05T00:00:00Z");
+
 	@Autowired
 	private MockMvc mockMvc;
 
@@ -54,11 +56,11 @@ class MemberIntegrationTest extends MySqlIntegrationTest {
 		UserAccount manager = saveUser("manager-" + UUID.randomUUID(), UserRole.MANAGER, UserStatus.ACTIVE);
 		Profile activeProfile = profileRepository.saveAndFlush(profile(alpha, "active"));
 		Profile deletedProfile = profileRepository.saveAndFlush(profile(alpha, "deleted"));
-		deletedProfile.softDelete(Instant.parse("2026-01-05T00:00:00Z"));
+		deletedProfile.softDelete(LATEST_PROFILE_UPDATE);
 		profileRepository.saveAndFlush(deletedProfile);
 		setUpdatedAt(alpha, Instant.parse("2026-01-03T00:00:00Z"));
 		setUpdatedAt(activeProfile, Instant.parse("2026-01-02T00:00:00Z"));
-		setUpdatedAt(deletedProfile, Instant.parse("2026-01-05T00:00:00Z"));
+		setUpdatedAt(deletedProfile, LATEST_PROFILE_UPDATE);
 
 		mockMvc.perform(get("/api/members").param("size", "10").with(authentication(userPrincipal(manager))))
 				.andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(3))
@@ -66,7 +68,7 @@ class MemberIntegrationTest extends MySqlIntegrationTest {
 				.andExpect(jsonPath("$.data.content[1].username").value(beta.getUsername()))
 				.andExpect(jsonPath("$.data.content[2].username").value(inactive.getUsername()))
 				.andExpect(jsonPath("$.data.content[0].activeProfileCount").value(1))
-				.andExpect(jsonPath("$.data.content[0].lastUpdatedAt").value("2026-01-05T07:00:00Z"));
+				.andExpect(jsonPath("$.data.content[0].lastUpdatedAt").value(LATEST_PROFILE_UPDATE.toString()));
 
 		mockMvc.perform(get("/api/members").param("status", "ACTIVE").param("search", "ALPHA")
 				.with(authentication(userPrincipal(manager))))

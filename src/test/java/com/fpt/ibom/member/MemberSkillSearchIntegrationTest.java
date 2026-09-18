@@ -70,10 +70,10 @@ class MemberSkillSearchIntegrationTest extends MySqlIntegrationTest {
 		Seniority upper = seniorityRepository.saveAndFlush(new Seniority("Upper-" + UUID.randomUUID(),
 				new BigDecimal("3.00"), null));
 
-		UserAccount matching = saveUser("search-match-" + UUID.randomUUID(), UserStatus.ACTIVE);
-		UserAccount split = saveUser("search-split-" + UUID.randomUUID(), UserStatus.ACTIVE);
-		UserAccount inactive = saveUser("search-inactive-" + UUID.randomUUID(), UserStatus.INACTIVE);
-		UserAccount manager = saveUser("search-manager-" + UUID.randomUUID(), UserStatus.ACTIVE);
+		UserAccount matching = saveMember("search-match-" + UUID.randomUUID(), UserStatus.ACTIVE);
+		UserAccount split = saveMember("search-split-" + UUID.randomUUID(), UserStatus.ACTIVE);
+		UserAccount inactive = saveMember("search-inactive-" + UUID.randomUUID(), UserStatus.INACTIVE);
+		UserAccount manager = saveManager("search-manager-" + UUID.randomUUID(), UserStatus.ACTIVE);
 
 		Profile matchingProfile = saveProfile(matching, "matching");
 		profileSkillRepository.saveAndFlush(new ProfileSkill(matchingProfile, firstSkill, new BigDecimal("1.00"), null));
@@ -113,9 +113,17 @@ class MemberSkillSearchIntegrationTest extends MySqlIntegrationTest {
 				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"));
 }
 
-	private UserAccount saveUser(String username, UserStatus status) {
+	private UserAccount saveMember(String username, UserStatus status) {
+		return saveUser(username, UserRole.MEMBER, status);
+	}
+
+	private UserAccount saveManager(String username, UserStatus status) {
+		return saveUser(username, UserRole.MANAGER, status);
+	}
+
+	private UserAccount saveUser(String username, UserRole role, UserStatus status) {
 		return userAccountRepository.saveAndFlush(new UserAccount(username + "@example.com", username, "hash",
-				UserRole.MEMBER, status));
+				role, status));
 	}
 
 	private Profile saveProfile(UserAccount user, String name) {
