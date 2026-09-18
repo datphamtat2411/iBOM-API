@@ -65,15 +65,13 @@ class ProfileAccessServiceTest {
 	}
 
 	@Test
-	void preservesCvForbiddenSemanticsThroughSharedPolicy() {
-		Profile profile = profile(8L, 7L, UserRole.MEMBER);
+	void inactiveMemberProfilesRemainEligibleForAuthorizedAccess() {
+		Profile profile = profile(8L, 7L, UserRole.MEMBER, UserStatus.INACTIVE);
 		when(profiles.findByIdAndDeletedAtIsNull(8L)).thenReturn(Optional.of(profile));
 
-		ApiException exception = assertThrows(ApiException.class,
-				() -> service.resolveForCv(principal(20L, UserRole.MEMBER), 8L));
-
-		assertEquals(HttpStatus.FORBIDDEN, exception.getStatus());
-		assertEquals(ErrorCode.REQUEST_FAILED, exception.getErrorCode());
+		assertSame(profile, service.resolve(principal(7L, UserRole.MEMBER), 8L));
+		assertSame(profile, service.resolve(principal(20L, UserRole.MANAGER), 8L));
+		assertSame(profile, service.resolve(principal(21L, UserRole.ADMIN), 8L));
 	}
 
 	private void assertNotFound(Executable executable) {
@@ -87,8 +85,12 @@ class ProfileAccessServiceTest {
 	}
 
 	private Profile profile(Long profileId, Long userId, UserRole role) {
+		return profile(profileId, userId, role, UserStatus.ACTIVE);
+	}
+
+	private Profile profile(Long profileId, Long userId, UserRole role, UserStatus status) {
 		UserAccount user = new UserAccount("user" + userId + "@example.com", "user" + userId, "hash", role,
-				UserStatus.ACTIVE);
+				status);
 		ReflectionTestUtils.setField(user, "id", userId);
 		Profile profile = new Profile(user, "Profile", "First", "Last", "Engineer", BigDecimal.ONE, "Personality",
 				"Summary");

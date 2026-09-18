@@ -68,11 +68,11 @@ class CvPreviewControllerTest {
 	@Test
 	void mapsCentralizedProfileErrorsWithoutWrappingSuccessfulBinaryResponses() throws Exception {
 		when(previewService.preview(userPrincipal(), 8L)).thenThrow(
-				new ApiException(HttpStatus.FORBIDDEN, ErrorCode.REQUEST_FAILED, "Forbidden"));
+				new ApiException(HttpStatus.NOT_FOUND, ErrorCode.PROFILE_NOT_FOUND, "Profile not found"));
 
 		mockMvc.perform(get("/api/cv/preview/8").with(principal()))
-				.andExpect(status().isForbidden())
-				.andExpect(jsonPath("$.errorCode").value("REQUEST_FAILED"));
+				.andExpect(status().isNotFound())
+				.andExpect(jsonPath("$.errorCode").value("PROFILE_NOT_FOUND"));
 
 		when(previewService.preview(userPrincipal(), 9L)).thenThrow(
 				new ApiException(HttpStatus.NOT_FOUND, ErrorCode.PROFILE_NOT_FOUND, "Profile not found"));

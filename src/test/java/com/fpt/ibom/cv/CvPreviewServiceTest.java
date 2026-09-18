@@ -143,13 +143,14 @@ class CvPreviewServiceTest {
 
 	@Test
 	void memberCannotPreviewAnotherMembersProfile() {
-		ApiException forbidden = new ApiException(HttpStatus.FORBIDDEN, ErrorCode.REQUEST_FAILED, "Forbidden");
-		when(access.resolve(principal(7L, UserRole.MEMBER), 8L)).thenThrow(forbidden);
+		ApiException notFound = new ApiException(HttpStatus.NOT_FOUND, ErrorCode.PROFILE_NOT_FOUND, "Profile not found");
+		when(access.resolve(principal(7L, UserRole.MEMBER), 8L)).thenThrow(notFound);
 
 		ApiException exception = assertThrows(ApiException.class,
 				() -> service.preview(principal(7L, UserRole.MEMBER), 8L));
 
-		assertEquals(HttpStatus.FORBIDDEN, exception.getStatus());
+		assertEquals(HttpStatus.NOT_FOUND, exception.getStatus());
+		assertEquals(ErrorCode.PROFILE_NOT_FOUND, exception.getErrorCode());
 		verifyNoInteractions(assembler, renderer, versions);
 	}
 
@@ -169,11 +170,11 @@ class CvPreviewServiceTest {
 		assertEquals(adminProfile, profileAccess.resolve(principal(9L, UserRole.ADMIN), 10L));
 		assertEquals(memberProfile, profileAccess.resolve(principal(20L, UserRole.MANAGER), 8L));
 		assertEquals(memberProfile, profileAccess.resolve(principal(20L, UserRole.ADMIN), 8L));
-		assertEquals(HttpStatus.FORBIDDEN,
+		assertEquals(HttpStatus.NOT_FOUND,
 				assertThrows(ApiException.class, () -> profileAccess.resolve(principal(20L, UserRole.MEMBER), 8L)).getStatus());
-		assertEquals(HttpStatus.FORBIDDEN,
+		assertEquals(HttpStatus.NOT_FOUND,
 				assertThrows(ApiException.class, () -> profileAccess.resolve(principal(20L, UserRole.MANAGER), 9L)).getStatus());
-		assertEquals(HttpStatus.FORBIDDEN,
+		assertEquals(HttpStatus.NOT_FOUND,
 				assertThrows(ApiException.class, () -> profileAccess.resolve(principal(20L, UserRole.ADMIN), 10L)).getStatus());
 
 		when(profiles.findByIdAndDeletedAtIsNull(11L)).thenReturn(Optional.empty());

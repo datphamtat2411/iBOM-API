@@ -122,12 +122,14 @@ class CvExportServiceTest {
 
 	@Test
 	void accessFailurePreventsAllCvDataAccess() {
-		ApiException forbidden = new ApiException(HttpStatus.FORBIDDEN, ErrorCode.REQUEST_FAILED, "Forbidden");
-		when(access.resolve(any(), eq(8L))).thenThrow(forbidden);
+		ApiException notFound = new ApiException(HttpStatus.NOT_FOUND, ErrorCode.PROFILE_NOT_FOUND, "Profile not found");
+		when(access.resolve(any(), eq(8L))).thenThrow(notFound);
 
-		assertThrows(ApiException.class,
+		ApiException exception = assertThrows(ApiException.class,
 				() -> service.export(principal(7L, UserRole.MEMBER), 8L, "pdf", null));
 
+		assertEquals(HttpStatus.NOT_FOUND, exception.getStatus());
+		assertEquals(ErrorCode.PROFILE_NOT_FOUND, exception.getErrorCode());
 		verifyNoInteractions(filenames.service(), assembler, pdfRenderer, docxRenderer, versions);
 	}
 

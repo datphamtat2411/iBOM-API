@@ -69,6 +69,52 @@ class CvPreviewIntegrationTest extends MySqlIntegrationTest {
 	}
 
 	@Test
+	void managerAndAdminCanPreviewActiveAndInactiveMemberProfilesButNotManagementProfiles() {
+		UserAccount activeMember = saveUser(UserRole.MEMBER, UserStatus.ACTIVE);
+		UserAccount inactiveMember = saveUser(UserRole.MEMBER, UserStatus.INACTIVE);
+		UserAccount manager = saveUser(UserRole.MANAGER, UserStatus.ACTIVE);
+		UserAccount admin = saveUser(UserRole.ADMIN, UserStatus.ACTIVE);
+		UserAccount otherManager = saveUser(UserRole.MANAGER, UserStatus.ACTIVE);
+		UserAccount otherAdmin = saveUser(UserRole.ADMIN, UserStatus.ACTIVE);
+		Profile activeProfile = saveProfile(activeMember, false);
+		Profile inactiveProfile = saveProfile(inactiveMember, false);
+		Profile managerProfile = saveProfile(otherManager, false);
+		Profile adminProfile = saveProfile(otherAdmin, false);
+
+		assertPdf(previewService.preview(principal(manager), activeProfile.getId()));
+		assertPdf(previewService.preview(principal(admin), inactiveProfile.getId()));
+
+		assertNotFound(() -> previewService.preview(principal(manager), managerProfile.getId()));
+		assertNotFound(() -> previewService.preview(principal(admin), adminProfile.getId()));
+	}
+
+	@Test
+	void missingUnauthorizedSoftDeletedAndManagementOwnedProfilesHaveTheSameNotFoundContract() {
+		UserAccount owner = saveUser(UserRole.MEMBER);
+		UserAccount foreignMember = saveUser(UserRole.MEMBER);
+		UserAccount manager = saveUser(UserRole.MANAGER);
+		Profile foreignProfile = saveProfile(owner, false);
+		Profile deletedProfile = saveProfile(owner, false);
+		deletedProfile.softDelete(Instant.parse("2026-01-01T00:00:00Z"));
+		profileRepository.saveAndFlush(deletedProfile);
+		Profile managementProfile = saveProfile(manager, false);
+
+		ApiException unauthorized = assertThrows(ApiException.class,
+				() -> previewService.preview(principal(foreignMember), foreignProfile.getId()));
+		ApiException missing = assertThrows(ApiException.class,
+				() -> previewService.preview(principal(owner), Long.MAX_VALUE));
+		ApiException deleted = assertThrows(ApiException.class,
+				() -> previewService.preview(principal(owner), deletedProfile.getId()));
+		ApiException management = assertThrows(ApiException.class,
+				() -> previewService.preview(principal(foreignMember), managementProfile.getId()));
+
+		assertNotFound(unauthorized);
+		assertNotFound(missing);
+		assertNotFound(deleted);
+		assertNotFound(management);
+	}
+
+	@Test
 	@Transactional
 	void conditionalPreviewMarkRejectsAStaleAssembledVersion() {
 		UserAccount owner = saveUser(UserRole.MEMBER);
@@ -86,8 +132,12 @@ class CvPreviewIntegrationTest extends MySqlIntegrationTest {
 	}
 
 	private UserAccount saveUser(UserRole role) {
+		return saveUser(role, UserStatus.ACTIVE);
+	}
+
+	private UserAccount saveUser(UserRole role, UserStatus status) {
 		return userRepository.saveAndFlush(new UserAccount(UUID.randomUUID() + "@example.com",
-				"user-" + UUID.randomUUID(), "hash", role, UserStatus.ACTIVE));
+				"user-" + UUID.randomUUID(), "hash", role, status));
 	}
 
 	private Profile saveProfile(UserAccount owner, boolean hasPreviewed) {
@@ -95,5 +145,27 @@ class CvPreviewIntegrationTest extends MySqlIntegrationTest {
 				"Personality", "Summary");
 		ReflectionTestUtils.setField(profile, "hasPreviewed", hasPreviewed);
 		return profileRepository.saveAndFlush(profile);
+	}
+
+	private UserPrincipal principal(UserAccount user) {
+		return new UserPrincipal(user.getId(), user.getEmail(), user.getUsername(), user.getRole());
+	}
+
+	private void assertPdf(byte[] pdf) {
+		assertTrue(new String(pdf, 0, 5, java.nio.charset.StandardCharsets.US_ASCII).startsWith("%PDF-"));
+	}
+
+	private void assertNotFound(ApiException exception) {
+		assertEquals(org.springframework.http.HttpStatus.NOT_FOUND, exception.getStatus());
+		assertEquals(ErrorCode.PROFILE_NOT_FOUND, exception.getErrorCode());
+	}
+
+	private void assertNotFound(Executable executable) {
+		assertNotFound(assertThrows(ApiException.class, executable::run));
+	}
+
+	@FunctionalInterface
+	private interface Executable {
+		void run();
 	}
 }

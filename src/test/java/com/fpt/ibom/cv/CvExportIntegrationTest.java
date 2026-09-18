@@ -16,6 +16,7 @@ import com.fpt.ibom.auth.entity.UserStatus;
 import com.fpt.ibom.auth.repository.UserAccountRepository;
 import com.fpt.ibom.auth.security.UserPrincipal;
 import com.fpt.ibom.cv.service.CvExportService;
+import com.fpt.ibom.cv.service.CvPreviewService;
 import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.exception.ErrorCode;
 import com.fpt.ibom.master.entity.FileNameFormat;
@@ -36,6 +37,9 @@ class CvExportIntegrationTest extends MySqlIntegrationTest {
 
 	@Autowired
 	private CvExportService exportService;
+
+	@Autowired
+	private CvPreviewService previewService;
 
 	@Autowired
 	private ProfileVersionService profileVersionService;
@@ -75,19 +79,28 @@ class CvExportIntegrationTest extends MySqlIntegrationTest {
 	}
 
 	@Test
-	void managerAndAdminCanExportMemberProfilesButMembersCannotExportAnotherMember() {
-		UserAccount owner = saveUser(UserRole.MEMBER);
+	void managerAndAdminCanExportActiveAndInactiveMemberProfilesButMembersCannotExportAnotherMember() {
+		UserAccount owner = saveUser(UserRole.MEMBER, UserStatus.ACTIVE);
+		UserAccount inactiveOwner = saveUser(UserRole.MEMBER, UserStatus.INACTIVE);
 		Profile profile = saveProfile(owner, true);
+		Profile inactiveProfile = saveProfile(inactiveOwner, true);
 		UserAccount manager = saveUser(UserRole.MANAGER);
 		UserAccount admin = saveUser(UserRole.ADMIN);
 
 		assertTrue(exportService.export(principal(manager), profile.getId(), "pdf", null).bytes().length > 0);
 		assertTrue(exportService.export(principal(admin), profile.getId(), "pdf", null).bytes().length > 0);
+		assertTrue(exportService.export(principal(manager), inactiveProfile.getId(), "pdf", null).bytes().length > 0);
+		assertTrue(exportService.export(principal(admin), inactiveProfile.getId(), "pdf", null).bytes().length > 0);
 
 		UserAccount otherMember = saveUser(UserRole.MEMBER);
-		ApiException forbidden = assertThrows(ApiException.class,
+		ApiException notFound = assertThrows(ApiException.class,
 				() -> exportService.export(principal(otherMember), profile.getId(), "pdf", null));
-		assertEquals(HttpStatus.FORBIDDEN, forbidden.getStatus());
+		assertNotFound(notFound);
+
+		Profile managerProfile = saveProfile(manager, true);
+		ApiException managerOwned = assertThrows(ApiException.class,
+				() -> exportService.export(principal(admin), managerProfile.getId(), "pdf", null));
+		assertNotFound(managerOwned);
 	}
 
 	@Test
@@ -95,16 +108,36 @@ class CvExportIntegrationTest extends MySqlIntegrationTest {
 		UserAccount owner = saveUser(UserRole.MEMBER);
 		Profile missing = saveProfile(owner, true);
 		profileRepository.delete(missing);
-		assertThrows(ApiException.class, () -> exportService.export(principal(owner), missing.getId(), "pdf", null));
+		ApiException missingException = assertThrows(ApiException.class,
+				() -> exportService.export(principal(owner), missing.getId(), "pdf", null));
 
 		Profile deleted = saveProfile(owner, true);
 		deleted.softDelete(Instant.parse("2026-01-01T00:00:00Z"));
 		profileRepository.saveAndFlush(deleted);
-		assertThrows(ApiException.class, () -> exportService.export(principal(owner), deleted.getId(), "pdf", null));
+		ApiException deletedException = assertThrows(ApiException.class,
+				() -> exportService.export(principal(owner), deleted.getId(), "pdf", null));
+		assertNotFound(missingException);
+		assertNotFound(deletedException);
 
 		Profile unpreviewed = saveProfile(owner, false);
 		ApiException previewRequired = assertThrows(ApiException.class,
 				() -> exportService.export(principal(owner), unpreviewed.getId(), "docx", null));
+		assertEquals(ErrorCode.CV_PREVIEW_REQUIRED, previewRequired.getErrorCode());
+	}
+
+	@Test
+	void previewByOneAuthorizedActorAllowsExportByAnotherAndUnpreviewedMemberProfilesStillRequirePreview() {
+		UserAccount owner = saveUser(UserRole.MEMBER);
+		UserAccount manager = saveUser(UserRole.MANAGER);
+		UserAccount admin = saveUser(UserRole.ADMIN);
+		Profile profile = saveProfile(owner, false);
+
+		previewService.preview(principal(manager), profile.getId());
+		assertTrue(exportService.export(principal(admin), profile.getId(), "pdf", null).bytes().length > 0);
+
+		Profile unpreviewed = saveProfile(owner, false);
+		ApiException previewRequired = assertThrows(ApiException.class,
+				() -> exportService.export(principal(manager), unpreviewed.getId(), "pdf", null));
 		assertEquals(ErrorCode.CV_PREVIEW_REQUIRED, previewRequired.getErrorCode());
 	}
 
@@ -128,8 +161,12 @@ class CvExportIntegrationTest extends MySqlIntegrationTest {
 	}
 
 	private UserAccount saveUser(UserRole role) {
+		return saveUser(role, UserStatus.ACTIVE);
+	}
+
+	private UserAccount saveUser(UserRole role, UserStatus status) {
 		return userRepository.saveAndFlush(new UserAccount(UUID.randomUUID() + "@example.com",
-				"user-" + UUID.randomUUID(), "hash", role, UserStatus.ACTIVE));
+				"user-" + UUID.randomUUID(), "hash", role, status));
 	}
 
 	private Profile saveProfile(UserAccount owner, boolean hasPreviewed) {
@@ -146,5 +183,10 @@ class CvExportIntegrationTest extends MySqlIntegrationTest {
 	
 	private UserPrincipal principal(UserAccount user) {
 		return new UserPrincipal(user.getId(), user.getEmail(), user.getUsername(), user.getRole());
+	}
+
+	private void assertNotFound(ApiException exception) {
+		assertEquals(HttpStatus.NOT_FOUND, exception.getStatus());
+		assertEquals(ErrorCode.PROFILE_NOT_FOUND, exception.getErrorCode());
 	}
 }

@@ -18,6 +18,6 @@ public class CvProfileAccessService {
 
 	@Transactional(readOnly = true)
 	public Profile resolve(UserPrincipal principal, Long profileId) {
-		return profileAccessService.resolveForCv(principal, profileId);
+		return profileAccessService.resolve(principal, profileId);
 	}
 }
