@@ -18,7 +18,10 @@ import com.fpt.ibom.auth.entity.UserStatus;
 import com.fpt.ibom.auth.repository.UserAccountRepository;
 import com.fpt.ibom.common.PageResponse;
 import com.fpt.ibom.exception.ApiException;
+import com.fpt.ibom.master.repository.SeniorityRepository;
+import com.fpt.ibom.master.repository.SkillRepository;
 import com.fpt.ibom.member.dto.MemberSummaryResponse;
+import com.fpt.ibom.member.repository.MemberSkillSearchRepository;
 import com.fpt.ibom.member.repository.MemberSummaryProjection;
 import com.fpt.ibom.member.service.MemberService;
 import org.junit.jupiter.api.Test;
@@ -31,7 +34,12 @@ import org.springframework.data.domain.Pageable;
 class MemberServiceTest {
 
 	private final UserAccountRepository userAccountRepository = org.mockito.Mockito.mock(UserAccountRepository.class);
-	private final MemberService memberService = new MemberService(userAccountRepository);
+	private final MemberSkillSearchRepository memberSkillSearchRepository = org.mockito.Mockito
+			.mock(MemberSkillSearchRepository.class);
+	private final SkillRepository skillRepository = org.mockito.Mockito.mock(SkillRepository.class);
+	private final SeniorityRepository seniorityRepository = org.mockito.Mockito.mock(SeniorityRepository.class);
+	private final MemberService memberService = new MemberService(userAccountRepository, memberSkillSearchRepository,
+			skillRepository, seniorityRepository);
 
 	@Test
 	void rejectsInvalidPaginationBeforeRepositoryAccess() {

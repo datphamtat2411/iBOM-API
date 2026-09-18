@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Arrays;
 
 import com.fpt.ibom.auth.entity.UserStatus;
+import com.fpt.ibom.auth.repository.UserAccountRepository;
 import com.fpt.ibom.common.PageResponse;
 import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.exception.ErrorCode;
@@ -36,7 +37,9 @@ class MemberSkillSearchServiceTest {
 	private final MemberSkillSearchRepository searchRepository = org.mockito.Mockito.mock(MemberSkillSearchRepository.class);
 	private final SkillRepository skillRepository = org.mockito.Mockito.mock(SkillRepository.class);
 	private final SeniorityRepository seniorityRepository = org.mockito.Mockito.mock(SeniorityRepository.class);
-	private final MemberService memberService = new MemberService(searchRepository, skillRepository, seniorityRepository);
+	private final UserAccountRepository userAccountRepository = org.mockito.Mockito.mock(UserAccountRepository.class);
+	private final MemberService memberService = new MemberService(userAccountRepository, searchRepository, skillRepository,
+			seniorityRepository);
 
 	@Test
 	void rejectsMissingEmptyUnequalMalformedDuplicateAndNonPositiveIds() {

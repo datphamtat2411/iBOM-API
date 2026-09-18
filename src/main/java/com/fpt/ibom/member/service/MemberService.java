@@ -39,21 +39,6 @@ public class MemberService {
 	private final SkillRepository skillRepository;
 	private final SeniorityRepository seniorityRepository;
 
-	public MemberService(UserAccountRepository userAccountRepository) {
-		this.userAccountRepository = userAccountRepository;
-		this.memberSkillSearchRepository = null;
-		this.skillRepository = null;
-		this.seniorityRepository = null;
-	}
-
-	public MemberService(MemberSkillSearchRepository memberSkillSearchRepository, SkillRepository skillRepository,
-			SeniorityRepository seniorityRepository) {
-		this.userAccountRepository = null;
-		this.memberSkillSearchRepository = memberSkillSearchRepository;
-		this.skillRepository = skillRepository;
-		this.seniorityRepository = seniorityRepository;
-	}
-
 	@Autowired
 	public MemberService(UserAccountRepository userAccountRepository,
 			MemberSkillSearchRepository memberSkillSearchRepository, SkillRepository skillRepository,
