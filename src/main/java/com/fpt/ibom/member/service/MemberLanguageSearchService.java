@@ -1,28 +1,24 @@
 package com.fpt.ibom.member.service;
 
 import java.time.Instant;
-import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import com.fpt.ibom.auth.entity.UserStatus;
-import com.fpt.ibom.auth.repository.UserAccountRepository;
 import com.fpt.ibom.common.PageResponse;
 import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.exception.ErrorCode;
 import com.fpt.ibom.master.repository.LanguageRepository;
-import com.fpt.ibom.member.dto.MemberLanguageSearchProfileResponse;
+import com.fpt.ibom.member.dto.MatchingProfileResponse;
 import com.fpt.ibom.member.dto.MemberLanguageSearchResponse;
-import com.fpt.ibom.member.repository.MemberSummaryProjection;
-import com.fpt.ibom.profile.dto.ProfileLanguageResponse;
+import com.fpt.ibom.member.repository.MemberLanguageSearchRepository;
 import com.fpt.ibom.profile.entity.LanguageLevel;
-import com.fpt.ibom.profile.entity.Profile;
-import com.fpt.ibom.profile.entity.ProfileLanguage;
-import com.fpt.ibom.profile.repository.ProfileLanguageRepository;
-import com.fpt.ibom.profile.service.ProfileDisplayOrder;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -33,14 +29,12 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class MemberLanguageSearchService {
 
-	private final UserAccountRepository userAccountRepository;
-	private final ProfileLanguageRepository profileLanguageRepository;
+	private final MemberLanguageSearchRepository searchRepository;
 	private final LanguageRepository languageRepository;
 
-	public MemberLanguageSearchService(UserAccountRepository userAccountRepository,
-			ProfileLanguageRepository profileLanguageRepository, LanguageRepository languageRepository) {
-		this.userAccountRepository = userAccountRepository;
-		this.profileLanguageRepository = profileLanguageRepository;
+	public MemberLanguageSearchService(MemberLanguageSearchRepository searchRepository,
+			LanguageRepository languageRepository) {
+		this.searchRepository = searchRepository;
 		this.languageRepository = languageRepository;
 	}
 
@@ -54,45 +48,30 @@ public class MemberLanguageSearchService {
 			}
 		}
 
-		List<ProfileLanguage> associations = profileLanguageRepository.findActiveByLanguageIds(languageIds);
-		Map<Long, Profile> profiles = new HashMap<>();
-		Map<Long, List<ProfileLanguage>> matchingLanguages = new HashMap<>();
-		for (ProfileLanguage association : associations) {
-			Profile profile = association.getProfile();
-			profiles.putIfAbsent(profile.getId(), profile);
-			int pairIndex = languageIds.indexOf(association.getLanguage().getId());
-			if (pairIndex >= 0 && association.getLevel() == requestedLevels.get(pairIndex)) {
-				matchingLanguages.computeIfAbsent(profile.getId(), ignored -> new java.util.ArrayList<>()).add(association);
-			}
+		List<MemberLanguageSearchRepository.Pair> pairs = new ArrayList<>();
+		for (int index = 0; index < languageIds.size(); index++) {
+			pairs.add(new MemberLanguageSearchRepository.Pair(languageIds.get(index), requestedLevels.get(index)));
 		}
 
-		Set<Long> matchingProfileIds = new HashSet<>();
-		for (Map.Entry<Long, List<ProfileLanguage>> entry : matchingLanguages.entrySet()) {
-			if (entry.getValue().size() == languageIds.size()) {
-				matchingProfileIds.add(entry.getKey());
-			}
-		}
-		if (matchingProfileIds.isEmpty()) {
-			return emptyPage(size);
-		}
-
-		Page<MemberSummaryProjection> members = findPage(page, size, status, matchingProfileIds);
+		Page<MemberLanguageSearchRepository.MemberRow> members = findPage(page, size, status, pairs);
 		if (members.getTotalElements() == 0) {
 			return emptyPage(size);
 		}
 		if (page >= members.getTotalPages()) {
-			members = findPage(members.getTotalPages() - 1, size, status, matchingProfileIds);
+			members = findPage(members.getTotalPages() - 1, size, status, pairs);
 		}
 
-		Map<Long, List<ProfileLanguage>> evidenceByProfile = new HashMap<>();
-		for (Long profileId : matchingProfileIds) {
-			if (matchingLanguages.containsKey(profileId)) {
-				evidenceByProfile.put(profileId, matchingLanguages.get(profileId));
-			}
-		}
-		return new PageResponse<>(members.getContent().stream()
-				.map(member -> toResponse(member, profiles, evidenceByProfile)).toList(), members.getNumber(), members.getSize(),
-				members.getTotalElements(), members.getTotalPages());
+		List<Long> memberIds = members.getContent().stream().map(MemberLanguageSearchRepository.MemberRow::id).toList();
+		List<MemberLanguageSearchRepository.ProfileMatchRow> evidence = searchRepository
+				.findMatchingProfiles(memberIds, pairs);
+		Map<Long, List<MemberLanguageSearchRepository.ProfileMatchRow>> evidenceByMember = evidence.stream()
+				.collect(Collectors.groupingBy(MemberLanguageSearchRepository.ProfileMatchRow::memberId,
+						LinkedHashMap::new, Collectors.toList()));
+
+		List<MemberLanguageSearchResponse> content = members.getContent().stream()
+				.map(member -> toResponse(member, evidenceByMember.getOrDefault(member.id(), List.of()))).toList();
+		return new PageResponse<>(content, members.getNumber(), members.getSize(), members.getTotalElements(),
+				members.getTotalPages());
 	}
 
 	private List<LanguageLevel> validate(List<Long> languageIds, List<String> levels, int page, int size) {
@@ -101,7 +80,7 @@ public class MemberLanguageSearchService {
 			throw validationError();
 		}
 		Set<Long> uniqueLanguageIds = new HashSet<>();
-		List<LanguageLevel> parsedLevels = new java.util.ArrayList<>();
+		List<LanguageLevel> parsedLevels = new ArrayList<>();
 		for (int index = 0; index < languageIds.size(); index++) {
 			Long languageId = languageIds.get(index);
 			if (languageId == null || languageId <= 0 || !uniqueLanguageIds.add(languageId)) {
@@ -116,32 +95,33 @@ public class MemberLanguageSearchService {
 		return parsedLevels;
 	}
 
-	private Page<MemberSummaryProjection> findPage(int page, int size, UserStatus status, Set<Long> profileIds) {
+	private Page<MemberLanguageSearchRepository.MemberRow> findPage(int page, int size, UserStatus status,
+			List<MemberLanguageSearchRepository.Pair> pairs) {
 		Pageable pageable = PageRequest.of(page, size);
-		return userAccountRepository.findMemberSummariesByProfileIds(status, profileIds.stream().sorted().toList(), pageable);
+		return searchRepository.findMembers(pairs, status, pageable);
 	}
 
-	private MemberLanguageSearchResponse toResponse(MemberSummaryProjection member, Map<Long, Profile> profiles,
-			Map<Long, List<ProfileLanguage>> evidenceByProfile) {
-		Instant lastUpdatedAt = member.getAccountUpdatedAt();
-		if (member.getProfileUpdatedAt() != null
-				&& (lastUpdatedAt == null || member.getProfileUpdatedAt().isAfter(lastUpdatedAt))) {
-			lastUpdatedAt = member.getProfileUpdatedAt();
-		}
-		List<MemberLanguageSearchProfileResponse> matchingProfiles = profiles.values().stream()
-				.filter(profile -> profile.getUser().getId().equals(member.getId()) && evidenceByProfile.containsKey(profile.getId()))
-				.sorted((first, second) -> {
-					int updatedOrder = java.util.Comparator.comparing(Profile::getUpdatedAt,
-							java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder())).compare(first, second);
-					return updatedOrder != 0 ? updatedOrder : Long.compare(second.getId(), first.getId());
-				})
-				.map(profile -> new MemberLanguageSearchProfileResponse(profile.getId(), profile.getProfileName(),
-						profile.getFirstName(), profile.getLastName(), profile.getJobTitle(), profile.getUpdatedAt(),
-						evidenceByProfile.get(profile.getId()).stream().sorted(ProfileDisplayOrder.languageComparator())
-								.map(ProfileLanguageResponse::from).toList()))
+	private MemberLanguageSearchResponse toResponse(MemberLanguageSearchRepository.MemberRow member,
+			List<MemberLanguageSearchRepository.ProfileMatchRow> evidence) {
+		Map<Long, MemberLanguageSearchRepository.ProfileMatchRow> profilesById = evidence.stream().collect(Collectors.toMap(
+				MemberLanguageSearchRepository.ProfileMatchRow::profileId, row -> row, (first, ignored) -> first,
+				LinkedHashMap::new));
+		List<MatchingProfileResponse> matchingProfiles = profilesById.values().stream()
+				.map(profile -> new MatchingProfileResponse(profile.profileId(), profile.profileName(), profile.firstName(),
+						profile.lastName(), profile.jobTitle(), profile.updatedAt()))
 				.toList();
-		return new MemberLanguageSearchResponse(member.getId(), member.getUsername(), member.getEmail(), member.getStatus(),
-				member.getActiveProfileCount(), lastUpdatedAt, matchingProfiles);
+		return new MemberLanguageSearchResponse(member.id(), member.username(), member.email(), member.status(),
+				member.activeProfileCount(), max(member.profileUpdatedAt(), member.accountUpdatedAt()), matchingProfiles);
+	}
+
+	private Instant max(Instant profileUpdatedAt, Instant accountUpdatedAt) {
+		if (profileUpdatedAt == null) {
+			return accountUpdatedAt;
+		}
+		if (accountUpdatedAt == null || profileUpdatedAt.isAfter(accountUpdatedAt)) {
+			return profileUpdatedAt;
+		}
+		return accountUpdatedAt;
 	}
 
 	private PageResponse<MemberLanguageSearchResponse> emptyPage(int size) {

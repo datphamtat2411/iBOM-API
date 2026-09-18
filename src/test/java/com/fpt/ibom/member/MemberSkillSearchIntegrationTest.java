@@ -100,7 +100,14 @@ class MemberSkillSearchIntegrationTest extends MySqlIntegrationTest {
 				.andExpect(jsonPath("$.data.totalElements").value(2))
 				.andExpect(jsonPath("$.data.content[0].id").value(matching.getId()))
 				.andExpect(jsonPath("$.data.content[0].matchingProfiles.length()").value(1))
-				.andExpect(jsonPath("$.data.content[0].matchingProfiles[0].matches.length()").value(2));
+				.andExpect(jsonPath("$.data.content[0].matchingProfiles[0].id").value(matchingProfile.getId()))
+				.andExpect(jsonPath("$.data.content[0].matchingProfiles[0].profileName")
+						.value(matchingProfile.getProfileName()))
+				.andExpect(jsonPath("$.data.content[0].matchingProfiles[0].firstName").value("First"))
+				.andExpect(jsonPath("$.data.content[0].matchingProfiles[0].lastName").value("Last"))
+				.andExpect(jsonPath("$.data.content[0].matchingProfiles[0].jobTitle").value("Engineer"))
+				.andExpect(jsonPath("$.data.content[0].matchingProfiles[0].updatedAt").exists())
+				.andExpect(jsonPath("$.data.content[0].matchingProfiles[0].matches").doesNotExist());
 
 		mockMvc.perform(get("/api/members/search-by-skill").param("skillIds", firstSkill.getId().toString(), secondSkill.getId().toString())
 				.param("seniorityIds", lower.getId().toString(), upper.getId().toString()).param("status", "INACTIVE")

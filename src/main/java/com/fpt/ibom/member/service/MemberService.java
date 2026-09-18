@@ -21,7 +21,6 @@ import com.fpt.ibom.member.dto.MatchingProfileResponse;
 import com.fpt.ibom.member.dto.MemberSkillSearchRequest;
 import com.fpt.ibom.member.dto.MemberSkillSearchResponse;
 import com.fpt.ibom.member.dto.MemberSummaryResponse;
-import com.fpt.ibom.member.dto.SkillSeniorityMatchResponse;
 import com.fpt.ibom.member.repository.MemberSkillSearchRepository;
 import com.fpt.ibom.member.repository.MemberSummaryProjection;
 import org.springframework.data.domain.Page;
@@ -110,7 +109,7 @@ public class MemberService {
 						Collectors.toList()));
 
 		List<MemberSkillSearchResponse> content = members.getContent().stream().map(member ->
-				toSearchResponse(member, evidenceByMember.getOrDefault(member.id(), List.of()), pairs)).toList();
+				toSearchResponse(member, evidenceByMember.getOrDefault(member.id(), List.of()))).toList();
 		return new PageResponse<>(content, members.getNumber(), members.getSize(), members.getTotalElements(),
 				members.getTotalPages());
 	}
@@ -165,22 +164,14 @@ public class MemberService {
 	}
 
 	private MemberSkillSearchResponse toSearchResponse(MemberSkillSearchRepository.MemberRow member,
-			List<MemberSkillSearchRepository.ProfileMatchRow> evidence, List<MemberSkillSearchRepository.Pair> pairs) {
+			List<MemberSkillSearchRepository.ProfileMatchRow> evidence) {
 		Map<Long, List<MemberSkillSearchRepository.ProfileMatchRow>> byProfile = evidence.stream()
 				.collect(Collectors.groupingBy(MemberSkillSearchRepository.ProfileMatchRow::profileId, LinkedHashMap::new,
 						Collectors.toList()));
 		List<MatchingProfileResponse> profiles = byProfile.values().stream().map(profileEvidence -> {
 			MemberSkillSearchRepository.ProfileMatchRow first = profileEvidence.get(0);
-			Map<Long, MemberSkillSearchRepository.ProfileMatchRow> bySkill = profileEvidence.stream()
-					.collect(Collectors.toMap(MemberSkillSearchRepository.ProfileMatchRow::skillId, Function.identity()));
-			List<SkillSeniorityMatchResponse> matches = pairs.stream()
-					.map(pair -> bySkill.get(pair.skillId()))
-					.map(match -> new SkillSeniorityMatchResponse(match.skillId(),
-							pairs.stream().filter(pair -> pair.skillId().equals(match.skillId())).findFirst().orElseThrow()
-									.seniorityId(), match.experienceYears()))
-					.toList();
 			return new MatchingProfileResponse(first.profileId(), first.profileName(), first.firstName(), first.lastName(),
-					first.jobTitle(), first.updatedAt(), matches);
+					first.jobTitle(), first.updatedAt());
 		}).toList();
 		return new MemberSkillSearchResponse(member.id(), member.username(), member.email(), member.status(),
 				member.activeProfileCount(), max(member.profileUpdatedAt(), member.accountUpdatedAt()), profiles);

@@ -8,7 +8,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 
@@ -22,7 +21,6 @@ import com.fpt.ibom.member.controller.MemberController;
 import com.fpt.ibom.member.dto.MatchingProfileResponse;
 import com.fpt.ibom.member.dto.MemberSkillSearchRequest;
 import com.fpt.ibom.member.dto.MemberSkillSearchResponse;
-import com.fpt.ibom.member.dto.SkillSeniorityMatchResponse;
 import com.fpt.ibom.member.service.MemberService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -62,8 +60,9 @@ class MemberSkillSearchControllerTest {
 		mockMvc.perform(get("/api/members/search-by-skill").param("skillIds", "1", "3")
 				.param("seniorityIds", "2", "4").with(principal(UserRole.MANAGER)))
 				.andExpect(status().isOk()).andExpect(jsonPath("$.code").value(200))
-				.andExpect(jsonPath("$.data.content[0].matchingProfiles[0].matches[0].skillId").value(1))
-				.andExpect(jsonPath("$.data.content[0].matchingProfiles[0].matches[0].seniorityId").value(2));
+				.andExpect(jsonPath("$.data.content[0].matchingProfiles[0].id").value(22))
+				.andExpect(jsonPath("$.data.content[0].matchingProfiles[0].profileName").value("CV"))
+				.andExpect(jsonPath("$.data.content[0].matchingProfiles[0].matches").doesNotExist());
 		verify(memberService).searchBySkill(eq(request));
 
 		MemberSkillSearchRequest explicit = new MemberSkillSearchRequest(List.of(1L), List.of(2L), UserStatus.INACTIVE, 2, 1);
@@ -108,8 +107,7 @@ class MemberSkillSearchControllerTest {
 		return new PageResponse<>(List.of(new MemberSkillSearchResponse(12L, "Alice", "alice@example.com",
 				UserStatus.ACTIVE, 1L, Instant.parse("2026-01-04T00:00:00Z"), List.of(
 						new MatchingProfileResponse(22L, "CV", "A", "One", "Engineer",
-								Instant.parse("2026-01-03T00:00:00Z"), List.of(
-										new SkillSeniorityMatchResponse(1L, 2L, new BigDecimal("2.00"))))))), 0, 10, 1, 1);
+								Instant.parse("2026-01-03T00:00:00Z"))))), 0, 10, 1, 1);
 	}
 
 	private org.springframework.test.web.servlet.request.RequestPostProcessor principal(UserRole role) {

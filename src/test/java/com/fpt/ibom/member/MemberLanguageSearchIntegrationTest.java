@@ -80,9 +80,13 @@ class MemberLanguageSearchIntegrationTest extends MySqlIntegrationTest {
 				.andExpect(jsonPath("$.data.content[0].username").value(matching.getUsername()))
 				.andExpect(jsonPath("$.data.content[0].activeProfileCount").value(2))
 				.andExpect(jsonPath("$.data.content[0].matchingProfiles.length()").value(2))
-				.andExpect(jsonPath("$.data.content[0].matchingProfiles[0].matchingLanguages.length()").value(2))
-				.andExpect(jsonPath("$.data.content[0].matchingProfiles[0].matchingLanguages[0].languageName").value("Vietnamese " + marker))
-				.andExpect(jsonPath("$.data.content[0].matchingProfiles[0].matchingLanguages[0].level").value("NATIVE"));
+				.andExpect(jsonPath("$.data.content[0].matchingProfiles[0].id").value(second.getId()))
+				.andExpect(jsonPath("$.data.content[0].matchingProfiles[0].profileName").value(second.getProfileName()))
+				.andExpect(jsonPath("$.data.content[0].matchingProfiles[0].firstName").value("First"))
+				.andExpect(jsonPath("$.data.content[0].matchingProfiles[0].lastName").value("Last"))
+				.andExpect(jsonPath("$.data.content[0].matchingProfiles[0].jobTitle").value("Engineer"))
+				.andExpect(jsonPath("$.data.content[0].matchingProfiles[0].updatedAt").exists())
+				.andExpect(jsonPath("$.data.content[0].matchingProfiles[0].matchingLanguages").doesNotExist());
 
 		mockMvc.perform(get("/api/members/search-by-language").param("languageIds", english.getId().toString(), vietnamese.getId().toString())
 				.param("levels", "ADVANCED", "NATIVE").param("status", "INACTIVE")

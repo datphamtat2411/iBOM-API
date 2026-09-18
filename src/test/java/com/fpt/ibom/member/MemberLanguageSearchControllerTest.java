@@ -19,10 +19,8 @@ import com.fpt.ibom.auth.security.UserPrincipal;
 import com.fpt.ibom.common.PageResponse;
 import com.fpt.ibom.config.SecurityConfig;
 import com.fpt.ibom.member.controller.MemberLanguageSearchController;
+import com.fpt.ibom.member.dto.MatchingProfileResponse;
 import com.fpt.ibom.member.dto.MemberLanguageSearchResponse;
-import com.fpt.ibom.member.dto.MemberLanguageSearchProfileResponse;
-import com.fpt.ibom.profile.dto.ProfileLanguageResponse;
-import com.fpt.ibom.profile.entity.LanguageLevel;
 import com.fpt.ibom.member.service.MemberLanguageSearchService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -62,7 +60,9 @@ class MemberLanguageSearchControllerTest {
 				.andExpect(status().isOk()).andExpect(jsonPath("$.code").value(200))
 				.andExpect(jsonPath("$.data.content[0].id").value(12))
 				.andExpect(jsonPath("$.data.content[0].matchingProfiles").isArray())
-				.andExpect(jsonPath("$.data.content[0].matchingProfiles[0].matchingLanguages").isArray())
+				.andExpect(jsonPath("$.data.content[0].matchingProfiles[0].id").value(18))
+				.andExpect(jsonPath("$.data.content[0].matchingProfiles[0].profileName").value("Primary"))
+				.andExpect(jsonPath("$.data.content[0].matchingProfiles[0].matchingLanguages").doesNotExist())
 				.andExpect(jsonPath("$.data.content[0].fullName").doesNotExist());
 		verify(service).search(List.of(1L, 2L), List.of("ADVANCED", "NATIVE"), 0, 10, null);
 
@@ -90,9 +90,8 @@ class MemberLanguageSearchControllerTest {
 	}
 
 	private PageResponse<MemberLanguageSearchResponse> page() {
-		ProfileLanguageResponse language = new ProfileLanguageResponse(19L, 1L, "English", LanguageLevel.ADVANCED);
-		MemberLanguageSearchProfileResponse profile = new MemberLanguageSearchProfileResponse(18L, "Primary", "First",
-				"Last", "Engineer", Instant.parse("2026-01-04T00:00:00Z"), List.of(language));
+		MatchingProfileResponse profile = new MatchingProfileResponse(18L, "Primary", "First", "Last", "Engineer",
+				Instant.parse("2026-01-04T00:00:00Z"));
 		MemberLanguageSearchResponse member = new MemberLanguageSearchResponse(12L, "Alice", "alice@example.com",
 				UserStatus.ACTIVE, 1L, Instant.parse("2026-01-04T00:00:00Z"), List.of(profile));
 		return new PageResponse<>(List.of(member), 0, 10, 1, 1);
