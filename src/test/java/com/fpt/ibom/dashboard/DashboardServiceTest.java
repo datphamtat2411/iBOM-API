@@ -179,6 +179,47 @@ class DashboardServiceTest {
 	}
 
 	@Test
+	void ignoresMalformedSkillsAndExcludesProfilesWithoutAValidSkill() {
+		Profile valid = profile(20L, 7L);
+		Profile mixed = profile(21L, 7L);
+		Profile withoutValidSkill = profile(22L, 7L);
+		Profile withUnusableCategory = profile(23L, 7L);
+		List<Profile> eligibleProfiles = List.of(valid, mixed, withoutValidSkill, withUnusableCategory);
+		SkillCategory backend = category(51L, "BACKEND", "Backend");
+		SkillCategory frontend = category(52L, "FRONTEND", "Frontend");
+		Skill java = skill(21L, "Java", backend);
+		Skill python = skill(22L, "Python", frontend);
+		Skill go = skill(23L, "Go", category(53L, null, null));
+		Skill malformed = skill(null, "Legacy", backend);
+		when(profileEligibilityService.findEligibleMemberProfiles()).thenReturn(eligibleProfiles);
+		when(profileCompletenessService.countCompleted(eligibleProfiles)).thenReturn(2);
+		when(profileSkillRepository.findByProfileIdIn(List.of(20L, 21L, 22L, 23L))).thenReturn(List.of(
+				new ProfileSkill(valid, java, new BigDecimal("5.00"), LocalDate.of(2025, 1, 1)),
+				new ProfileSkill(mixed, null, new BigDecimal("9.00"), LocalDate.of(2026, 1, 1)),
+				new ProfileSkill(mixed, python, new BigDecimal("4.00"), LocalDate.of(2024, 1, 1)),
+				new ProfileSkill(withoutValidSkill, null, BigDecimal.ONE, LocalDate.of(2024, 1, 1)),
+				new ProfileSkill(withoutValidSkill, malformed, new BigDecimal("8.00"), LocalDate.of(2026, 1, 1)),
+				new ProfileSkill(withUnusableCategory, go, new BigDecimal("3.00"), null)));
+
+		ManagerDashboardStatsResponse result = service.getManagerStats();
+
+		assertEquals(4, result.totalProfiles());
+		assertEquals(2, result.completedProfiles());
+		assertEquals(List.of("Go", "Java", "Python"), result.primarySkillDistribution().items().stream()
+				.map(ManagerDashboardStatsResponse.PrimarySkillItem::skillName).toList());
+		assertEquals(List.of(1L, 1L, 1L), result.primarySkillDistribution().items().stream()
+				.map(ManagerDashboardStatsResponse.PrimarySkillItem::profileCount).toList());
+		assertEquals(0, result.primarySkillDistribution().otherProfileCount());
+		assertEquals(List.of("Backend", "Frontend", "Uncategorized"), result.skillCategoryDistribution().items().stream()
+				.map(ManagerDashboardStatsResponse.SkillCategoryItem::categoryName).toList());
+		assertEquals(List.of(1L, 1L, 1L), result.skillCategoryDistribution().items().stream()
+				.map(ManagerDashboardStatsResponse.SkillCategoryItem::profileCount).toList());
+		assertEquals(List.of(33, 33, 33), result.skillCategoryDistribution().items().stream()
+				.map(ManagerDashboardStatsResponse.SkillCategoryItem::percentage).toList());
+		assertEquals(0, result.skillCategoryDistribution().otherProfileCount());
+	}
+
+	@Test
 	void keepsOnlySevenItemsAndSumsOmittedProfilesForBothDistributions() {
 		List<Profile> eligibleProfiles = java.util.stream.IntStream.rangeClosed(1, 8)
 				.mapToObj(index -> profile((long) index, 7L)).toList();

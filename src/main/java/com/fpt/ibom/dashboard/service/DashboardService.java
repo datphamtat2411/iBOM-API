@@ -11,6 +11,8 @@ import java.util.Map;
 import com.fpt.ibom.auth.security.UserPrincipal;
 import com.fpt.ibom.dashboard.dto.ManagerDashboardStatsResponse;
 import com.fpt.ibom.dashboard.dto.MemberDashboardStatsResponse;
+import com.fpt.ibom.master.entity.Skill;
+import com.fpt.ibom.master.entity.SkillCategory;
 import com.fpt.ibom.profile.dto.ProfileSummaryResponse;
 import com.fpt.ibom.profile.entity.Profile;
 import com.fpt.ibom.profile.entity.ProfileSkill;
@@ -61,6 +63,9 @@ public class DashboardService {
 		List<ProfileSkill> profileSkills = profileSkillRepository.findByProfileIdIn(profileIds);
 		Map<Long, List<ProfileSkill>> skillsByProfile = new HashMap<>();
 		for (ProfileSkill profileSkill : profileSkills) {
+			if (!isValidSkillContribution(profileSkill)) {
+				continue;
+			}
 			skillsByProfile.computeIfAbsent(profileSkill.getProfile().getId(), ignored -> new ArrayList<>()).add(profileSkill);
 		}
 
@@ -74,6 +79,14 @@ public class DashboardService {
 
 		return new ManagerDashboardStatsResponse(eligibleProfiles.size(), completedProfiles,
 				buildPrimaryDistribution(primarySkills), buildCategoryDistribution(primarySkills));
+	}
+
+	private boolean isValidSkillContribution(ProfileSkill profileSkill) {
+		if (profileSkill == null || profileSkill.getProfile() == null || profileSkill.getProfile().getId() == null) {
+			return false;
+		}
+		Skill skill = profileSkill.getSkill();
+		return skill != null && skill.getId() != null && skill.getName() != null && !skill.getName().isBlank();
 	}
 
 	private ProfileSkill selectPrimarySkill(List<ProfileSkill> profileSkills) {
@@ -137,11 +150,12 @@ public class DashboardService {
 	}
 
 	private CategoryKey categoryKey(ProfileSkill profileSkill) {
-		if (profileSkill.getSkill().getCategory() == null || profileSkill.getSkill().getCategory().getId() == null) {
+		SkillCategory category = profileSkill.getSkill().getCategory();
+		if (category == null || category.getId() == null || category.getCode() == null || category.getCode().isBlank()
+				|| category.getName() == null || category.getName().isBlank()) {
 			return new CategoryKey(null, null, "Uncategorized");
 		}
-		return new CategoryKey(profileSkill.getSkill().getCategory().getId(),
-				profileSkill.getSkill().getCategory().getCode(), profileSkill.getSkill().getCategory().getName());
+		return new CategoryKey(category.getId(), category.getCode(), category.getName());
 	}
 
 	private int percentage(long count, long denominator) {
