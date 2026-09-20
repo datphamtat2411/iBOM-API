@@ -76,6 +76,20 @@ Authorization: Bearer <access-token>
 
 Refresh Tokens use the project-defined HttpOnly cookie flow.
 
+Refresh and logout requests also require the CSRF double-submit token. The API
+sets a client-readable `XSRF-TOKEN` cookie during authentication. Clients must
+send that same value in the `X-XSRF-TOKEN` header together with the
+`refresh_token` cookie:
+
+```http
+POST /api/auth/refresh-token
+Cookie: refresh_token=<http-only-refresh-token>; XSRF-TOKEN=<csrf-token>
+X-XSRF-TOKEN: <csrf-token>
+```
+
+The CSRF cookie and header values must match. Missing or mismatched values are
+rejected with HTTP `403` before the refresh or logout handler is executed.
+
 Authentication routes:
 
 ```text

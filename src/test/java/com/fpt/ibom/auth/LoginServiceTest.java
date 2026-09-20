@@ -39,7 +39,7 @@ class LoginServiceTest {
 		String passwordHash = "$2a$12$wJ8w4J0vM7fFh2cQ0k7YyO7Vh5L7s3W1n8z0j4hQxC3g6k2mP1a3e";
 		UserAccount user = new UserAccount("user@example.com", "member", passwordHash,
 				UserRole.MEMBER, UserStatus.ACTIVE);
-		when(users.findByEmailIgnoreCase("user@example.com")).thenReturn(Optional.of(user));
+		when(users.findByEmailIgnoreCaseForUpdate("user@example.com")).thenReturn(Optional.of(user));
 		when(passwordEncoder.matches("correct-password", passwordHash)).thenReturn(true);
 		when(jwtService.createAccessToken(user)).thenReturn("access-token");
 
@@ -53,7 +53,7 @@ class LoginServiceTest {
 
 	@Test
 	void rejectsUnknownEmailAndUsesDummyPasswordCheck() {
-		when(users.findByEmailIgnoreCase("user@example.com")).thenReturn(Optional.empty());
+		when(users.findByEmailIgnoreCaseForUpdate("user@example.com")).thenReturn(Optional.empty());
 		when(passwordEncoder.matches("incorrect-password", "$2a$12$C6UzMDM.H6dfI/f/IKcEeOeGxM1M8fM6mR8Xk1o9q0fPq8L9Qv7yW")).thenReturn(true);
 
 		ApiException exception = assertThrows(ApiException.class,
@@ -70,7 +70,7 @@ class LoginServiceTest {
 		String passwordHash = "$2a$12$wJ8w4J0vM7fFh2cQ0k7YyO7Vh5L7s3W1n8z0j4hQxC3g6k2mP1a3e";
 		UserAccount user = new UserAccount("user@example.com", "member", passwordHash,
 				UserRole.MEMBER, UserStatus.ACTIVE);
-		when(users.findByEmailIgnoreCase("user@example.com")).thenReturn(Optional.of(user));
+		when(users.findByEmailIgnoreCaseForUpdate("user@example.com")).thenReturn(Optional.of(user));
 		when(passwordEncoder.matches("incorrect-password", passwordHash)).thenReturn(false);
 
 		ApiException exception = assertThrows(ApiException.class,
@@ -87,7 +87,7 @@ class LoginServiceTest {
 		String passwordHash = "$2a$12$wJ8w4J0vM7fFh2cQ0k7YyO7Vh5L7s3W1n8z0j4hQxC3g6k2mP1a3e";
 		UserAccount user = new UserAccount("user@example.com", "member", passwordHash,
 				UserRole.MEMBER, UserStatus.INACTIVE);
-		when(users.findByEmailIgnoreCase("user@example.com")).thenReturn(Optional.of(user));
+		when(users.findByEmailIgnoreCaseForUpdate("user@example.com")).thenReturn(Optional.of(user));
 		when(passwordEncoder.matches("correct-password", passwordHash)).thenReturn(true);
 
 		ApiException exception = assertThrows(ApiException.class,
@@ -99,12 +99,12 @@ class LoginServiceTest {
 
 	@Test
 	void normalizesEmailBeforeLookup() {
-		when(users.findByEmailIgnoreCase("user@example.com")).thenReturn(Optional.empty());
+		when(users.findByEmailIgnoreCaseForUpdate("user@example.com")).thenReturn(Optional.empty());
 
 		assertThrows(ApiException.class,
 				() -> loginService.authenticate(new LoginRequest(" User@Example.COM ", "incorrect-password")));
 
-		verify(users).findByEmailIgnoreCase("user@example.com");
+		verify(users).findByEmailIgnoreCaseForUpdate("user@example.com");
 	}
 
 	@Test

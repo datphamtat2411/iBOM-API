@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -18,9 +19,12 @@ import com.fpt.ibom.auth.repository.UserAccountRepository;
 import com.fpt.ibom.auth.security.UserPrincipal;
 import com.fpt.ibom.common.PageResponse;
 import com.fpt.ibom.config.SecurityConfig;
+import com.fpt.ibom.exception.ApiException;
+import com.fpt.ibom.exception.ErrorCode;
 import com.fpt.ibom.user.controller.UserController;
 import com.fpt.ibom.user.dto.ManagedUserCreateRequest;
 import com.fpt.ibom.user.dto.UserSummaryResponse;
+import com.fpt.ibom.user.dto.UserStatusUpdateRequest;
 import com.fpt.ibom.user.service.UserService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -158,6 +162,68 @@ class UserControllerTest {
 					.andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"));
 		}
 		verifyNoInteractions(userService);
+	}
+
+	@ParameterizedTest
+	@EnumSource(value = UserRole.class, names = { "MANAGER", "ADMIN" })
+	void managerAndAdminCanSetUserStatusWithCanonicalSafeResponse(UserRole creatorRole) throws Exception {
+		UserStatusUpdateRequest request = new UserStatusUpdateRequest("INACTIVE");
+		when(userService.updateStatus(12L, 7L, UserStatus.INACTIVE))
+				.thenReturn(new UserSummaryResponse(12L, "managed-user", "user@gmail.com", UserRole.MEMBER,
+						UserStatus.INACTIVE));
+
+		mockMvc.perform(put("/api/users/{userId}/status", 12L).with(principal(creatorRole))
+				.contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"INACTIVE\"}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.code").value(200))
+				.andExpect(jsonPath("$.data.id").value(12))
+				.andExpect(jsonPath("$.data.username").value("managed-user"))
+				.andExpect(jsonPath("$.data.email").value("user@gmail.com"))
+				.andExpect(jsonPath("$.data.role").value("MEMBER"))
+				.andExpect(jsonPath("$.data.status").value("INACTIVE"))
+				.andExpect(jsonPath("$.data.password").doesNotExist())
+				.andExpect(jsonPath("$.data.passwordHash").doesNotExist());
+		verify(userService).updateStatus(12L, 7L, UserStatus.INACTIVE);
+	}
+
+	@Test
+	void requiresAuthenticationToUpdateUserStatus() throws Exception {
+		mockMvc.perform(put("/api/users/{userId}/status", 12L).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"status\":\"INACTIVE\"}"))
+				.andExpect(status().isUnauthorized());
+		verifyNoInteractions(userService);
+	}
+
+	@Test
+	void memberCannotUpdateUserStatus() throws Exception {
+		mockMvc.perform(put("/api/users/{userId}/status", 12L).with(principal(UserRole.MEMBER))
+				.contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"INACTIVE\"}"))
+				.andExpect(status().isForbidden());
+		verifyNoInteractions(userService);
+	}
+
+	@Test
+	void validatesExactDesiredStatusValues() throws Exception {
+		for (String request : new String[] { "{}", "{\"status\":null}", "{\"status\":\"inactive\"}",
+				"{\"status\":\"ACTIVE \"}", "{\"status\":\"UNKNOWN\"}" }) {
+			mockMvc.perform(put("/api/users/{userId}/status", 12L).with(principal(UserRole.MANAGER))
+					.contentType(MediaType.APPLICATION_JSON).content(request))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"));
+		}
+		verifyNoInteractions(userService);
+	}
+
+	@Test
+	void mapsStatusServiceErrors() throws Exception {
+		when(userService.updateStatus(12L, 7L, UserStatus.INACTIVE))
+				.thenThrow(new ApiException(org.springframework.http.HttpStatus.NOT_FOUND, ErrorCode.USER_NOT_FOUND,
+						"User not found"));
+
+		mockMvc.perform(put("/api/users/{userId}/status", 12L).with(principal(UserRole.MANAGER))
+				.contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"INACTIVE\"}"))
+				.andExpect(status().isNotFound())
+				.andExpect(jsonPath("$.errorCode").value("USER_NOT_FOUND"));
 	}
 
 	private PageResponse<UserSummaryResponse> page() {

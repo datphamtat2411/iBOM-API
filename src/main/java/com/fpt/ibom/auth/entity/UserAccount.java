@@ -65,4 +65,5 @@ public class UserAccount {
 	public void setUsername(String username) { this.username = username; }
 	public UserRole getRole() { return role; }
 	public UserStatus getStatus() { return status; }
+	public void changeStatus(UserStatus status) { this.status = status; }
 }

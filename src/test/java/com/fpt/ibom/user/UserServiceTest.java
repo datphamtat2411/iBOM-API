@@ -11,15 +11,19 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 import com.fpt.ibom.auth.entity.UserRole;
 import com.fpt.ibom.auth.entity.UserAccount;
 import com.fpt.ibom.auth.entity.UserStatus;
+import com.fpt.ibom.auth.repository.RefreshTokenRepository;
 import com.fpt.ibom.auth.repository.UserAccountRepository;
 import com.fpt.ibom.auth.service.UserAccountCreationService;
 import com.fpt.ibom.common.PageResponse;
 import com.fpt.ibom.exception.ApiException;
+import com.fpt.ibom.exception.ErrorCode;
 import com.fpt.ibom.user.dto.UserSummaryResponse;
 import com.fpt.ibom.user.dto.ManagedUserCreateRequest;
 import com.fpt.ibom.user.repository.UserSummaryProjection;
@@ -34,8 +38,9 @@ import org.springframework.data.domain.Pageable;
 class UserServiceTest {
 
 	private final UserAccountRepository userAccountRepository = org.mockito.Mockito.mock(UserAccountRepository.class);
+	private final RefreshTokenRepository refreshTokenRepository = org.mockito.Mockito.mock(RefreshTokenRepository.class);
 	private final UserAccountCreationService accountCreationService = org.mockito.Mockito.mock(UserAccountCreationService.class);
-	private final UserService userService = new UserService(userAccountRepository, accountCreationService);
+	private final UserService userService = new UserService(userAccountRepository, refreshTokenRepository, accountCreationService);
 
 	@Test
 	void rejectsInvalidPaginationBeforeRepositoryAccess() {
@@ -126,6 +131,84 @@ class UserServiceTest {
 		assertEquals(UserRole.ADMIN, result.role());
 		assertEquals(UserStatus.ACTIVE, result.status());
 		verify(accountCreationService).create(request.email(), request.username(), request.password(), UserRole.ADMIN);
+	}
+
+	@Test
+	void deactivatesUserWithPessimisticLookupAndRevokesAllRefreshSessions() {
+		UserAccount user = account(UserStatus.ACTIVE);
+		when(userAccountRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(user));
+
+		UserSummaryResponse result = userService.updateStatus(12L, 7L, UserStatus.INACTIVE);
+
+		assertEquals(UserStatus.INACTIVE, user.getStatus());
+		assertEquals(UserStatus.INACTIVE, result.status());
+		InOrder order = org.mockito.Mockito.inOrder(userAccountRepository, refreshTokenRepository);
+		order.verify(userAccountRepository).findByIdForUpdate(12L);
+		order.verify(refreshTokenRepository).revokeAllByUserId(eq(12L), any(Instant.class));
+	}
+
+	@Test
+	void reactivatesUserWithoutRestoringOrRevokingRefreshSessions() {
+		UserAccount user = account(UserStatus.INACTIVE);
+		when(userAccountRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(user));
+
+		UserSummaryResponse result = userService.updateStatus(12L, 7L, UserStatus.ACTIVE);
+
+		assertEquals(UserStatus.ACTIVE, user.getStatus());
+		assertEquals(UserStatus.ACTIVE, result.status());
+		verifyNoInteractions(refreshTokenRepository);
+	}
+
+	@Test
+	void sameActiveStateIsIdempotent() {
+		UserAccount user = account(UserStatus.ACTIVE);
+		when(userAccountRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(user));
+
+		userService.updateStatus(12L, 7L, UserStatus.ACTIVE);
+
+		assertEquals(UserStatus.ACTIVE, user.getStatus());
+		verifyNoInteractions(refreshTokenRepository);
+	}
+
+	@Test
+	void sameInactiveStateStillRevokesAnyRemainingRefreshSessions() {
+		UserAccount user = account(UserStatus.INACTIVE);
+		when(userAccountRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(user));
+
+		userService.updateStatus(12L, 7L, UserStatus.INACTIVE);
+
+		assertEquals(UserStatus.INACTIVE, user.getStatus());
+		verify(refreshTokenRepository).revokeAllByUserId(eq(12L), any(Instant.class));
+	}
+
+	@Test
+	void rejectsSelfDeactivationBeforeRevokingSessions() {
+		UserAccount user = account(UserStatus.ACTIVE);
+		when(userAccountRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(user));
+
+		ApiException exception = assertThrows(ApiException.class,
+				() -> userService.updateStatus(12L, 12L, UserStatus.INACTIVE));
+
+		assertEquals(ErrorCode.USER_SELF_DEACTIVATION_NOT_ALLOWED, exception.getErrorCode());
+		assertEquals(org.springframework.http.HttpStatus.CONFLICT, exception.getStatus());
+		assertEquals(UserStatus.ACTIVE, user.getStatus());
+		verifyNoInteractions(refreshTokenRepository);
+	}
+
+	@Test
+	void reportsMissingTargetBeforeChangingAnything() {
+		when(userAccountRepository.findByIdForUpdate(12L)).thenReturn(Optional.empty());
+
+		ApiException exception = assertThrows(ApiException.class,
+				() -> userService.updateStatus(12L, 7L, UserStatus.INACTIVE));
+
+		assertEquals(ErrorCode.USER_NOT_FOUND, exception.getErrorCode());
+		assertEquals(org.springframework.http.HttpStatus.NOT_FOUND, exception.getStatus());
+		verifyNoInteractions(refreshTokenRepository);
+	}
+
+	private UserAccount account(UserStatus status) {
+		return new UserAccount("user@example.com", "user", "hash", UserRole.MEMBER, status);
 	}
 
 	private UserSummaryProjection projection(Long id, String username, String email, UserRole role, UserStatus status) {

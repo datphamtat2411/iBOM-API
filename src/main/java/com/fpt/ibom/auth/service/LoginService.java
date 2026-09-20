@@ -47,7 +47,7 @@ public class LoginService {
 
 	@Transactional
 	public AuthenticationResult authenticate(LoginRequest request) {
-		var userOptional = userAccountRepository.findByEmailIgnoreCase(normalizeEmail(request.email()));
+		var userOptional = userAccountRepository.findByEmailIgnoreCaseForUpdate(normalizeEmail(request.email()));
 		if (userOptional.isEmpty()) {
 			passwordEncoder.matches(request.password(), DUMMY_PASSWORD_HASH);
 			throw new ApiException(HttpStatus.UNAUTHORIZED, ErrorCode.AUTH_INVALID_CREDENTIALS, "Invalid credentials");
