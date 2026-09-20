@@ -14,11 +14,14 @@ import static org.mockito.Mockito.when;
 import java.util.List;
 
 import com.fpt.ibom.auth.entity.UserRole;
+import com.fpt.ibom.auth.entity.UserAccount;
 import com.fpt.ibom.auth.entity.UserStatus;
 import com.fpt.ibom.auth.repository.UserAccountRepository;
+import com.fpt.ibom.auth.service.UserAccountCreationService;
 import com.fpt.ibom.common.PageResponse;
 import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.user.dto.UserSummaryResponse;
+import com.fpt.ibom.user.dto.ManagedUserCreateRequest;
 import com.fpt.ibom.user.repository.UserSummaryProjection;
 import com.fpt.ibom.user.service.UserService;
 import org.junit.jupiter.api.Test;
@@ -31,7 +34,8 @@ import org.springframework.data.domain.Pageable;
 class UserServiceTest {
 
 	private final UserAccountRepository userAccountRepository = org.mockito.Mockito.mock(UserAccountRepository.class);
-	private final UserService userService = new UserService(userAccountRepository);
+	private final UserAccountCreationService accountCreationService = org.mockito.Mockito.mock(UserAccountCreationService.class);
+	private final UserService userService = new UserService(userAccountRepository, accountCreationService);
 
 	@Test
 	void rejectsInvalidPaginationBeforeRepositoryAccess() {
@@ -104,6 +108,24 @@ class UserServiceTest {
 		assertEquals(10, result.size());
 		assertEquals(0, result.totalElements());
 		assertEquals(0, result.totalPages());
+	}
+
+	@Test
+	void createsManagedUserThroughSharedAccountRulesAndMapsSummary() {
+		ManagedUserCreateRequest request = new ManagedUserCreateRequest(" User@GMAIL.COM ", " managed-user ",
+				"Password1!", "ADMIN");
+		UserAccount account = new UserAccount("user@gmail.com", "managed-user", "bcrypt-hash", UserRole.ADMIN,
+				UserStatus.ACTIVE);
+		when(accountCreationService.create(request.email(), request.username(), request.password(), UserRole.ADMIN))
+				.thenReturn(account);
+
+		UserSummaryResponse result = userService.create(request);
+
+		assertEquals("user@gmail.com", result.email());
+		assertEquals("managed-user", result.username());
+		assertEquals(UserRole.ADMIN, result.role());
+		assertEquals(UserStatus.ACTIVE, result.status());
+		verify(accountCreationService).create(request.email(), request.username(), request.password(), UserRole.ADMIN);
 	}
 
 	private UserSummaryProjection projection(Long id, String username, String email, UserRole role, UserStatus status) {

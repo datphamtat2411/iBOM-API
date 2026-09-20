@@ -108,6 +108,8 @@ public class SecurityConfig {
 							.hasAnyRole("MANAGER", "ADMIN")
 						.requestMatchers(HttpMethod.DELETE, "/api/master/file-name-formats/**")
 							.hasAnyRole("MANAGER", "ADMIN")
+						.requestMatchers(HttpMethod.POST, "/api/users")
+							.hasAnyRole("MANAGER", "ADMIN")
 						.requestMatchers(HttpMethod.GET, "/api/members/*/profiles")
 							.hasAnyRole("MANAGER", "ADMIN")
 						.requestMatchers(HttpMethod.GET, "/api/members/search-by-skill")

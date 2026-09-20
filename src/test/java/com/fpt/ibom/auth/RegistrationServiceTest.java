@@ -5,9 +5,11 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -26,23 +28,33 @@ import com.fpt.ibom.auth.entity.VerificationPurpose;
 import com.fpt.ibom.auth.repository.UserAccountRepository;
 import com.fpt.ibom.auth.repository.VerificationCodeRepository;
 import com.fpt.ibom.auth.service.RegistrationService;
+import com.fpt.ibom.auth.service.UserAccountCreationService;
 import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.exception.ErrorCode;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import com.fpt.ibom.auth.service.MailService;
 
 class RegistrationServiceTest {
 
 	private final UserAccountRepository users = mock(UserAccountRepository.class);
 	private final VerificationCodeRepository codes = mock(VerificationCodeRepository.class);
-	private final PasswordEncoder passwordEncoder = mock(PasswordEncoder.class);
+	private final UserAccountCreationService accountCreationService = mock(UserAccountCreationService.class);
 	private final MailService mailService = mock(MailService.class);
-	private final RegistrationService registrationService = new RegistrationService(users, codes, passwordEncoder, mailService,
-			"fsoft.com.vn,fpt.com.vn,fpt.com,gmail.com");
+	private final RegistrationService registrationService = new RegistrationService(users, codes, accountCreationService,
+			mailService);
+
+	@BeforeEach
+	void preparesNormalizedAccountDetails() {
+		when(accountCreationService.normalizeAndValidateEmail(anyString())).thenAnswer(invocation ->
+				invocation.getArgument(0, String.class).trim().toLowerCase(java.util.Locale.ROOT));
+		when(accountCreationService.prepare(anyString(), anyString())).thenAnswer(invocation ->
+				new UserAccountCreationService.PreparedAccount(
+						invocation.getArgument(0, String.class).trim().toLowerCase(java.util.Locale.ROOT),
+						invocation.getArgument(1, String.class).trim()));
+	}
 
 	@Test
 	void requestsCodeForAllowedNormalizedEmailAndRoutesMailThroughMailService() {
@@ -60,6 +72,9 @@ class RegistrationServiceTest {
 
 	@Test
 	void rejectsDisallowedDomain() {
+		when(accountCreationService.normalizeAndValidateEmail("user@example.com"))
+				.thenThrow(new ApiException(HttpStatus.BAD_REQUEST, ErrorCode.AUTH_EMAIL_DOMAIN_NOT_ALLOWED,
+						"Email domain is not allowed"));
 		ApiException exception = assertThrows(ApiException.class,
 				() -> registrationService.requestVerificationCode(new RegistrationCodeRequest("user@example.com")));
 
@@ -137,13 +152,17 @@ class RegistrationServiceTest {
 
 	@Test
 	void rejectsCaseInsensitiveDuplicateEmailAndUsername() {
-		when(users.existsByEmailIgnoreCase("user@gmail.com")).thenReturn(true);
+		when(accountCreationService.prepare("User@GMAIL.COM", "member"))
+				.thenThrow(new ApiException(HttpStatus.CONFLICT, ErrorCode.AUTH_EMAIL_ALREADY_REGISTERED,
+						"Email is already registered"));
 		ApiException emailException = assertThrows(ApiException.class, () -> registrationService.register(request()));
 		assertEquals(HttpStatus.CONFLICT, emailException.getStatus());
 		assertEquals(ErrorCode.AUTH_EMAIL_ALREADY_REGISTERED, emailException.getErrorCode());
 
-		when(users.existsByEmailIgnoreCase("user@gmail.com")).thenReturn(false);
-		when(users.existsByUsernameIgnoreCase("member")).thenReturn(true);
+		reset(accountCreationService);
+		when(accountCreationService.prepare("User@GMAIL.COM", "member"))
+				.thenThrow(new ApiException(HttpStatus.CONFLICT, ErrorCode.AUTH_USERNAME_ALREADY_REGISTERED,
+						"Username is already registered"));
 		ApiException usernameException = assertThrows(ApiException.class, () -> registrationService.register(request()));
 		assertEquals(HttpStatus.CONFLICT, usernameException.getStatus());
 		assertEquals(ErrorCode.AUTH_USERNAME_ALREADY_REGISTERED, usernameException.getErrorCode());
@@ -157,16 +176,15 @@ class RegistrationServiceTest {
 		}
 		when(codes.findTopByEmailAndPurposeAndUsedAtIsNullOrderByCreatedAtDesc("user@gmail.com", VerificationPurpose.REGISTRATION))
 				.thenReturn(Optional.of(code));
-		when(passwordEncoder.encode("Password1!")).thenReturn("bcrypt-hash");
+		when(accountCreationService.create(any(UserAccountCreationService.PreparedAccount.class), eq("Password1!"),
+				eq(UserRole.MEMBER))).thenReturn(new UserAccount("user@gmail.com", "member", "bcrypt-hash",
+					UserRole.MEMBER, UserStatus.ACTIVE));
 
 		registrationService.register(request());
 
-		ArgumentCaptor<UserAccount> user = ArgumentCaptor.forClass(UserAccount.class);
-		verify(users).saveAndFlush(user.capture());
-		assertEquals("user@gmail.com", user.getValue().getEmail());
-		assertEquals("bcrypt-hash", user.getValue().getPasswordHash());
-		assertEquals(UserRole.MEMBER, user.getValue().getRole());
-		assertEquals(UserStatus.ACTIVE, user.getValue().getStatus());
+		verify(accountCreationService).create(
+				new UserAccountCreationService.PreparedAccount("user@gmail.com", "member"), "Password1!",
+				UserRole.MEMBER);
 		assertEquals(4, code.getFailedAttempts());
 		assertEquals(false, code.getUsedAt() == null);
 	}
@@ -176,8 +194,10 @@ class RegistrationServiceTest {
 		VerificationCode code = verificationCode("user@gmail.com", "123456", Instant.now().plusSeconds(300));
 		when(codes.findTopByEmailAndPurposeAndUsedAtIsNullOrderByCreatedAtDesc("user@gmail.com", VerificationPurpose.REGISTRATION))
 				.thenReturn(Optional.of(code));
-		when(passwordEncoder.encode("Password1!")).thenReturn("bcrypt-hash");
-		when(users.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("duplicate"));
+		when(accountCreationService.create(any(UserAccountCreationService.PreparedAccount.class), eq("Password1!"),
+				eq(UserRole.MEMBER))).thenThrow(new ApiException(HttpStatus.CONFLICT,
+					ErrorCode.AUTH_EMAIL_OR_USERNAME_ALREADY_REGISTERED,
+					"Email or username is already registered"));
 
 		ApiException exception = assertThrows(ApiException.class, () -> registrationService.register(request()));
 

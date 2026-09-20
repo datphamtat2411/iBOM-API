@@ -3,10 +3,13 @@ package com.fpt.ibom.user.service;
 import java.util.List;
 
 import com.fpt.ibom.auth.entity.UserRole;
+import com.fpt.ibom.auth.entity.UserAccount;
 import com.fpt.ibom.auth.repository.UserAccountRepository;
+import com.fpt.ibom.auth.service.UserAccountCreationService;
 import com.fpt.ibom.common.PageResponse;
 import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.user.dto.UserSummaryResponse;
+import com.fpt.ibom.user.dto.ManagedUserCreateRequest;
 import com.fpt.ibom.user.repository.UserSummaryProjection;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -19,9 +22,18 @@ import org.springframework.transaction.annotation.Transactional;
 public class UserService {
 
 	private final UserAccountRepository userAccountRepository;
+	private final UserAccountCreationService accountCreationService;
 
-	public UserService(UserAccountRepository userAccountRepository) {
+	public UserService(UserAccountRepository userAccountRepository, UserAccountCreationService accountCreationService) {
 		this.userAccountRepository = userAccountRepository;
+		this.accountCreationService = accountCreationService;
+	}
+
+	@Transactional
+	public UserSummaryResponse create(ManagedUserCreateRequest request) {
+		UserRole role = parseManagedRole(request.role());
+		UserAccount user = accountCreationService.create(request.email(), request.username(), request.password(), role);
+		return new UserSummaryResponse(user.getId(), user.getUsername(), user.getEmail(), user.getRole(), user.getStatus());
 	}
 
 	@Transactional(readOnly = true)
@@ -55,5 +67,18 @@ public class UserService {
 
 	private UserSummaryResponse toResponse(UserSummaryProjection user) {
 		return new UserSummaryResponse(user.getId(), user.getUsername(), user.getEmail(), user.getRole(), user.getStatus());
+	}
+
+	private UserRole parseManagedRole(String role) {
+		if (role == null) {
+			throw new ApiException(HttpStatus.BAD_REQUEST, com.fpt.ibom.exception.ErrorCode.VALIDATION_ERROR,
+					"Validation failed");
+		}
+		try {
+			return UserRole.valueOf(role);
+		} catch (IllegalArgumentException exception) {
+			throw new ApiException(HttpStatus.BAD_REQUEST, com.fpt.ibom.exception.ErrorCode.VALIDATION_ERROR,
+					"Validation failed");
+		}
 	}
 }

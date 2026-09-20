@@ -4,26 +4,17 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Instant;
-import java.util.Arrays;
-import java.util.Locale;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 import com.fpt.ibom.auth.dto.RegistrationCodeRequest;
 import com.fpt.ibom.auth.dto.RegistrationRequest;
-import com.fpt.ibom.auth.entity.UserAccount;
 import com.fpt.ibom.auth.entity.UserRole;
-import com.fpt.ibom.auth.entity.UserStatus;
 import com.fpt.ibom.auth.entity.VerificationCode;
 import com.fpt.ibom.auth.entity.VerificationPurpose;
 import com.fpt.ibom.auth.repository.UserAccountRepository;
 import com.fpt.ibom.auth.repository.VerificationCodeRepository;
 import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.exception.ErrorCode;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,28 +25,22 @@ public class RegistrationService {
 	private static final int MAX_FAILED_ATTEMPTS = 5;
 	private final UserAccountRepository userAccountRepository;
 	private final VerificationCodeRepository verificationCodeRepository;
-	private final PasswordEncoder passwordEncoder;
+	private final UserAccountCreationService accountCreationService;
 	private final MailService mailService;
-	private final Set<String> allowedDomains;
 	private final SecureRandom secureRandom = new SecureRandom();
 
 	public RegistrationService(UserAccountRepository userAccountRepository,
-			VerificationCodeRepository verificationCodeRepository, PasswordEncoder passwordEncoder, MailService mailService,
-			@Value("${app.auth.registration.allowed-domains}") String allowedDomains) {
+			VerificationCodeRepository verificationCodeRepository, UserAccountCreationService accountCreationService,
+			MailService mailService) {
 		this.userAccountRepository = userAccountRepository;
 		this.verificationCodeRepository = verificationCodeRepository;
-		this.passwordEncoder = passwordEncoder;
+		this.accountCreationService = accountCreationService;
 		this.mailService = mailService;
-		this.allowedDomains = Arrays.stream(allowedDomains.split(","))
-				.map(domain -> domain.trim().toLowerCase(Locale.ROOT))
-				.filter(domain -> !domain.isEmpty())
-				.collect(Collectors.toUnmodifiableSet());
 	}
 
 	@Transactional
 	public void requestVerificationCode(RegistrationCodeRequest request) {
-		String email = normalizeEmail(request.email());
-		ensureAllowedDomain(email);
+		String email = accountCreationService.normalizeAndValidateEmail(request.email());
 		if (userAccountRepository.existsByEmailIgnoreCase(email)) {
 			return;
 		}
@@ -74,32 +59,16 @@ public class RegistrationService {
 
 	@Transactional(noRollbackFor = InvalidRegistrationVerificationCodeException.class)
 	public void register(RegistrationRequest request) {
-		String email = normalizeEmail(request.email());
-		String username = request.username().trim();
-		ensureAllowedDomain(email);
-		if (userAccountRepository.existsByEmailIgnoreCase(email)) {
-			throw new ApiException(HttpStatus.CONFLICT, ErrorCode.AUTH_EMAIL_ALREADY_REGISTERED,
-					"Email is already registered");
-		}
-		if (userAccountRepository.existsByUsernameIgnoreCase(username)) {
-			throw new ApiException(HttpStatus.CONFLICT, ErrorCode.AUTH_USERNAME_ALREADY_REGISTERED,
-					"Username is already registered");
-		}
+		UserAccountCreationService.PreparedAccount account = accountCreationService.prepare(request.email(), request.username());
 
 		VerificationCode verificationCode = verificationCodeRepository
-				.findTopByEmailAndPurposeAndUsedAtIsNullOrderByCreatedAtDesc(email, VerificationPurpose.REGISTRATION)
+				.findTopByEmailAndPurposeAndUsedAtIsNullOrderByCreatedAtDesc(account.email(), VerificationPurpose.REGISTRATION)
 				.orElseThrow(this::invalidVerificationCode);
 		if (!isValidVerificationCode(verificationCode, request.verificationCode())) {
 			throw invalidVerificationCode();
 		}
 
-		try {
-			userAccountRepository.saveAndFlush(new UserAccount(email, username, passwordEncoder.encode(request.password()),
-					UserRole.MEMBER, UserStatus.ACTIVE));
-		} catch (DataIntegrityViolationException exception) {
-			throw new ApiException(HttpStatus.CONFLICT, ErrorCode.AUTH_EMAIL_OR_USERNAME_ALREADY_REGISTERED,
-					"Email or username is already registered");
-		}
+		accountCreationService.create(account, request.password(), UserRole.MEMBER);
 		verificationCode.use(Instant.now());
 	}
 
@@ -118,18 +87,6 @@ public class RegistrationService {
 
 	private InvalidRegistrationVerificationCodeException invalidVerificationCode() {
 		return new InvalidRegistrationVerificationCodeException();
-	}
-
-	private void ensureAllowedDomain(String email) {
-		int at = email.lastIndexOf('@');
-		if (at < 1 || !allowedDomains.contains(email.substring(at + 1))) {
-			throw new ApiException(HttpStatus.BAD_REQUEST, ErrorCode.AUTH_EMAIL_DOMAIN_NOT_ALLOWED,
-					"Email domain is not allowed");
-		}
-	}
-
-	private String normalizeEmail(String email) {
-		return email.trim().toLowerCase(Locale.ROOT);
 	}
 
 	private String sha256(String value) {
