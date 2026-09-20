@@ -116,6 +116,8 @@ public class SecurityConfig {
 							.hasAnyRole("MANAGER", "ADMIN")
 						.requestMatchers(HttpMethod.GET, "/api/members")
 							.hasAnyRole("MANAGER", "ADMIN")
+						.requestMatchers(HttpMethod.GET, "/api/users")
+							.hasAnyRole("MANAGER", "ADMIN")
 						.anyRequest().authenticated()
 				)
 				.exceptionHandling(exceptions -> exceptions

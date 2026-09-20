@@ -5,6 +5,7 @@ import java.util.List;
 
 import com.fpt.ibom.auth.entity.UserStatus;
 import com.fpt.ibom.member.repository.MemberSummaryProjection;
+import com.fpt.ibom.user.repository.UserSummaryProjection;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.domain.Page;
@@ -84,4 +85,24 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, Long> 
 			""")
 	Page<MemberSummaryProjection> findMemberSummariesByProfileIds(@Param("status") UserStatus status,
 			@Param("profileIds") List<Long> profileIds, Pageable pageable);
+
+	@Query(value = """
+			select user.id as id, user.username as username, user.email as email,
+				user.role as role, user.status as status
+			from UserAccount user
+			where (:roles is null or user.role in :roles)
+			and (:search is null or lower(user.username) like lower(concat('%', :search, '%'))
+				or lower(user.email) like lower(concat('%', :search, '%')))
+			order by case when user.status = com.fpt.ibom.auth.entity.UserStatus.ACTIVE then 0 else 1 end,
+				lower(user.username), user.id
+			""",
+			countQuery = """
+			select count(user)
+			from UserAccount user
+			where (:roles is null or user.role in :roles)
+			and (:search is null or lower(user.username) like lower(concat('%', :search, '%'))
+				or lower(user.email) like lower(concat('%', :search, '%')))
+			""")
+	Page<UserSummaryProjection> findUserSummaries(@Param("roles") List<UserRole> roles,
+			@Param("search") String search, Pageable pageable);
 }
