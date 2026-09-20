@@ -5,12 +5,16 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.anyLong;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 
 import com.fpt.ibom.auth.entity.UserAccount;
@@ -22,8 +26,12 @@ import com.fpt.ibom.dashboard.dto.MemberDashboardStatsResponse;
 import com.fpt.ibom.dashboard.service.DashboardService;
 import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.exception.ErrorCode;
+import com.fpt.ibom.master.entity.Skill;
+import com.fpt.ibom.master.entity.SkillCategory;
 import com.fpt.ibom.profile.dto.ProfileCompletenessResponse;
 import com.fpt.ibom.profile.entity.Profile;
+import com.fpt.ibom.profile.entity.ProfileSkill;
+import com.fpt.ibom.profile.repository.ProfileSkillRepository;
 import com.fpt.ibom.profile.service.ProfileAccessService;
 import com.fpt.ibom.profile.service.ProfileCompletenessService;
 import com.fpt.ibom.profile.service.ProfileEligibilityService;
@@ -38,8 +46,9 @@ class DashboardServiceTest {
 	private final ProfileCompletenessService profileCompletenessService = mock(ProfileCompletenessService.class);
 	private final ProfileService profileService = mock(ProfileService.class);
 	private final ProfileEligibilityService profileEligibilityService = mock(ProfileEligibilityService.class);
+	private final ProfileSkillRepository profileSkillRepository = mock(ProfileSkillRepository.class);
 	private final DashboardService service = new DashboardService(profileAccessService, profileCompletenessService,
-			profileService, profileEligibilityService);
+			profileService, profileEligibilityService, profileSkillRepository);
 
 	@Test
 	void resolvesTheSuppliedProfileThroughOwnerScopedAccessAndReusesCanonicalCompleteness() {
@@ -97,6 +106,7 @@ class DashboardServiceTest {
 
 		assertEquals(3, result.totalProfiles());
 		assertEquals(2, result.completedProfiles());
+		verify(profileSkillRepository).findByProfileIdIn(List.of(8L, 9L, 10L));
 		verify(profileEligibilityService).findEligibleMemberProfiles();
 		verify(profileCompletenessService).countCompleted(eligibleProfiles);
 		verifyNoMoreInteractions(profileEligibilityService, profileCompletenessService);
@@ -111,7 +121,89 @@ class DashboardServiceTest {
 
 		assertEquals(0, result.totalProfiles());
 		assertEquals(0, result.completedProfiles());
+		assertEquals(List.of(), result.primarySkillDistribution().items());
+		assertEquals(0, result.primarySkillDistribution().otherProfileCount());
+		assertEquals(List.of(), result.skillCategoryDistribution().items());
+		assertEquals(0, result.skillCategoryDistribution().otherProfileCount());
 		verify(profileCompletenessService).countCompleted(List.of());
+		verifyNoInteractions(profileSkillRepository);
+	}
+
+	@Test
+	void selectsOnePrimarySkillPerProfileAndUsesOnlyThoseSkillsForAnalytics() {
+		Profile first = profile(8L, 7L);
+		Profile second = profile(9L, 7L);
+		Profile third = profile(10L, 7L);
+		Profile fourth = profile(11L, 7L);
+		Profile withoutSkills = profile(12L, 7L);
+		List<Profile> eligibleProfiles = List.of(first, second, third, fourth, withoutSkills);
+		SkillCategory backend = category(41L, "BACKEND", "Backend");
+		SkillCategory frontend = category(42L, "FRONTEND", "Frontend");
+		Skill java = skill(11L, "Java", backend);
+		Skill python = skill(12L, "Python", frontend);
+		Skill kotlin = skill(13L, "Kotlin", frontend);
+		Skill lowercaseJava = skill(14L, "java", backend);
+		Skill uppercaseJava = skill(11L, "Java", backend);
+		Skill go = skill(16L, "Go", null);
+		Skill lowercaseGo = skill(17L, "go", backend);
+		when(profileEligibilityService.findEligibleMemberProfiles()).thenReturn(eligibleProfiles);
+		when(profileCompletenessService.countCompleted(eligibleProfiles)).thenReturn(3);
+		when(profileSkillRepository.findByProfileIdIn(List.of(8L, 9L, 10L, 11L, 12L))).thenReturn(List.of(
+			new ProfileSkill(first, python, new BigDecimal("4.00"), LocalDate.of(2025, 1, 1)),
+			new ProfileSkill(first, java, new BigDecimal("5.00"), LocalDate.of(2024, 1, 1)),
+			new ProfileSkill(second, java, new BigDecimal("5.00"), null),
+			new ProfileSkill(second, kotlin, new BigDecimal("5.00"), LocalDate.of(2023, 1, 1)),
+			new ProfileSkill(third, lowercaseJava, new BigDecimal("3.00"), LocalDate.of(2023, 1, 1)),
+			new ProfileSkill(third, uppercaseJava, new BigDecimal("3.00"), LocalDate.of(2023, 1, 1)),
+			new ProfileSkill(fourth, lowercaseGo, new BigDecimal("2.00"), LocalDate.of(2022, 1, 1)),
+			new ProfileSkill(fourth, go, new BigDecimal("2.00"), LocalDate.of(2022, 1, 1))));
+
+		ManagerDashboardStatsResponse result = service.getManagerStats();
+
+		assertEquals(5, result.totalProfiles());
+		assertEquals(3, result.completedProfiles());
+		assertEquals(List.of("Java", "Go", "Kotlin"), result.primarySkillDistribution().items().stream()
+				.map(ManagerDashboardStatsResponse.PrimarySkillItem::skillName).toList());
+		assertEquals(List.of(2L, 1L, 1L), result.primarySkillDistribution().items().stream()
+				.map(ManagerDashboardStatsResponse.PrimarySkillItem::profileCount).toList());
+		assertEquals(0, result.primarySkillDistribution().otherProfileCount());
+		assertEquals(List.of("Backend", "Frontend", "Uncategorized"), result.skillCategoryDistribution().items().stream()
+				.map(ManagerDashboardStatsResponse.SkillCategoryItem::categoryName).toList());
+		assertEquals(List.of(2L, 1L, 1L), result.skillCategoryDistribution().items().stream()
+				.map(ManagerDashboardStatsResponse.SkillCategoryItem::profileCount).toList());
+		assertEquals(List.of(50, 25, 25), result.skillCategoryDistribution().items().stream()
+				.map(ManagerDashboardStatsResponse.SkillCategoryItem::percentage).toList());
+		assertEquals(0, result.skillCategoryDistribution().otherProfileCount());
+		verify(profileSkillRepository).findByProfileIdIn(List.of(8L, 9L, 10L, 11L, 12L));
+		verify(profileSkillRepository, never()).findByProfileId(anyLong());
+	}
+
+	@Test
+	void keepsOnlySevenItemsAndSumsOmittedProfilesForBothDistributions() {
+		List<Profile> eligibleProfiles = java.util.stream.IntStream.rangeClosed(1, 8)
+				.mapToObj(index -> profile((long) index, 7L)).toList();
+		List<ProfileSkill> profileSkills = java.util.stream.IntStream.rangeClosed(1, 8).mapToObj(index -> {
+			SkillCategory category = category(100L + index, "CAT_" + index, "Category " + index);
+			Skill skill = skill(200L + index, "Skill " + index, category);
+			return new ProfileSkill(eligibleProfiles.get(index - 1), skill, BigDecimal.ONE, LocalDate.of(2024, 1, 1));
+		}).toList();
+		when(profileEligibilityService.findEligibleMemberProfiles()).thenReturn(eligibleProfiles);
+		when(profileCompletenessService.countCompleted(eligibleProfiles)).thenReturn(0);
+		when(profileSkillRepository.findByProfileIdIn(java.util.stream.LongStream.rangeClosed(1, 8).boxed().toList()))
+				.thenReturn(profileSkills);
+
+		ManagerDashboardStatsResponse result = service.getManagerStats();
+
+		assertEquals(List.of("Skill 1", "Skill 2", "Skill 3", "Skill 4", "Skill 5", "Skill 6", "Skill 7"),
+				result.primarySkillDistribution().items().stream()
+						.map(ManagerDashboardStatsResponse.PrimarySkillItem::skillName).toList());
+		assertEquals(1, result.primarySkillDistribution().otherProfileCount());
+		assertEquals(List.of("Category 1", "Category 2", "Category 3", "Category 4", "Category 5", "Category 6",
+				"Category 7"), result.skillCategoryDistribution().items().stream()
+						.map(ManagerDashboardStatsResponse.SkillCategoryItem::categoryName).toList());
+		assertEquals(List.of(13, 13, 13, 13, 13, 13, 13), result.skillCategoryDistribution().items().stream()
+				.map(ManagerDashboardStatsResponse.SkillCategoryItem::percentage).toList());
+		assertEquals(1, result.skillCategoryDistribution().otherProfileCount());
 	}
 
 	private UserPrincipal principal(Long userId, UserRole role) {
@@ -126,5 +218,17 @@ class DashboardServiceTest {
 				"Personality", "Summary");
 		ReflectionTestUtils.setField(profile, "id", profileId);
 		return profile;
+	}
+
+	private SkillCategory category(Long categoryId, String code, String name) {
+		SkillCategory category = new SkillCategory(code, name);
+		ReflectionTestUtils.setField(category, "id", categoryId);
+		return category;
+	}
+
+	private Skill skill(Long skillId, String name, SkillCategory category) {
+		Skill skill = new Skill(name, category);
+		ReflectionTestUtils.setField(skill, "id", skillId);
+		return skill;
 	}
 }

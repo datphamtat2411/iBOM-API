@@ -115,14 +115,28 @@ class DashboardControllerTest {
 
 	@Test
 	void returnsManagerStatsForManagerAndAdmin() throws Exception {
-		when(dashboardService.getManagerStats()).thenReturn(new ManagerDashboardStatsResponse(3, 2));
+		when(dashboardService.getManagerStats()).thenReturn(new ManagerDashboardStatsResponse(3, 2,
+				new ManagerDashboardStatsResponse.PrimarySkillDistribution(
+						List.of(new ManagerDashboardStatsResponse.PrimarySkillItem(1L, "Java", 2L)), 1L),
+				new ManagerDashboardStatsResponse.SkillCategoryDistribution(
+						List.of(new ManagerDashboardStatsResponse.SkillCategoryItem(4L, "BACKEND", "Backend", 2L, 67)), 1L)));
 
 		for (UserRole role : List.of(UserRole.MANAGER, UserRole.ADMIN)) {
 			mockMvc.perform(get("/api/dashboard/manager-stats").with(principal(role)))
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.code").value(200))
 					.andExpect(jsonPath("$.data.totalProfiles").value(3))
-					.andExpect(jsonPath("$.data.completedProfiles").value(2));
+					.andExpect(jsonPath("$.data.completedProfiles").value(2))
+					.andExpect(jsonPath("$.data.primarySkillDistribution.items[0].skillId").value(1))
+					.andExpect(jsonPath("$.data.primarySkillDistribution.items[0].skillName").value("Java"))
+					.andExpect(jsonPath("$.data.primarySkillDistribution.items[0].profileCount").value(2))
+					.andExpect(jsonPath("$.data.primarySkillDistribution.otherProfileCount").value(1))
+					.andExpect(jsonPath("$.data.skillCategoryDistribution.items[0].categoryId").value(4))
+					.andExpect(jsonPath("$.data.skillCategoryDistribution.items[0].categoryCode").value("BACKEND"))
+					.andExpect(jsonPath("$.data.skillCategoryDistribution.items[0].categoryName").value("Backend"))
+					.andExpect(jsonPath("$.data.skillCategoryDistribution.items[0].profileCount").value(2))
+					.andExpect(jsonPath("$.data.skillCategoryDistribution.items[0].percentage").value(67))
+					.andExpect(jsonPath("$.data.skillCategoryDistribution.otherProfileCount").value(1));
 		}
 
 		verify(dashboardService, org.mockito.Mockito.times(2)).getManagerStats();

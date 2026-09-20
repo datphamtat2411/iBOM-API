@@ -168,13 +168,64 @@ class DashboardIntegrationTest extends MySqlIntegrationTest {
 	}
 
 	@Test
+	void managerAnalyticsUsesOnlyPrimarySkillsFromEligibleProfiles() throws Exception {
+		UserAccount member = saveUser(UserRole.MEMBER);
+		Profile first = saveProfile(member, "First");
+		Profile second = saveProfile(member, "Second");
+		Profile deleted = saveProfile(member, "Deleted");
+		deleted.softDelete(Instant.parse("2026-01-01T00:00:00Z"));
+		profiles.saveAndFlush(deleted);
+
+		Profile inactive = saveProfile(saveUser(UserRole.MEMBER, UserStatus.INACTIVE), "Inactive");
+		Profile managerOwned = saveProfile(saveUser(UserRole.MANAGER), "Manager");
+		Profile adminOwned = saveProfile(saveUser(UserRole.ADMIN), "Admin");
+
+		String backendName = "Backend-" + UUID.randomUUID();
+		String frontendName = "Frontend-" + UUID.randomUUID();
+		SkillCategory backend = skillCategories.saveAndFlush(new SkillCategory("BACKEND-" + UUID.randomUUID(), backendName));
+		SkillCategory frontend = skillCategories.saveAndFlush(new SkillCategory("FRONTEND-" + UUID.randomUUID(), frontendName));
+		Skill java = skills.saveAndFlush(new Skill("Java-" + UUID.randomUUID(), backend));
+		Skill python = skills.saveAndFlush(new Skill("Python-" + UUID.randomUUID(), frontend));
+		Skill excluded = skills.saveAndFlush(new Skill("Excluded-" + UUID.randomUUID(), backend));
+		profileSkills.saveAndFlush(new ProfileSkill(first, java, new BigDecimal("5.00"), LocalDate.of(2025, 1, 1)));
+		profileSkills.saveAndFlush(new ProfileSkill(first, python, new BigDecimal("4.00"), LocalDate.of(2024, 1, 1)));
+		profileSkills.saveAndFlush(new ProfileSkill(second, python, new BigDecimal("3.00"), LocalDate.of(2025, 1, 1)));
+		profileSkills.saveAndFlush(new ProfileSkill(deleted, excluded, BigDecimal.ONE, LocalDate.of(2025, 1, 1)));
+		profileSkills.saveAndFlush(new ProfileSkill(inactive, excluded, BigDecimal.ONE, LocalDate.of(2025, 1, 1)));
+		profileSkills.saveAndFlush(new ProfileSkill(managerOwned, excluded, BigDecimal.ONE, LocalDate.of(2025, 1, 1)));
+		profileSkills.saveAndFlush(new ProfileSkill(adminOwned, excluded, BigDecimal.ONE, LocalDate.of(2025, 1, 1)));
+
+		UserAccount dashboardManager = saveUser(UserRole.MANAGER);
+		mockMvc.perform(get("/api/dashboard/manager-stats").with(authentication(principal(dashboardManager))))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.totalProfiles").value(2))
+				.andExpect(jsonPath("$.data.completedProfiles").value(0))
+				.andExpect(jsonPath("$.data.primarySkillDistribution.items.length()").value(2))
+				.andExpect(jsonPath("$.data.primarySkillDistribution.items[0].skillName").value(java.getName()))
+				.andExpect(jsonPath("$.data.primarySkillDistribution.items[0].profileCount").value(1))
+				.andExpect(jsonPath("$.data.primarySkillDistribution.items[1].skillName").value(python.getName()))
+				.andExpect(jsonPath("$.data.primarySkillDistribution.items[1].profileCount").value(1))
+				.andExpect(jsonPath("$.data.primarySkillDistribution.otherProfileCount").value(0))
+				.andExpect(jsonPath("$.data.skillCategoryDistribution.items.length()").value(2))
+				.andExpect(jsonPath("$.data.skillCategoryDistribution.items[0].categoryName").value(backendName))
+				.andExpect(jsonPath("$.data.skillCategoryDistribution.items[0].percentage").value(50))
+				.andExpect(jsonPath("$.data.skillCategoryDistribution.items[1].categoryName").value(frontendName))
+				.andExpect(jsonPath("$.data.skillCategoryDistribution.items[1].percentage").value(50))
+				.andExpect(jsonPath("$.data.skillCategoryDistribution.otherProfileCount").value(0));
+	}
+
+	@Test
 	void returnsZeroCountsWhenNoEligibleProfilesExist() throws Exception {
 		UserAccount manager = saveUser(UserRole.MANAGER, UserStatus.ACTIVE);
 
 		mockMvc.perform(get("/api/dashboard/manager-stats").with(authentication(principal(manager))))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.data.totalProfiles").value(0))
-				.andExpect(jsonPath("$.data.completedProfiles").value(0));
+				.andExpect(jsonPath("$.data.completedProfiles").value(0))
+				.andExpect(jsonPath("$.data.primarySkillDistribution.items").isEmpty())
+				.andExpect(jsonPath("$.data.primarySkillDistribution.otherProfileCount").value(0))
+				.andExpect(jsonPath("$.data.skillCategoryDistribution.items").isEmpty())
+				.andExpect(jsonPath("$.data.skillCategoryDistribution.otherProfileCount").value(0));
 	}
 
 	private void addCompleteProfileData(Profile profile) {

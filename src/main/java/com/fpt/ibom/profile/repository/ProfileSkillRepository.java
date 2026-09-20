@@ -15,6 +15,9 @@ public interface ProfileSkillRepository extends JpaRepository<ProfileSkill, Long
 	@EntityGraph(attributePaths = { "skill", "skill.category" })
 	List<ProfileSkill> findByProfileId(Long profileId);
 
+	@EntityGraph(attributePaths = { "skill", "skill.category" })
+	List<ProfileSkill> findByProfileIdIn(List<Long> profileIds);
+
 	boolean existsByProfileId(Long profileId);
 
 	@Query("select profileSkill.profile.id from ProfileSkill profileSkill where profileSkill.profile.id in :profileIds")
