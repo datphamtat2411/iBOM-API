@@ -13,6 +13,8 @@ public interface CertificateRepository extends JpaRepository<Certificate, Long> 
 
 	List<Certificate> findByProfileIdOrderByIssueDateDescIdAsc(Long profileId);
 
+	List<Certificate> findByProfileIdIn(List<Long> profileIds);
+
 	boolean existsByProfileId(Long profileId);
 
 	@Query("select certificate.profile.id from Certificate certificate where certificate.profile.id in :profileIds")

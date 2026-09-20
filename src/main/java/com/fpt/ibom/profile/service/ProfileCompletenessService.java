@@ -1,15 +1,28 @@
 package com.fpt.ibom.profile.service;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.LocalDate;
 import java.math.RoundingMode;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.function.Predicate;
 
 import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.exception.ErrorCode;
+import com.fpt.ibom.master.entity.Language;
+import com.fpt.ibom.master.entity.Skill;
 import com.fpt.ibom.profile.dto.ProfileCompletenessResponse;
 import com.fpt.ibom.profile.dto.ProfileCompletenessSectionResponse;
+import com.fpt.ibom.profile.entity.Certificate;
+import com.fpt.ibom.profile.entity.Education;
+import com.fpt.ibom.profile.entity.EducationStatus;
+import com.fpt.ibom.profile.entity.ProfileLanguage;
+import com.fpt.ibom.profile.entity.ProfileSkill;
+import com.fpt.ibom.profile.entity.Project;
+import com.fpt.ibom.profile.entity.ProjectStatus;
 import com.fpt.ibom.profile.entity.Profile;
 import com.fpt.ibom.profile.repository.CertificateRepository;
 import com.fpt.ibom.profile.repository.EducationRepository;
@@ -37,16 +50,18 @@ public class ProfileCompletenessService {
 	private final CertificateRepository certificateRepository;
 	private final ProjectRepository projectRepository;
 	private final ProfileSkillRepository profileSkillRepository;
+	private final Clock clock;
 
 	public ProfileCompletenessService(ProfileRepository profileRepository, EducationRepository educationRepository,
 			ProfileLanguageRepository profileLanguageRepository, CertificateRepository certificateRepository,
-			ProjectRepository projectRepository, ProfileSkillRepository profileSkillRepository) {
+			ProjectRepository projectRepository, ProfileSkillRepository profileSkillRepository, Clock clock) {
 		this.profileRepository = profileRepository;
 		this.educationRepository = educationRepository;
 		this.profileLanguageRepository = profileLanguageRepository;
 		this.certificateRepository = certificateRepository;
 		this.projectRepository = projectRepository;
 		this.profileSkillRepository = profileSkillRepository;
+		this.clock = clock;
 	}
 
 	@Transactional(readOnly = true)
@@ -59,11 +74,17 @@ public class ProfileCompletenessService {
 	@Transactional(readOnly = true)
 	public ProfileCompletenessResponse calculate(Profile profile) {
 		int validAboutMeFields = validAboutMeFields(profile);
-		boolean hasEducation = educationRepository.existsByProfileId(profile.getId());
-		boolean hasLanguage = profileLanguageRepository.existsByProfileId(profile.getId());
-		boolean hasCertificate = certificateRepository.existsByProfileId(profile.getId());
-		boolean hasProject = projectRepository.existsByProfileId(profile.getId());
-		boolean hasSkill = profileSkillRepository.existsByProfileId(profile.getId());
+		Long profileId = profile.getId();
+		boolean hasEducation = hasQualifyingRecord(educationRepository.findByProfileIdOrderByIdAsc(profileId), profileId,
+				Education::getProfile, this::isQualifyingEducation);
+		boolean hasLanguage = hasQualifyingRecord(profileLanguageRepository.findByProfileId(profileId), profileId,
+				ProfileLanguage::getProfile, this::isQualifyingLanguage);
+		boolean hasCertificate = hasQualifyingRecord(certificateRepository.findByProfileIdOrderByIssueDateDescIdAsc(profileId),
+				profileId, Certificate::getProfile, this::isQualifyingCertificate);
+		boolean hasProject = hasQualifyingRecord(projectRepository.findByProfileIdInDisplayOrder(profileId), profileId,
+				Project::getProfile, this::isQualifyingProject);
+		boolean hasSkill = hasQualifyingRecord(profileSkillRepository.findByProfileId(profileId), profileId,
+				ProfileSkill::getProfile, this::isQualifyingSkill);
 
 		int collectionPoints = (hasEducation ? EDUCATION_WEIGHT : 0) + (hasLanguage ? LANGUAGE_WEIGHT : 0)
 				+ (hasCertificate ? CERTIFICATE_WEIGHT : 0) + (hasProject ? PROJECT_WEIGHT : 0)
@@ -91,11 +112,16 @@ public class ProfileCompletenessService {
 		}
 
 		List<Long> profileIds = profiles.stream().map(Profile::getId).toList();
-		Set<Long> educationProfileIds = new HashSet<>(educationRepository.findProfileIdsByProfileIdIn(profileIds));
-		Set<Long> languageProfileIds = new HashSet<>(profileLanguageRepository.findProfileIdsByProfileIdIn(profileIds));
-		Set<Long> certificateProfileIds = new HashSet<>(certificateRepository.findProfileIdsByProfileIdIn(profileIds));
-		Set<Long> projectProfileIds = new HashSet<>(projectRepository.findProfileIdsByProfileIdIn(profileIds));
-		Set<Long> skillProfileIds = new HashSet<>(profileSkillRepository.findProfileIdsByProfileIdIn(profileIds));
+		Set<Long> educationProfileIds = qualifyingProfileIds(educationRepository.findByProfileIdIn(profileIds),
+				Education::getProfile, this::isQualifyingEducation);
+		Set<Long> languageProfileIds = qualifyingProfileIds(profileLanguageRepository.findByProfileIdIn(profileIds),
+				ProfileLanguage::getProfile, this::isQualifyingLanguage);
+		Set<Long> certificateProfileIds = qualifyingProfileIds(certificateRepository.findByProfileIdIn(profileIds),
+				Certificate::getProfile, this::isQualifyingCertificate);
+		Set<Long> projectProfileIds = qualifyingProfileIds(projectRepository.findByProfileIdIn(profileIds), Project::getProfile,
+				this::isQualifyingProject);
+		Set<Long> skillProfileIds = qualifyingProfileIds(profileSkillRepository.findByProfileIdIn(profileIds),
+				ProfileSkill::getProfile, this::isQualifyingSkill);
 
 		int completedProfiles = 0;
 		for (Profile profile : profiles) {
@@ -112,6 +138,84 @@ public class ProfileCompletenessService {
 	private ProfileCompletenessSectionResponse collection(String key, int weight, boolean hasQualifyingRecord) {
 		return new ProfileCompletenessSectionResponse(key, weight, hasQualifyingRecord, null, null,
 				hasQualifyingRecord);
+	}
+
+	private <T> boolean hasQualifyingRecord(List<T> records, Long profileId, Function<T, Profile> profileOf,
+			Predicate<T> qualifies) {
+		return records != null && records.stream().anyMatch(record -> record != null && qualifies.test(record)
+				&& belongsToProfile(profileOf.apply(record), profileId));
+	}
+
+	private <T> Set<Long> qualifyingProfileIds(List<T> records, Function<T, Profile> profileOf, Predicate<T> qualifies) {
+		Set<Long> profileIds = new HashSet<>();
+		if (records == null) {
+			return profileIds;
+		}
+		for (T record : records) {
+			if (record != null && qualifies.test(record)) {
+				Profile profile = profileOf.apply(record);
+				if (profile != null && profile.getId() != null) {
+					profileIds.add(profile.getId());
+				}
+			}
+		}
+		return profileIds;
+	}
+
+	private boolean belongsToProfile(Profile profile, Long profileId) {
+		return profile != null && profile.getId() != null && profile.getId().equals(profileId);
+	}
+
+	private boolean isQualifyingEducation(Education education) {
+		if (!isRequiredText(education.getSchoolName(), 255) || !isRequiredText(education.getDegree(), 255)
+				|| education.getStartDate() == null || education.getStatus() == null
+				|| education.getFieldOfStudy() != null && education.getFieldOfStudy().length() > 255) {
+			return false;
+		}
+		if (education.getStatus() == EducationStatus.ONGOING) {
+			return education.getEndDate() == null;
+		}
+		return education.getStatus() == EducationStatus.COMPLETED && education.getEndDate() != null
+				&& !education.getStartDate().isAfter(education.getEndDate());
+	}
+
+	private boolean isQualifyingLanguage(ProfileLanguage profileLanguage) {
+		Language language = profileLanguage.getLanguage();
+		return language != null && hasPositiveId(language.getId()) && profileLanguage.getLevel() != null;
+	}
+
+	private boolean isQualifyingCertificate(Certificate certificate) {
+		return isRequiredText(certificate.getCertificateName(), 255) && certificate.getIssueDate() != null
+				&& !certificate.getIssueDate().isAfter(LocalDate.now(clock));
+	}
+
+	private boolean isQualifyingProject(Project project) {
+		if (!isRequiredText(project.getName(), 255) || !isNonBlank(project.getDescription())
+				|| !isRequiredText(project.getPosition(), 255) || project.getStatus() == null
+				|| project.getTeamSize() != null && project.getTeamSize() < 1) {
+			return false;
+		}
+		if (project.getStatus() == ProjectStatus.ONGOING) {
+			return project.getEndDate() == null;
+		}
+		return project.getStatus() == ProjectStatus.COMPLETED && project.getEndDate() != null
+				&& (project.getStartDate() == null || !project.getStartDate().isAfter(project.getEndDate()));
+	}
+
+	private boolean isQualifyingSkill(ProfileSkill profileSkill) {
+		Skill skill = profileSkill.getSkill();
+		return skill != null && hasPositiveId(skill.getId()) && profileSkill.getExperienceYears() != null
+				&& profileSkill.getExperienceYears().signum() >= 0
+				&& (profileSkill.getLastUsed() == null
+						|| !profileSkill.getLastUsed().isAfter(LocalDate.now(clock)));
+	}
+
+	private boolean hasPositiveId(Long id) {
+		return id != null && id > 0;
+	}
+
+	private boolean isRequiredText(String value, int maxLength) {
+		return isNonBlank(value) && value.trim().length() <= maxLength;
 	}
 
 	private boolean isCompleted(int validAboutMeFields, boolean hasEducation, boolean hasLanguage,

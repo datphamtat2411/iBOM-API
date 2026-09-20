@@ -15,6 +15,8 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
 			+ "p.endDate DESC, p.startDate DESC, p.createdAt DESC")
 	List<Project> findByProfileIdInDisplayOrder(@Param("profileId") Long profileId);
 
+	List<Project> findByProfileIdIn(List<Long> profileIds);
+
 	boolean existsByProfileId(Long profileId);
 
 	@Query("select project.profile.id from Project project where project.profile.id in :profileIds")

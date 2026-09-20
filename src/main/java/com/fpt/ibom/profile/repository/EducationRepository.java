@@ -12,6 +12,8 @@ public interface EducationRepository extends JpaRepository<Education, Long> {
 
 	List<Education> findByProfileIdOrderByIdAsc(Long profileId);
 
+	List<Education> findByProfileIdIn(List<Long> profileIds);
+
 	boolean existsByProfileId(Long profileId);
 
 	@Query("select education.profile.id from Education education where education.profile.id in :profileIds")
