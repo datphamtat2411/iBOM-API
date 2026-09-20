@@ -65,6 +65,11 @@ public class ProfileService {
 	}
 
 	@Transactional(readOnly = true)
+	public Instant latestExportedAt(Long userId) {
+		return profileRepository.findLatestExportedAtByUserId(userId);
+	}
+
+	@Transactional(readOnly = true)
 	public List<ProfileSummaryResponse> listMemberProfiles(Long memberId) {
 		userAccountRepository.findByIdAndRole(memberId, UserRole.MEMBER).orElseThrow(this::profileNotFound);
 		return list(memberId);

@@ -29,6 +29,12 @@ public class ProfileAccessService {
 		throw profileNotFound();
 	}
 
+	@Transactional(readOnly = true)
+	public Profile resolveOwned(UserPrincipal principal, Long profileId) {
+		return profileRepository.findByIdAndUserIdAndDeletedAtIsNull(profileId, principal.userId())
+				.orElseThrow(this::profileNotFound);
+	}
+
 	private boolean isManagerOrAdmin(UserPrincipal principal) {
 		return principal.role() == UserRole.MANAGER || principal.role() == UserRole.ADMIN;
 	}

@@ -25,6 +25,10 @@ public interface ProfileRepository extends JpaRepository<Profile, Long> {
 
 	Optional<Profile> findByIdAndDeletedAtIsNull(Long id);
 
+	@Query("select max(profile.lastExportedAt) from Profile profile "
+			+ "where profile.user.id = :userId and profile.deletedAt is null")
+	Instant findLatestExportedAtByUserId(@Param("userId") Long userId);
+
 	long countByUserIdAndDeletedAtIsNull(Long userId);
 
 	@Modifying(flushAutomatically = true)

@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
@@ -72,6 +74,24 @@ class ProfileAccessServiceTest {
 		assertSame(profile, service.resolve(principal(7L, UserRole.MEMBER), 8L));
 		assertSame(profile, service.resolve(principal(20L, UserRole.MANAGER), 8L));
 		assertSame(profile, service.resolve(principal(21L, UserRole.ADMIN), 8L));
+	}
+
+	@Test
+	void resolvesOnlyAnActiveProfileOwnedByTheAuthenticatedPrincipal() {
+		Profile profile = profile(8L, 7L, UserRole.MEMBER);
+		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
+
+		assertSame(profile, service.resolveOwned(principal(7L, UserRole.MANAGER), 8L));
+		verify(profiles).findByIdAndUserIdAndDeletedAtIsNull(8L, 7L);
+		verify(profiles, never()).findByIdAndDeletedAtIsNull(8L);
+	}
+
+	@Test
+	void mapsForeignAndDeletedOwnedLookupsToProfileNotFound() {
+		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(11L, 7L)).thenReturn(Optional.empty());
+
+		assertNotFound(() -> service.resolveOwned(principal(7L, UserRole.MEMBER), 11L));
+		assertNotFound(() -> service.resolveOwned(principal(7L, UserRole.MEMBER), 11L));
 	}
 
 	private void assertNotFound(Executable executable) {

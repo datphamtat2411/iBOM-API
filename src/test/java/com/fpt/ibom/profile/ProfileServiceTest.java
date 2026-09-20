@@ -120,6 +120,15 @@ class ProfileServiceTest {
 	}
 
 	@Test
+	void delegatesLatestExportTimestampToTheOwnerScopedProfileAggregate() {
+		Instant latest = Instant.parse("2026-02-03T04:05:06Z");
+		when(profiles.findLatestExportedAtByUserId(7L)).thenReturn(latest);
+
+		assertEquals(latest, service.latestExportedAt(7L));
+		verify(profiles).findLatestExportedAtByUserId(7L);
+	}
+
+	@Test
 	void listsActiveProfilesForAnExistingMemberRegardlessOfStatus() {
 		UserAccount inactiveMember = new UserAccount("member@example.com", "member", "hash", UserRole.MEMBER,
 				UserStatus.INACTIVE);
