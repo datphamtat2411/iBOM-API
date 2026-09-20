@@ -2,6 +2,8 @@ package com.fpt.ibom.dashboard.service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Clock;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -32,15 +34,18 @@ public class DashboardService {
 	private final ProfileService profileService;
 	private final ProfileEligibilityService profileEligibilityService;
 	private final ProfileSkillRepository profileSkillRepository;
+	private final Clock clock;
 
 	public DashboardService(ProfileAccessService profileAccessService,
 			ProfileCompletenessService profileCompletenessService, ProfileService profileService,
-			ProfileEligibilityService profileEligibilityService, ProfileSkillRepository profileSkillRepository) {
+			ProfileEligibilityService profileEligibilityService, ProfileSkillRepository profileSkillRepository,
+			Clock clock) {
 		this.profileAccessService = profileAccessService;
 		this.profileCompletenessService = profileCompletenessService;
 		this.profileService = profileService;
 		this.profileEligibilityService = profileEligibilityService;
 		this.profileSkillRepository = profileSkillRepository;
+		this.clock = clock;
 	}
 
 	@Transactional(readOnly = true)
@@ -62,8 +67,9 @@ public class DashboardService {
 		List<Long> profileIds = eligibleProfiles.stream().map(Profile::getId).toList();
 		List<ProfileSkill> profileSkills = profileSkillRepository.findByProfileIdIn(profileIds);
 		Map<Long, List<ProfileSkill>> skillsByProfile = new HashMap<>();
+		LocalDate businessDate = LocalDate.now(clock);
 		for (ProfileSkill profileSkill : profileSkills) {
-			if (!isValidSkillContribution(profileSkill)) {
+			if (!isValidSkillContribution(profileSkill, businessDate)) {
 				continue;
 			}
 			skillsByProfile.computeIfAbsent(profileSkill.getProfile().getId(), ignored -> new ArrayList<>()).add(profileSkill);
@@ -81,12 +87,15 @@ public class DashboardService {
 				buildPrimaryDistribution(primarySkills), buildCategoryDistribution(primarySkills));
 	}
 
-	private boolean isValidSkillContribution(ProfileSkill profileSkill) {
+	private boolean isValidSkillContribution(ProfileSkill profileSkill, LocalDate businessDate) {
 		if (profileSkill == null || profileSkill.getProfile() == null || profileSkill.getProfile().getId() == null) {
 			return false;
 		}
 		Skill skill = profileSkill.getSkill();
-		return skill != null && skill.getId() != null && skill.getName() != null && !skill.getName().isBlank();
+		return skill != null && skill.getId() != null && skill.getName() != null && !skill.getName().isBlank()
+				&& profileSkill.getExperienceYears() != null
+				&& profileSkill.getExperienceYears().compareTo(BigDecimal.ZERO) >= 0
+				&& (profileSkill.getLastUsed() == null || !profileSkill.getLastUsed().isAfter(businessDate));
 	}
 
 	private ProfileSkill selectPrimarySkill(List<ProfileSkill> profileSkills) {

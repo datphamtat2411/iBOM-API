@@ -13,8 +13,10 @@ import static org.mockito.Mockito.when;
 import static org.mockito.ArgumentMatchers.anyLong;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 
 import com.fpt.ibom.auth.entity.UserAccount;
@@ -47,8 +49,9 @@ class DashboardServiceTest {
 	private final ProfileService profileService = mock(ProfileService.class);
 	private final ProfileEligibilityService profileEligibilityService = mock(ProfileEligibilityService.class);
 	private final ProfileSkillRepository profileSkillRepository = mock(ProfileSkillRepository.class);
+	private final Clock clock = Clock.fixed(Instant.parse("2026-02-01T00:00:00Z"), ZoneId.of("Asia/Ho_Chi_Minh"));
 	private final DashboardService service = new DashboardService(profileAccessService, profileCompletenessService,
-			profileService, profileEligibilityService, profileSkillRepository);
+			profileService, profileEligibilityService, profileSkillRepository, clock);
 
 	@Test
 	void resolvesTheSuppliedProfileThroughOwnerScopedAccessAndReusesCanonicalCompleteness() {
@@ -217,6 +220,80 @@ class DashboardServiceTest {
 		assertEquals(List.of(33, 33, 33), result.skillCategoryDistribution().items().stream()
 				.map(ManagerDashboardStatsResponse.SkillCategoryItem::percentage).toList());
 		assertEquals(0, result.skillCategoryDistribution().otherProfileCount());
+	}
+
+	@Test
+	void ignoresFutureLastUsedWhenSelectingPrimarySkill() {
+		Profile profile = profile(24L, 7L);
+		Skill future = skill(24L, "Future", category(54L, "FUTURE", "Future"));
+		Skill valid = skill(25L, "Valid", category(55L, "VALID", "Valid"));
+		when(profileEligibilityService.findEligibleMemberProfiles()).thenReturn(List.of(profile));
+		when(profileCompletenessService.countCompleted(List.of(profile))).thenReturn(1);
+		when(profileSkillRepository.findByProfileIdIn(List.of(24L))).thenReturn(List.of(
+				new ProfileSkill(profile, future, new BigDecimal("10.00"), LocalDate.of(2026, 2, 2)),
+				new ProfileSkill(profile, valid, new BigDecimal("1.00"), LocalDate.of(2026, 2, 1))));
+
+		ManagerDashboardStatsResponse result = service.getManagerStats();
+
+		assertEquals(List.of("Valid"), result.primarySkillDistribution().items().stream()
+				.map(ManagerDashboardStatsResponse.PrimarySkillItem::skillName).toList());
+		assertEquals(List.of("Valid"), result.skillCategoryDistribution().items().stream()
+				.map(ManagerDashboardStatsResponse.SkillCategoryItem::categoryName).toList());
+	}
+
+	@Test
+	void excludesProfilesWithOnlyInvalidProfileSkillsFromBothDistributions() {
+		Profile profile = profile(25L, 7L);
+		Skill skill = skill(26L, "Ignored", category(56L, "IGNORED", "Ignored"));
+		when(profileEligibilityService.findEligibleMemberProfiles()).thenReturn(List.of(profile));
+		when(profileCompletenessService.countCompleted(List.of(profile))).thenReturn(0);
+		when(profileSkillRepository.findByProfileIdIn(List.of(25L))).thenReturn(List.of(
+				new ProfileSkill(profile, skill, null, LocalDate.of(2026, 1, 1)),
+				new ProfileSkill(profile, skill, new BigDecimal("-1.00"), LocalDate.of(2026, 1, 1)),
+				new ProfileSkill(profile, skill, BigDecimal.ONE, LocalDate.of(2026, 2, 2))));
+
+		ManagerDashboardStatsResponse result = service.getManagerStats();
+
+		assertEquals(List.of(), result.primarySkillDistribution().items());
+		assertEquals(0, result.primarySkillDistribution().otherProfileCount());
+		assertEquals(List.of(), result.skillCategoryDistribution().items());
+		assertEquals(0, result.skillCategoryDistribution().otherProfileCount());
+	}
+
+	@Test
+	void preservesPrimarySkillOrderingForValidProfileSkills() {
+		Profile byExperience = profile(26L, 7L);
+		Profile byLastUsed = profile(27L, 7L);
+		Profile byName = profile(28L, 7L);
+		Profile byId = profile(29L, 7L);
+		List<Profile> eligibleProfiles = List.of(byExperience, byLastUsed, byName, byId);
+		SkillCategory category = category(57L, "ORDERING", "Ordering");
+		Skill lowExperience = skill(27L, "Low experience", category);
+		Skill highExperience = skill(28L, "High experience", category);
+		Skill old = skill(29L, "Old", category);
+		Skill recent = skill(30L, "Recent", category);
+		Skill zeta = skill(31L, "zeta", category);
+		Skill alpha = skill(32L, "Alpha", category);
+		Skill higherId = skill(34L, "same", category);
+		Skill lowerId = skill(33L, "SAME", category);
+		when(profileEligibilityService.findEligibleMemberProfiles()).thenReturn(eligibleProfiles);
+		when(profileCompletenessService.countCompleted(eligibleProfiles)).thenReturn(4);
+		when(profileSkillRepository.findByProfileIdIn(List.of(26L, 27L, 28L, 29L))).thenReturn(List.of(
+				new ProfileSkill(byExperience, lowExperience, new BigDecimal("1.00"), LocalDate.of(2026, 1, 1)),
+				new ProfileSkill(byExperience, highExperience, new BigDecimal("2.00"), LocalDate.of(2025, 1, 1)),
+				new ProfileSkill(byLastUsed, old, new BigDecimal("2.00"), LocalDate.of(2025, 1, 1)),
+				new ProfileSkill(byLastUsed, recent, new BigDecimal("2.00"), LocalDate.of(2026, 1, 1)),
+				new ProfileSkill(byName, zeta, new BigDecimal("2.00"), LocalDate.of(2026, 1, 1)),
+				new ProfileSkill(byName, alpha, new BigDecimal("2.00"), LocalDate.of(2026, 1, 1)),
+				new ProfileSkill(byId, higherId, new BigDecimal("2.00"), LocalDate.of(2026, 1, 1)),
+				new ProfileSkill(byId, lowerId, new BigDecimal("2.00"), LocalDate.of(2026, 1, 1))));
+
+		ManagerDashboardStatsResponse result = service.getManagerStats();
+
+		assertEquals(List.of("Alpha", "High experience", "Recent", "SAME"), result.primarySkillDistribution().items()
+				.stream().map(ManagerDashboardStatsResponse.PrimarySkillItem::skillName).toList());
+		assertEquals(List.of(32L, 28L, 30L, 33L), result.primarySkillDistribution().items().stream()
+				.map(ManagerDashboardStatsResponse.PrimarySkillItem::skillId).toList());
 	}
 
 	@Test
