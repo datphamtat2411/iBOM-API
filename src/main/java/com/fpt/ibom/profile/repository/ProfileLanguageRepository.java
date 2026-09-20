@@ -16,6 +16,10 @@ public interface ProfileLanguageRepository extends JpaRepository<ProfileLanguage
 
 	boolean existsByProfileId(Long profileId);
 
+	@Query("select profileLanguage.profile.id from ProfileLanguage profileLanguage "
+			+ "where profileLanguage.profile.id in :profileIds")
+	List<Long> findProfileIdsByProfileIdIn(@Param("profileIds") List<Long> profileIds);
+
 	Optional<ProfileLanguage> findByIdAndProfileId(Long profileLanguageId, Long profileId);
 
 	boolean existsByProfileIdAndLanguageId(Long profileId, Long languageId);

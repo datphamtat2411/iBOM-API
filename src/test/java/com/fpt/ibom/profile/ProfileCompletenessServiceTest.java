@@ -142,6 +142,39 @@ class ProfileCompletenessServiceTest {
 		verify(profiles, never()).save(any());
 	}
 
+	@Test
+	void countsCompletedProfilesUsingBatchChildLookups() {
+		Profile first = profile("First", "First", "Last", "Engineer", BigDecimal.ZERO, "Personality",
+				"Summary");
+		Profile second = profile("Second", "First", "Last", "Engineer", BigDecimal.ZERO, "Personality",
+				"Summary");
+		Profile incomplete = profile("Incomplete", "First", "Last", "Engineer", BigDecimal.ZERO, "Personality",
+				null);
+		ReflectionTestUtils.setField(second, "id", 9L);
+		ReflectionTestUtils.setField(incomplete, "id", 10L);
+		List<Long> profileIds = List.of(8L, 9L, 10L);
+		when(educations.findProfileIdsByProfileIdIn(profileIds)).thenReturn(List.of(8L, 9L));
+		when(languages.findProfileIdsByProfileIdIn(profileIds)).thenReturn(List.of(8L, 9L, 10L));
+		when(certificates.findProfileIdsByProfileIdIn(profileIds)).thenReturn(List.of(8L, 9L));
+		when(projects.findProfileIdsByProfileIdIn(profileIds)).thenReturn(List.of(8L, 9L));
+		when(skills.findProfileIdsByProfileIdIn(profileIds)).thenReturn(List.of(8L, 9L));
+
+		assertEquals(2, service.countCompleted(List.of(first, second, incomplete)));
+
+		verify(educations, never()).existsByProfileId(any());
+		verify(languages, never()).existsByProfileId(any());
+		verify(certificates, never()).existsByProfileId(any());
+		verify(projects, never()).existsByProfileId(any());
+		verify(skills, never()).existsByProfileId(any());
+	}
+
+	@Test
+	void returnsZeroWithoutBatchChildQueriesForEmptyProfiles() {
+		assertEquals(0, service.countCompleted(List.of()));
+
+		verifyNoInteractions(educations, languages, certificates, projects, skills);
+	}
+
 	private void stubProfile(Profile profile) {
 		when(profiles.findByIdAndUserIdAndDeletedAtIsNull(8L, 7L)).thenReturn(Optional.of(profile));
 	}

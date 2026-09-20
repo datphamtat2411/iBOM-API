@@ -17,5 +17,8 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
 
 	boolean existsByProfileId(Long profileId);
 
+	@Query("select project.profile.id from Project project where project.profile.id in :profileIds")
+	List<Long> findProfileIdsByProfileIdIn(@Param("profileIds") List<Long> profileIds);
+
 	Optional<Project> findByIdAndProfileId(Long projectId, Long profileId);
 }

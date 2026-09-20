@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -16,13 +17,34 @@ import com.fpt.ibom.auth.entity.UserRole;
 import com.fpt.ibom.auth.entity.UserStatus;
 import com.fpt.ibom.auth.repository.UserAccountRepository;
 import com.fpt.ibom.auth.security.UserPrincipal;
+import com.fpt.ibom.master.entity.Language;
+import com.fpt.ibom.master.entity.Skill;
+import com.fpt.ibom.master.entity.SkillCategory;
+import com.fpt.ibom.master.repository.LanguageRepository;
+import com.fpt.ibom.master.repository.SkillCategoryRepository;
+import com.fpt.ibom.master.repository.SkillRepository;
+import com.fpt.ibom.profile.entity.Certificate;
+import com.fpt.ibom.profile.entity.Education;
+import com.fpt.ibom.profile.entity.EducationStatus;
+import com.fpt.ibom.profile.entity.LanguageLevel;
 import com.fpt.ibom.profile.entity.Profile;
+import com.fpt.ibom.profile.entity.ProfileLanguage;
+import com.fpt.ibom.profile.entity.ProfileSkill;
+import com.fpt.ibom.profile.entity.Project;
+import com.fpt.ibom.profile.entity.ProjectStatus;
+import com.fpt.ibom.profile.repository.CertificateRepository;
+import com.fpt.ibom.profile.repository.EducationRepository;
+import com.fpt.ibom.profile.repository.ProfileLanguageRepository;
 import com.fpt.ibom.profile.repository.ProfileRepository;
+import com.fpt.ibom.profile.repository.ProfileSkillRepository;
+import com.fpt.ibom.profile.repository.ProjectRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest
@@ -37,6 +59,41 @@ class DashboardIntegrationTest extends MySqlIntegrationTest {
 
 	@Autowired
 	private UserAccountRepository users;
+
+	@Autowired
+	private EducationRepository educations;
+
+	@Autowired
+	private ProfileLanguageRepository profileLanguages;
+
+	@Autowired
+	private CertificateRepository certificates;
+
+	@Autowired
+	private ProjectRepository projects;
+
+	@Autowired
+	private ProfileSkillRepository profileSkills;
+
+	@Autowired
+	private LanguageRepository languages;
+
+	@Autowired
+	private SkillCategoryRepository skillCategories;
+
+	@Autowired
+	private SkillRepository skills;
+
+	@BeforeEach
+	void clearProfilesAndChildRecords() {
+		profileSkills.deleteAllInBatch();
+		profileLanguages.deleteAllInBatch();
+		certificates.deleteAllInBatch();
+		projects.deleteAllInBatch();
+		educations.deleteAllInBatch();
+		profiles.deleteAllInBatch();
+		users.deleteAllInBatch();
+	}
 
 	@Test
 	void returnsSelectedProfileCompletenessAndLatestExportAcrossActiveOwnedProfiles() throws Exception {
@@ -88,9 +145,59 @@ class DashboardIntegrationTest extends MySqlIntegrationTest {
 				.andExpect(status().isNotFound()).andExpect(jsonPath("$.errorCode").value("PROFILE_NOT_FOUND"));
 	}
 
+	@Test
+	void countsOnlyActiveMemberProfilesAndOnlyCanonicallyCompletedProfiles() throws Exception {
+		UserAccount member = saveUser(UserRole.MEMBER, UserStatus.ACTIVE);
+		Profile completed = saveProfile(member, "Completed");
+		addCompleteProfileData(completed);
+		saveProfile(member, "Incomplete");
+		Profile deleted = saveProfile(member, "Deleted");
+		deleted.softDelete(Instant.parse("2026-01-01T00:00:00Z"));
+		profiles.saveAndFlush(deleted);
+
+		UserAccount inactiveMember = saveUser(UserRole.MEMBER, UserStatus.INACTIVE);
+		saveProfile(inactiveMember, "Inactive");
+		saveProfile(saveUser(UserRole.MANAGER, UserStatus.ACTIVE), "Manager");
+		saveProfile(saveUser(UserRole.ADMIN, UserStatus.ACTIVE), "Admin");
+
+		UserAccount manager = saveUser(UserRole.MANAGER, UserStatus.ACTIVE);
+		mockMvc.perform(get("/api/dashboard/manager-stats").with(authentication(principal(manager))))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.totalProfiles").value(2))
+				.andExpect(jsonPath("$.data.completedProfiles").value(1));
+	}
+
+	@Test
+	void returnsZeroCountsWhenNoEligibleProfilesExist() throws Exception {
+		UserAccount manager = saveUser(UserRole.MANAGER, UserStatus.ACTIVE);
+
+		mockMvc.perform(get("/api/dashboard/manager-stats").with(authentication(principal(manager))))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.totalProfiles").value(0))
+				.andExpect(jsonPath("$.data.completedProfiles").value(0));
+	}
+
+	private void addCompleteProfileData(Profile profile) {
+		educations.saveAndFlush(new Education(profile, "University", "Degree", "Field",
+				LocalDate.of(2015, 9, 1), LocalDate.of(2019, 6, 1), EducationStatus.COMPLETED));
+		Language language = languages.saveAndFlush(new Language("English-" + UUID.randomUUID()));
+		profileLanguages.saveAndFlush(new ProfileLanguage(profile, language, LanguageLevel.ADVANCED));
+		certificates.saveAndFlush(new Certificate(profile, "Certification", LocalDate.of(2020, 1, 1)));
+		projects.saveAndFlush(new Project(profile, "Project", "Description", LocalDate.of(2020, 1, 1),
+				LocalDate.of(2021, 1, 1), ProjectStatus.COMPLETED, "Developer", 3, "Responsibilities",
+				"Java", "Tools"));
+		SkillCategory category = skillCategories.saveAndFlush(new SkillCategory("CAT-" + UUID.randomUUID(), "Category"));
+		Skill skill = skills.saveAndFlush(new Skill("Java-" + UUID.randomUUID(), category));
+		profileSkills.saveAndFlush(new ProfileSkill(profile, skill, BigDecimal.ONE, LocalDate.of(2021, 1, 1)));
+	}
+
 	private UserAccount saveUser(UserRole role) {
+		return saveUser(role, UserStatus.ACTIVE);
+	}
+
+	private UserAccount saveUser(UserRole role, UserStatus status) {
 		return users.saveAndFlush(new UserAccount(UUID.randomUUID() + "@example.com", "user-" + UUID.randomUUID(),
-				"hash", role, UserStatus.ACTIVE));
+				"hash", role, status));
 	}
 
 	private Profile saveProfile(UserAccount user, String name) {
@@ -100,6 +207,6 @@ class DashboardIntegrationTest extends MySqlIntegrationTest {
 
 	private UsernamePasswordAuthenticationToken principal(UserAccount user) {
 		return new UsernamePasswordAuthenticationToken(new UserPrincipal(user.getId(), user.getEmail(), user.getUsername(),
-				user.getRole()), null, List.of());
+				user.getRole()), null, List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name())));
 	}
 }

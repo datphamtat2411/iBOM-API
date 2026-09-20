@@ -7,6 +7,8 @@ import java.math.BigDecimal;
 import com.fpt.ibom.profile.entity.ProfileSkill;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface ProfileSkillRepository extends JpaRepository<ProfileSkill, Long> {
 
@@ -14,6 +16,9 @@ public interface ProfileSkillRepository extends JpaRepository<ProfileSkill, Long
 	List<ProfileSkill> findByProfileId(Long profileId);
 
 	boolean existsByProfileId(Long profileId);
+
+	@Query("select profileSkill.profile.id from ProfileSkill profileSkill where profileSkill.profile.id in :profileIds")
+	List<Long> findProfileIdsByProfileIdIn(@Param("profileIds") List<Long> profileIds);
 
 	Optional<ProfileSkill> findByIdAndProfileId(Long profileSkillId, Long profileId);
 

@@ -17,6 +17,7 @@ import com.fpt.ibom.auth.entity.UserAccount;
 import com.fpt.ibom.auth.entity.UserRole;
 import com.fpt.ibom.auth.entity.UserStatus;
 import com.fpt.ibom.auth.security.UserPrincipal;
+import com.fpt.ibom.dashboard.dto.ManagerDashboardStatsResponse;
 import com.fpt.ibom.dashboard.dto.MemberDashboardStatsResponse;
 import com.fpt.ibom.dashboard.service.DashboardService;
 import com.fpt.ibom.exception.ApiException;
@@ -25,6 +26,7 @@ import com.fpt.ibom.profile.dto.ProfileCompletenessResponse;
 import com.fpt.ibom.profile.entity.Profile;
 import com.fpt.ibom.profile.service.ProfileAccessService;
 import com.fpt.ibom.profile.service.ProfileCompletenessService;
+import com.fpt.ibom.profile.service.ProfileEligibilityService;
 import com.fpt.ibom.profile.service.ProfileService;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -35,8 +37,9 @@ class DashboardServiceTest {
 	private final ProfileAccessService profileAccessService = mock(ProfileAccessService.class);
 	private final ProfileCompletenessService profileCompletenessService = mock(ProfileCompletenessService.class);
 	private final ProfileService profileService = mock(ProfileService.class);
+	private final ProfileEligibilityService profileEligibilityService = mock(ProfileEligibilityService.class);
 	private final DashboardService service = new DashboardService(profileAccessService, profileCompletenessService,
-			profileService);
+			profileService, profileEligibilityService);
 
 	@Test
 	void resolvesTheSuppliedProfileThroughOwnerScopedAccessAndReusesCanonicalCompleteness() {
@@ -79,6 +82,36 @@ class DashboardServiceTest {
 		assertThrows(ApiException.class, () -> service.getStats(principal, 8L));
 		verify(profileAccessService).resolveOwned(principal, 8L);
 		verifyNoMoreInteractions(profileAccessService, profileCompletenessService, profileService);
+	}
+
+	@Test
+	void countsEligibleProfilesAndDelegatesCompletionToCanonicalService() {
+		Profile first = profile(8L, 7L);
+		Profile second = profile(9L, 7L);
+		Profile third = profile(10L, 8L);
+		List<Profile> eligibleProfiles = List.of(first, second, third);
+		when(profileEligibilityService.findEligibleMemberProfiles()).thenReturn(eligibleProfiles);
+		when(profileCompletenessService.countCompleted(eligibleProfiles)).thenReturn(2);
+
+		ManagerDashboardStatsResponse result = service.getManagerStats();
+
+		assertEquals(3, result.totalProfiles());
+		assertEquals(2, result.completedProfiles());
+		verify(profileEligibilityService).findEligibleMemberProfiles();
+		verify(profileCompletenessService).countCompleted(eligibleProfiles);
+		verifyNoMoreInteractions(profileEligibilityService, profileCompletenessService);
+	}
+
+	@Test
+	void returnsZeroCountsWhenNoEligibleProfilesExist() {
+		when(profileEligibilityService.findEligibleMemberProfiles()).thenReturn(List.of());
+		when(profileCompletenessService.countCompleted(List.of())).thenReturn(0);
+
+		ManagerDashboardStatsResponse result = service.getManagerStats();
+
+		assertEquals(0, result.totalProfiles());
+		assertEquals(0, result.completedProfiles());
+		verify(profileCompletenessService).countCompleted(List.of());
 	}
 
 	private UserPrincipal principal(Long userId, UserRole role) {

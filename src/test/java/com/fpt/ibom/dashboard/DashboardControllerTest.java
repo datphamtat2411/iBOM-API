@@ -18,6 +18,7 @@ import com.fpt.ibom.auth.repository.UserAccountRepository;
 import com.fpt.ibom.auth.security.UserPrincipal;
 import com.fpt.ibom.config.SecurityConfig;
 import com.fpt.ibom.dashboard.controller.DashboardController;
+import com.fpt.ibom.dashboard.dto.ManagerDashboardStatsResponse;
 import com.fpt.ibom.dashboard.dto.MemberDashboardStatsResponse;
 import com.fpt.ibom.dashboard.service.DashboardService;
 import com.fpt.ibom.exception.ApiException;
@@ -97,6 +98,34 @@ class DashboardControllerTest {
 
 		mockMvc.perform(get("/api/dashboard/my-stats").param("profileId", "8").with(principal(UserRole.MEMBER)))
 				.andExpect(status().isNotFound()).andExpect(jsonPath("$.errorCode").value("PROFILE_NOT_FOUND"));
+	}
+
+	@Test
+	void requiresAuthenticationForManagerStats() throws Exception {
+		mockMvc.perform(get("/api/dashboard/manager-stats"))
+				.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void rejectsMemberForManagerStats() throws Exception {
+		mockMvc.perform(get("/api/dashboard/manager-stats").with(principal(UserRole.MEMBER)))
+				.andExpect(status().isForbidden());
+		verify(dashboardService, never()).getManagerStats();
+	}
+
+	@Test
+	void returnsManagerStatsForManagerAndAdmin() throws Exception {
+		when(dashboardService.getManagerStats()).thenReturn(new ManagerDashboardStatsResponse(3, 2));
+
+		for (UserRole role : List.of(UserRole.MANAGER, UserRole.ADMIN)) {
+			mockMvc.perform(get("/api/dashboard/manager-stats").with(principal(role)))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.code").value(200))
+					.andExpect(jsonPath("$.data.totalProfiles").value(3))
+					.andExpect(jsonPath("$.data.completedProfiles").value(2));
+		}
+
+		verify(dashboardService, org.mockito.Mockito.times(2)).getManagerStats();
 	}
 
 	private MemberDashboardStatsResponse response(Instant latest) {

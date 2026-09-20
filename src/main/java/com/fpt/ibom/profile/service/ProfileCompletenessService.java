@@ -2,7 +2,9 @@ package com.fpt.ibom.profile.service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.exception.ErrorCode;
@@ -69,8 +71,8 @@ public class ProfileCompletenessService {
 		long rawTotalNumerator = (long) ABOUT_ME_WEIGHT * validAboutMeFields + 6L * collectionPoints;
 		int percentage = BigDecimal.valueOf(rawTotalNumerator)
 				.divide(BigDecimal.valueOf(ABOUT_ME_FIELD_COUNT), 0, RoundingMode.HALF_UP).intValueExact();
-		boolean completed = validAboutMeFields == ABOUT_ME_FIELD_COUNT
-				&& hasEducation && hasLanguage && hasCertificate && hasProject && hasSkill;
+		boolean completed = isCompleted(validAboutMeFields, hasEducation, hasLanguage, hasCertificate, hasProject,
+				hasSkill);
 
 		return new ProfileCompletenessResponse(percentage, completed, List.of(
 				new ProfileCompletenessSectionResponse("aboutMe", ABOUT_ME_WEIGHT,
@@ -82,9 +84,40 @@ public class ProfileCompletenessService {
 				collection("skills", SKILLS_WEIGHT, hasSkill)));
 	}
 
+	@Transactional(readOnly = true)
+	public int countCompleted(List<Profile> profiles) {
+		if (profiles.isEmpty()) {
+			return 0;
+		}
+
+		List<Long> profileIds = profiles.stream().map(Profile::getId).toList();
+		Set<Long> educationProfileIds = new HashSet<>(educationRepository.findProfileIdsByProfileIdIn(profileIds));
+		Set<Long> languageProfileIds = new HashSet<>(profileLanguageRepository.findProfileIdsByProfileIdIn(profileIds));
+		Set<Long> certificateProfileIds = new HashSet<>(certificateRepository.findProfileIdsByProfileIdIn(profileIds));
+		Set<Long> projectProfileIds = new HashSet<>(projectRepository.findProfileIdsByProfileIdIn(profileIds));
+		Set<Long> skillProfileIds = new HashSet<>(profileSkillRepository.findProfileIdsByProfileIdIn(profileIds));
+
+		int completedProfiles = 0;
+		for (Profile profile : profiles) {
+			Long profileId = profile.getId();
+			if (isCompleted(validAboutMeFields(profile), educationProfileIds.contains(profileId),
+					languageProfileIds.contains(profileId), certificateProfileIds.contains(profileId),
+					projectProfileIds.contains(profileId), skillProfileIds.contains(profileId))) {
+				completedProfiles++;
+			}
+		}
+		return completedProfiles;
+	}
+
 	private ProfileCompletenessSectionResponse collection(String key, int weight, boolean hasQualifyingRecord) {
 		return new ProfileCompletenessSectionResponse(key, weight, hasQualifyingRecord, null, null,
 				hasQualifyingRecord);
+	}
+
+	private boolean isCompleted(int validAboutMeFields, boolean hasEducation, boolean hasLanguage,
+			boolean hasCertificate, boolean hasProject, boolean hasSkill) {
+		return validAboutMeFields == ABOUT_ME_FIELD_COUNT && hasEducation && hasLanguage && hasCertificate && hasProject
+				&& hasSkill;
 	}
 
 	private int validAboutMeFields(Profile profile) {
