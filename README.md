@@ -36,6 +36,22 @@ control.
 
 Hibernate runs in `validate` mode and Flyway is enabled.
 
+## Initial Admin Bootstrap
+
+Bootstrap provisioning is disabled by default. To create the single initial
+admin account on startup, set these environment variables for that deployment:
+
+| Variable | Purpose |
+| --- | --- |
+| `IBOM_AUTH_BOOTSTRAP_ENABLED` | Set to `true` to enable provisioning |
+| `IBOM_AUTH_BOOTSTRAP_ADMIN_EMAIL` | Initial admin email |
+| `IBOM_AUTH_BOOTSTRAP_ADMIN_USERNAME` | Initial admin username |
+| `IBOM_AUTH_BOOTSTRAP_ADMIN_PASSWORD` | Initial admin password |
+
+The credentials are validated and used only when no conflicting account exists.
+The bootstrap password must satisfy the normal strong-password and allowed-domain
+rules. Do not commit these values to source control.
+
 ## Verification
 
 With MySQL running and the environment variables configured, run:
@@ -54,4 +70,3 @@ OpenAPI documentation is available at `/v3/api-docs` and Swagger UI at
 ```text
 com.fpt.ibom
 ```
-

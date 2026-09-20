@@ -19,6 +19,7 @@ import com.fpt.ibom.auth.entity.UserRole;
 
 public interface UserAccountRepository extends JpaRepository<UserAccount, Long> {
 	Optional<UserAccount> findByEmailIgnoreCase(String email);
+	Optional<UserAccount> findByUsernameIgnoreCase(String username);
 
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	@Query("select user from UserAccount user where lower(user.email) = lower(:email)")

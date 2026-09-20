@@ -11,6 +11,7 @@ import com.fpt.ibom.auth.entity.UserStatus;
 import com.fpt.ibom.auth.repository.UserAccountRepository;
 import com.fpt.ibom.exception.ApiException;
 import com.fpt.ibom.exception.ErrorCode;
+import com.fpt.ibom.validation.StrongPasswordValidator;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -37,13 +38,30 @@ public class UserAccountCreationService {
 
 	public String normalizeAndValidateEmail(String email) {
 		String normalizedEmail = normalizeEmail(email);
+		if (normalizedEmail.isBlank()) {
+			throw new ApiException(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_ERROR, "Validation failed");
+		}
 		ensureAllowedDomain(normalizedEmail);
 		return normalizedEmail;
 	}
 
+	public String normalizeAndValidateUsername(String username) {
+		String normalizedUsername = normalizeUsername(username);
+		if (normalizedUsername.isBlank() || normalizedUsername.length() > 100) {
+			throw new ApiException(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_ERROR, "Validation failed");
+		}
+		return normalizedUsername;
+	}
+
+	public void validatePassword(String password) {
+		if (!new StrongPasswordValidator().isValid(password, null)) {
+			throw new ApiException(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_ERROR, "Validation failed");
+		}
+	}
+
 	public PreparedAccount prepare(String email, String username) {
 		String normalizedEmail = normalizeAndValidateEmail(email);
-		String normalizedUsername = normalizeUsername(username);
+		String normalizedUsername = normalizeAndValidateUsername(username);
 		if (userAccountRepository.existsByEmailIgnoreCase(normalizedEmail)) {
 			throw new ApiException(HttpStatus.CONFLICT, ErrorCode.AUTH_EMAIL_ALREADY_REGISTERED,
 					"Email is already registered");
@@ -65,6 +83,7 @@ public class UserAccountCreationService {
 		if (role == null) {
 			throw new ApiException(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_ERROR, "Validation failed");
 		}
+		validatePassword(password);
 		try {
 			return userAccountRepository.saveAndFlush(new UserAccount(account.email(), account.username(),
 					passwordEncoder.encode(password), role, UserStatus.ACTIVE));
