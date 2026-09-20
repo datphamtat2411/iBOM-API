@@ -38,6 +38,9 @@ public class UserAccount {
 	@Enumerated(EnumType.STRING)
 	private UserStatus status;
 
+	@Column(name = "auth_version", nullable = false)
+	private long authVersion;
+
 	@CreationTimestamp
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private Instant createdAt;
@@ -65,5 +68,7 @@ public class UserAccount {
 	public void setUsername(String username) { this.username = username; }
 	public UserRole getRole() { return role; }
 	public UserStatus getStatus() { return status; }
+	public long getAuthVersion() { return authVersion; }
 	public void changeStatus(UserStatus status) { this.status = status; }
+	public void invalidateAuthenticationState() { authVersion++; }
 }

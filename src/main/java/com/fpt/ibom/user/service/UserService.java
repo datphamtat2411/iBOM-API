@@ -52,6 +52,9 @@ public class UserService {
 					"Users cannot deactivate their own account");
 		}
 
+		if (desiredStatus == UserStatus.INACTIVE && user.getStatus() != UserStatus.INACTIVE) {
+			user.invalidateAuthenticationState();
+		}
 		user.changeStatus(desiredStatus);
 		if (desiredStatus == UserStatus.INACTIVE) {
 			refreshTokenRepository.revokeAllByUserId(userId, Instant.now());

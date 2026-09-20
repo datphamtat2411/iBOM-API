@@ -83,17 +83,41 @@ class UserStatusIntegrationTest extends MySqlIntegrationTest {
 		assertNotNull(csrfCookie);
 
 		updateStatus(manager, member, "INACTIVE");
-		assertEquals(UserStatus.INACTIVE, userAccountRepository.findById(member.getId()).orElseThrow().getStatus());
+		UserAccount deactivated = userAccountRepository.findById(member.getId()).orElseThrow();
+		assertEquals(UserStatus.INACTIVE, deactivated.getStatus());
+		assertEquals(1L, deactivated.getAuthVersion());
 		assertProfileUnchanged(profile);
 		mockMvc.perform(get("/api/profiles/me").header("Authorization", "Bearer " + accessToken))
 				.andExpect(status().isUnauthorized());
 
+		updateStatus(manager, member, "INACTIVE");
+		assertEquals(1L, userAccountRepository.findById(member.getId()).orElseThrow().getAuthVersion());
+
 		updateStatus(manager, member, "ACTIVE");
-		assertEquals(UserStatus.ACTIVE, userAccountRepository.findById(member.getId()).orElseThrow().getStatus());
+		UserAccount reactivated = userAccountRepository.findById(member.getId()).orElseThrow();
+		assertEquals(UserStatus.ACTIVE, reactivated.getStatus());
+		assertEquals(1L, reactivated.getAuthVersion());
 		assertProfileUnchanged(profile);
+		mockMvc.perform(get("/api/profiles/me").header("Authorization", "Bearer " + accessToken))
+				.andExpect(status().isUnauthorized());
 		mockMvc.perform(post("/api/auth/refresh-token").cookie(refreshCookie, csrfCookie)
 				.header("X-XSRF-TOKEN", csrfCookie.getValue()))
 				.andExpect(status().isUnauthorized());
+
+		MvcResult loginAgain = login(member, "member-password");
+		String newAccessToken = com.jayway.jsonpath.JsonPath.read(loginAgain.getResponse().getContentAsString(), "$.data.accessToken");
+		mockMvc.perform(get("/api/profiles/me").header("Authorization", "Bearer " + newAccessToken))
+				.andExpect(status().isOk());
+	}
+
+	@Test
+	void migrationAddsNonNullableAuthenticationVersionWithZeroDefault() {
+		assertEquals("NO", jdbcTemplate.queryForObject("SELECT IS_NULLABLE FROM information_schema.COLUMNS "
+				+ "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'auth_version'", String.class));
+		assertEquals("0", jdbcTemplate.queryForObject("SELECT COLUMN_DEFAULT FROM information_schema.COLUMNS "
+				+ "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'auth_version'", String.class));
+		assertEquals("bigint", jdbcTemplate.queryForObject("SELECT DATA_TYPE FROM information_schema.COLUMNS "
+				+ "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'auth_version'", String.class));
 	}
 
 	@Test

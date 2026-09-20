@@ -141,6 +141,7 @@ class UserServiceTest {
 		UserSummaryResponse result = userService.updateStatus(12L, 7L, UserStatus.INACTIVE);
 
 		assertEquals(UserStatus.INACTIVE, user.getStatus());
+		assertEquals(1L, user.getAuthVersion());
 		assertEquals(UserStatus.INACTIVE, result.status());
 		InOrder order = org.mockito.Mockito.inOrder(userAccountRepository, refreshTokenRepository);
 		order.verify(userAccountRepository).findByIdForUpdate(12L);
@@ -150,11 +151,13 @@ class UserServiceTest {
 	@Test
 	void reactivatesUserWithoutRestoringOrRevokingRefreshSessions() {
 		UserAccount user = account(UserStatus.INACTIVE);
+		user.invalidateAuthenticationState();
 		when(userAccountRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(user));
 
 		UserSummaryResponse result = userService.updateStatus(12L, 7L, UserStatus.ACTIVE);
 
 		assertEquals(UserStatus.ACTIVE, user.getStatus());
+		assertEquals(1L, user.getAuthVersion());
 		assertEquals(UserStatus.ACTIVE, result.status());
 		verifyNoInteractions(refreshTokenRepository);
 	}
@@ -178,6 +181,7 @@ class UserServiceTest {
 		userService.updateStatus(12L, 7L, UserStatus.INACTIVE);
 
 		assertEquals(UserStatus.INACTIVE, user.getStatus());
+		assertEquals(0L, user.getAuthVersion());
 		verify(refreshTokenRepository).revokeAllByUserId(eq(12L), any(Instant.class));
 	}
 

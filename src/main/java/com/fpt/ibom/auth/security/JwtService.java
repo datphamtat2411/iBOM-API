@@ -15,6 +15,8 @@ import org.springframework.stereotype.Service;
 @Service
 public class JwtService {
 
+	public static final String AUTHENTICATION_VERSION_CLAIM = "auth_version";
+
 	private final JwtEncoder jwtEncoder;
 	private final long accessTokenTtlSeconds;
 
@@ -33,6 +35,7 @@ public class JwtService {
 				.claim("email", user.getEmail())
 				.claim("username", user.getUsername())
 				.claim("role", user.getRole().name())
+				.claim(AUTHENTICATION_VERSION_CLAIM, user.getAuthVersion())
 				.build();
 		return jwtEncoder.encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims)).getTokenValue();
 	}

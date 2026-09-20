@@ -2,6 +2,7 @@ package com.fpt.ibom.auth.security;
 
 import java.util.List;
 
+import com.fpt.ibom.auth.entity.UserAccount;
 import com.fpt.ibom.auth.entity.UserRole;
 import com.fpt.ibom.auth.entity.UserStatus;
 import com.fpt.ibom.auth.repository.UserAccountRepository;
@@ -27,11 +28,13 @@ public class UserAccountJwtAuthenticationConverter implements Converter<Jwt, Abs
 		try {
 			UserPrincipal principal = new UserPrincipal(Long.valueOf(jwt.getSubject()), jwt.getClaimAsString("email"),
 					jwt.getClaimAsString("username"), UserRole.valueOf(jwt.getClaimAsString("role")));
-			boolean active = userAccountRepository.findById(principal.userId())
-					.map(user -> user.getStatus() == UserStatus.ACTIVE)
-					.orElse(false);
-			if (!active) {
+			long tokenAuthenticationVersion = authenticationVersion(jwt);
+			UserAccount user = userAccountRepository.findById(principal.userId()).orElse(null);
+			if (user == null || user.getStatus() != UserStatus.ACTIVE) {
 				throw new InvalidBearerTokenException("Account is inactive");
+			}
+			if (user.getAuthVersion() != tokenAuthenticationVersion) {
+				throw new InvalidBearerTokenException("Authentication state is outdated");
 			}
 			return new UsernamePasswordAuthenticationToken(principal, jwt,
 					List.of(new SimpleGrantedAuthority("ROLE_" + principal.role().name())));
@@ -40,5 +43,10 @@ public class UserAccountJwtAuthenticationConverter implements Converter<Jwt, Abs
 		} catch (RuntimeException exception) {
 			throw new InvalidBearerTokenException("Invalid access token", exception);
 		}
+	}
+
+	private long authenticationVersion(Jwt jwt) {
+		Object claim = jwt.getClaim(JwtService.AUTHENTICATION_VERSION_CLAIM);
+		return claim == null ? 0L : Long.parseLong(claim.toString());
 	}
 }
