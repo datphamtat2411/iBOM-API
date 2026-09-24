@@ -5,6 +5,6 @@ import java.util.List;
 
 import com.fpt.ibom.auth.entity.UserStatus;
 
-public record MemberLanguageSearchResponse(Long id, String username, String email, UserStatus status,
+public record MemberSearchResponse(Long id, String username, String email, UserStatus status,
 		Long activeProfileCount, Instant lastUpdatedAt, List<MatchingProfileResponse> matchingProfiles) {
 }

@@ -20,8 +20,9 @@ import com.fpt.ibom.common.PageResponse;
 import com.fpt.ibom.config.SecurityConfig;
 import com.fpt.ibom.member.controller.MemberLanguageSearchController;
 import com.fpt.ibom.member.dto.MatchingProfileResponse;
-import com.fpt.ibom.member.dto.MemberLanguageSearchResponse;
-import com.fpt.ibom.member.service.MemberLanguageSearchService;
+import com.fpt.ibom.member.dto.MemberSearchRequest;
+import com.fpt.ibom.member.dto.MemberSearchResponse;
+import com.fpt.ibom.member.service.MemberService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -42,7 +43,7 @@ class MemberLanguageSearchControllerTest {
 	private MockMvc mockMvc;
 
 	@MockitoBean
-	private MemberLanguageSearchService service;
+	private MemberService service;
 
 	@MockitoBean
 	private JwtDecoder jwtDecoder;
@@ -52,7 +53,10 @@ class MemberLanguageSearchControllerTest {
 
 	@Test
 	void mapsRepeatedPairsDefaultsStatusAndResponseStructure() throws Exception {
-		when(service.search(eq(List.of(1L, 2L)), eq(List.of("ADVANCED", "NATIVE")), eq(0), eq(10), eq(null)))
+		MemberSearchRequest request = new MemberSearchRequest(null, null, null,
+				List.of(new MemberSearchRequest.LanguageCondition(1L, "ADVANCED"),
+						new MemberSearchRequest.LanguageCondition(2L, "NATIVE")), 0, 10);
+		when(service.search(request))
 				.thenReturn(page());
 
 		mockMvc.perform(get("/api/members/search-by-language").param("languageIds", "1", "2")
@@ -64,14 +68,16 @@ class MemberLanguageSearchControllerTest {
 				.andExpect(jsonPath("$.data.content[0].matchingProfiles[0].profileName").value("Primary"))
 				.andExpect(jsonPath("$.data.content[0].matchingProfiles[0].matchingLanguages").doesNotExist())
 				.andExpect(jsonPath("$.data.content[0].fullName").doesNotExist());
-		verify(service).search(List.of(1L, 2L), List.of("ADVANCED", "NATIVE"), 0, 10, null);
+		verify(service).search(request);
 
-		when(service.search(eq(List.of(1L)), eq(List.of("NATIVE")), eq(2), eq(1), eq(UserStatus.INACTIVE)))
+		MemberSearchRequest explicit = new MemberSearchRequest(null, "INACTIVE", null,
+				List.of(new MemberSearchRequest.LanguageCondition(1L, "NATIVE")), 2, 1);
+		when(service.search(explicit))
 				.thenReturn(page());
 		mockMvc.perform(get("/api/members/search-by-language").param("languageIds", "1").param("levels", "NATIVE")
 				.param("status", "INACTIVE").param("page", "2").param("size", "1")
 				.with(principal(UserRole.ADMIN))).andExpect(status().isOk());
-		verify(service).search(List.of(1L), List.of("NATIVE"), 2, 1, UserStatus.INACTIVE);
+		verify(service).search(explicit);
 	}
 
 	@Test
@@ -89,10 +95,10 @@ class MemberLanguageSearchControllerTest {
 				.andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"));
 	}
 
-	private PageResponse<MemberLanguageSearchResponse> page() {
+	private PageResponse<MemberSearchResponse> page() {
 		MatchingProfileResponse profile = new MatchingProfileResponse(18L, "Primary", "First", "Last", "Engineer",
 				Instant.parse("2026-01-04T00:00:00Z"));
-		MemberLanguageSearchResponse member = new MemberLanguageSearchResponse(12L, "Alice", "alice@example.com",
+		MemberSearchResponse member = new MemberSearchResponse(12L, "Alice", "alice@example.com",
 				UserStatus.ACTIVE, 1L, Instant.parse("2026-01-04T00:00:00Z"), List.of(profile));
 		return new PageResponse<>(List.of(member), 0, 10, 1, 1);
 	}

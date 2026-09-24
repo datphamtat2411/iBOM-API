@@ -1,6 +1,5 @@
 package com.fpt.ibom.member;
 
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -19,8 +18,8 @@ import com.fpt.ibom.common.PageResponse;
 import com.fpt.ibom.config.SecurityConfig;
 import com.fpt.ibom.member.controller.MemberController;
 import com.fpt.ibom.member.dto.MatchingProfileResponse;
-import com.fpt.ibom.member.dto.MemberSkillSearchRequest;
-import com.fpt.ibom.member.dto.MemberSkillSearchResponse;
+import com.fpt.ibom.member.dto.MemberSearchRequest;
+import com.fpt.ibom.member.dto.MemberSearchResponse;
 import com.fpt.ibom.member.service.MemberService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -54,8 +53,10 @@ class MemberSkillSearchControllerTest {
 
 	@Test
 	void bindsRepeatedListsByIndexAndAppliesDefaults() throws Exception {
-		MemberSkillSearchRequest request = new MemberSkillSearchRequest(List.of(1L, 3L), List.of(2L, 4L), null, 0, 10);
-		when(memberService.searchBySkill(request)).thenReturn(page());
+		MemberSearchRequest request = new MemberSearchRequest(null, null,
+				List.of(new MemberSearchRequest.SkillCondition(1L, 2L),
+						new MemberSearchRequest.SkillCondition(3L, 4L)), null, 0, 10);
+		when(memberService.search(request)).thenReturn(page());
 
 		mockMvc.perform(get("/api/members/search-by-skill").param("skillIds", "1", "3")
 				.param("seniorityIds", "2", "4").with(principal(UserRole.MANAGER)))
@@ -63,14 +64,15 @@ class MemberSkillSearchControllerTest {
 				.andExpect(jsonPath("$.data.content[0].matchingProfiles[0].id").value(22))
 				.andExpect(jsonPath("$.data.content[0].matchingProfiles[0].profileName").value("CV"))
 				.andExpect(jsonPath("$.data.content[0].matchingProfiles[0].matches").doesNotExist());
-		verify(memberService).searchBySkill(eq(request));
+		verify(memberService).search(request);
 
-		MemberSkillSearchRequest explicit = new MemberSkillSearchRequest(List.of(1L), List.of(2L), UserStatus.INACTIVE, 2, 1);
-		when(memberService.searchBySkill(explicit)).thenReturn(page());
+		MemberSearchRequest explicit = new MemberSearchRequest(null, "INACTIVE",
+				List.of(new MemberSearchRequest.SkillCondition(1L, 2L)), null, 2, 1);
+		when(memberService.search(explicit)).thenReturn(page());
 		mockMvc.perform(get("/api/members/search-by-skill").param("skillIds", "1").param("seniorityIds", "2")
 				.param("status", "INACTIVE").param("page", "2").param("size", "1")
 				.with(principal(UserRole.ADMIN))).andExpect(status().isOk());
-		verify(memberService).searchBySkill(eq(explicit));
+		verify(memberService).search(explicit);
 	}
 
 	@Test
@@ -97,14 +99,15 @@ class MemberSkillSearchControllerTest {
 	@ParameterizedTest
 	@EnumSource(value = UserRole.class, names = { "MANAGER", "ADMIN" })
 	void managerAndAdminCanAccess(UserRole role) throws Exception {
-		when(memberService.searchBySkill(new MemberSkillSearchRequest(List.of(1L), List.of(2L), null, 0, 10)))
+		when(memberService.search(new MemberSearchRequest(null, null,
+				List.of(new MemberSearchRequest.SkillCondition(1L, 2L)), null, 0, 10)))
 				.thenReturn(page());
 		mockMvc.perform(get("/api/members/search-by-skill").param("skillIds", "1").param("seniorityIds", "2")
 				.with(principal(role))).andExpect(status().isOk());
 	}
 
-	private PageResponse<MemberSkillSearchResponse> page() {
-		return new PageResponse<>(List.of(new MemberSkillSearchResponse(12L, "Alice", "alice@example.com",
+	private PageResponse<MemberSearchResponse> page() {
+		return new PageResponse<>(List.of(new MemberSearchResponse(12L, "Alice", "alice@example.com",
 				UserStatus.ACTIVE, 1L, Instant.parse("2026-01-04T00:00:00Z"), List.of(
 						new MatchingProfileResponse(22L, "CV", "A", "One", "Engineer",
 								Instant.parse("2026-01-03T00:00:00Z"))))), 0, 10, 1, 1);

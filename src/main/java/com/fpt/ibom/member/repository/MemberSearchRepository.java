@@ -1,5 +1,6 @@
 package com.fpt.ibom.member.repository;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -9,6 +10,7 @@ import com.fpt.ibom.auth.entity.UserStatus;
 import com.fpt.ibom.profile.entity.LanguageLevel;
 import com.fpt.ibom.profile.entity.Profile;
 import com.fpt.ibom.profile.entity.ProfileLanguage;
+import com.fpt.ibom.profile.entity.ProfileSkill;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.criteria.CommonAbstractCriteria;
@@ -24,12 +26,12 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 
 @Repository
-public class MemberLanguageSearchRepository {
+public class MemberSearchRepository {
 
 	@PersistenceContext
 	private EntityManager entityManager;
 
-	public Page<MemberRow> findMembers(List<Pair> pairs, UserStatus status, Pageable pageable) {
+	public Page<MemberRow> findMembers(SearchCriteria criteria, Pageable pageable) {
 		CriteriaBuilder criteriaBuilder = entityManager.getCriteriaBuilder();
 		CriteriaQuery<Object[]> query = criteriaBuilder.createQuery(Object[].class);
 		Root<com.fpt.ibom.auth.entity.UserAccount> user = query.from(com.fpt.ibom.auth.entity.UserAccount.class);
@@ -47,7 +49,7 @@ public class MemberLanguageSearchRepository {
 
 		query.multiselect(user.get("id"), user.get("username"), user.get("email"), user.get("status"),
 				activeProfileCount, user.get("updatedAt"), profileUpdatedAt);
-		query.where(memberPredicate(criteriaBuilder, query, user, status, pairs));
+		query.where(memberPredicate(criteriaBuilder, query, user, criteria));
 		query.orderBy(criteriaBuilder.asc(criteriaBuilder.selectCase().when(
 				criteriaBuilder.equal(user.get("status"), UserStatus.ACTIVE), 0).otherwise(1)),
 				criteriaBuilder.asc(criteriaBuilder.lower(user.get("username"))), criteriaBuilder.asc(user.get("id")));
@@ -58,7 +60,7 @@ public class MemberLanguageSearchRepository {
 		CriteriaQuery<Long> countQuery = criteriaBuilder.createQuery(Long.class);
 		Root<com.fpt.ibom.auth.entity.UserAccount> countUser = countQuery.from(com.fpt.ibom.auth.entity.UserAccount.class);
 		countQuery.select(criteriaBuilder.countDistinct(countUser));
-		countQuery.where(memberPredicate(criteriaBuilder, countQuery, countUser, status, pairs));
+		countQuery.where(memberPredicate(criteriaBuilder, countQuery, countUser, criteria));
 		long total = entityManager.createQuery(countQuery).getSingleResult();
 
 		List<MemberRow> members = results.stream().map(row -> new MemberRow((Long) row[0], (String) row[1],
@@ -67,7 +69,7 @@ public class MemberLanguageSearchRepository {
 		return new PageImpl<>(members, pageable, total);
 	}
 
-	public List<ProfileMatchRow> findMatchingProfiles(List<Long> memberIds, List<Pair> pairs) {
+	public List<ProfileMatchRow> findMatchingProfiles(List<Long> memberIds, SearchCriteria criteria) {
 		if (memberIds.isEmpty()) {
 			return List.of();
 		}
@@ -78,7 +80,7 @@ public class MemberLanguageSearchRepository {
 		query.multiselect(profile.get("user").get("id"), profile.get("id"), profile.get("profileName"),
 				profile.get("firstName"), profile.get("lastName"), profile.get("jobTitle"), profile.get("updatedAt"));
 		query.where(criteriaBuilder.and(criteriaBuilder.isNull(profile.get("deletedAt")),
-				profile.get("user").get("id").in(memberIds), profileMatchesAll(criteriaBuilder, query, profile, pairs)));
+				profile.get("user").get("id").in(memberIds), profileMatchesAll(criteriaBuilder, query, profile, criteria)));
 		query.orderBy(criteriaBuilder.desc(profile.get("updatedAt")), criteriaBuilder.desc(profile.get("id")));
 
 		return entityManager.createQuery(query).getResultList().stream().map(row -> new ProfileMatchRow((Long) row[0],
@@ -86,39 +88,83 @@ public class MemberLanguageSearchRepository {
 	}
 
 	private Predicate memberPredicate(CriteriaBuilder criteriaBuilder, CommonAbstractCriteria owner,
-			Root<com.fpt.ibom.auth.entity.UserAccount> user, UserStatus status, List<Pair> pairs) {
+			Root<com.fpt.ibom.auth.entity.UserAccount> user, SearchCriteria criteria) {
 		List<Predicate> predicates = new ArrayList<>();
 		predicates.add(criteriaBuilder.equal(user.get("role"), UserRole.MEMBER));
-		if (status != null) {
-			predicates.add(criteriaBuilder.equal(user.get("status"), status));
+		if (criteria.status() != null) {
+			predicates.add(criteriaBuilder.equal(user.get("status"), criteria.status()));
+		}
+		if (criteria.search() != null) {
+			predicates.add(criteriaBuilder.or(
+					criteriaBuilder.like(criteriaBuilder.lower(user.get("username")),
+							"%" + criteria.search().toLowerCase() + "%"),
+					criteriaBuilder.like(criteriaBuilder.lower(user.get("email")),
+							"%" + criteria.search().toLowerCase() + "%")));
 		}
 
-		Subquery<Long> matchingProfile = owner.subquery(Long.class);
-		Root<Profile> profile = matchingProfile.from(Profile.class);
-		matchingProfile.select(profile.get("id"));
-		matchingProfile.where(criteriaBuilder.equal(profile.get("user"), user),
-				criteriaBuilder.isNull(profile.get("deletedAt")),
-				profileMatchesAll(criteriaBuilder, matchingProfile, profile, pairs));
-		predicates.add(criteriaBuilder.exists(matchingProfile));
+		if (criteria.hasProfileConditions()) {
+			Subquery<Long> matchingProfile = owner.subquery(Long.class);
+			Root<Profile> profile = matchingProfile.from(Profile.class);
+			matchingProfile.select(profile.get("id"));
+			matchingProfile.where(criteriaBuilder.equal(profile.get("user"), user),
+					criteriaBuilder.isNull(profile.get("deletedAt")),
+					profileMatchesAll(criteriaBuilder, matchingProfile, profile, criteria));
+			predicates.add(criteriaBuilder.exists(matchingProfile));
+		}
 		return criteriaBuilder.and(predicates.toArray(Predicate[]::new));
 	}
 
 	private Predicate profileMatchesAll(CriteriaBuilder criteriaBuilder, CommonAbstractCriteria owner,
-			From<?, Profile> profile, List<Pair> pairs) {
+			From<?, Profile> profile, SearchCriteria criteria) {
 		List<Predicate> predicates = new ArrayList<>();
-		for (Pair pair : pairs) {
+		for (SkillCriteria skill : criteria.skills()) {
+			Subquery<Long> matchingSkill = owner.subquery(Long.class);
+			Root<ProfileSkill> profileSkill = matchingSkill.from(ProfileSkill.class);
+			matchingSkill.select(profileSkill.get("id"));
+			matchingSkill.where(criteriaBuilder.equal(profileSkill.get("profile"), profile),
+					skillPredicate(criteriaBuilder, profileSkill, skill));
+			predicates.add(criteriaBuilder.exists(matchingSkill));
+		}
+		for (LanguageCriteria language : criteria.languages()) {
 			Subquery<Long> matchingLanguage = owner.subquery(Long.class);
 			Root<ProfileLanguage> profileLanguage = matchingLanguage.from(ProfileLanguage.class);
 			matchingLanguage.select(profileLanguage.get("id"));
-			matchingLanguage.where(criteriaBuilder.equal(profileLanguage.get("profile"), profile),
-					criteriaBuilder.equal(profileLanguage.get("language").get("id"), pair.languageId()),
-					criteriaBuilder.equal(profileLanguage.get("level"), pair.level()));
+			List<Predicate> languagePredicates = new ArrayList<>();
+			languagePredicates.add(criteriaBuilder.equal(profileLanguage.get("profile"), profile));
+			languagePredicates.add(criteriaBuilder.equal(profileLanguage.get("language").get("id"), language.languageId()));
+			if (language.level() != null) {
+				languagePredicates.add(criteriaBuilder.equal(profileLanguage.get("level"), language.level()));
+			}
+			matchingLanguage.where(languagePredicates.toArray(Predicate[]::new));
 			predicates.add(criteriaBuilder.exists(matchingLanguage));
 		}
 		return criteriaBuilder.and(predicates.toArray(Predicate[]::new));
 	}
 
-	public record Pair(Long languageId, LanguageLevel level) {
+	private Predicate skillPredicate(CriteriaBuilder criteriaBuilder, Root<ProfileSkill> profileSkill,
+			SkillCriteria skill) {
+		List<Predicate> predicates = new ArrayList<>();
+		predicates.add(criteriaBuilder.equal(profileSkill.get("skill").get("id"), skill.skillId()));
+		if (skill.fromExperience() != null) {
+			predicates.add(criteriaBuilder.greaterThanOrEqualTo(profileSkill.get("experienceYears"), skill.fromExperience()));
+		}
+		if (skill.toExperience() != null) {
+			predicates.add(criteriaBuilder.lessThan(profileSkill.get("experienceYears"), skill.toExperience()));
+		}
+		return criteriaBuilder.and(predicates.toArray(Predicate[]::new));
+	}
+
+	public record SearchCriteria(String search, UserStatus status, List<SkillCriteria> skills,
+			List<LanguageCriteria> languages) {
+		public boolean hasProfileConditions() {
+			return !skills.isEmpty() || !languages.isEmpty();
+		}
+	}
+
+	public record SkillCriteria(Long skillId, BigDecimal fromExperience, BigDecimal toExperience) {
+	}
+
+	public record LanguageCriteria(Long languageId, LanguageLevel level) {
 	}
 
 	public record MemberRow(Long id, String username, String email, UserStatus status, Long activeProfileCount,
