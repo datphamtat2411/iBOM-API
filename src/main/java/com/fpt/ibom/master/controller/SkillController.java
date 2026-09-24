@@ -32,8 +32,9 @@ public class SkillController {
 	public ResponseEntity<ApiResponse<PageResponse<SkillResponse>>> list(
 			@RequestParam(defaultValue = "0") int page,
 			@RequestParam(defaultValue = "10") int size,
-			@RequestParam(required = false) String search) {
-		return ResponseEntity.ok(new ApiResponse<>(200, "Success", skillService.list(page, size, search)));
+			@RequestParam(required = false) String search,
+			@RequestParam(required = false) Long categoryId) {
+		return ResponseEntity.ok(new ApiResponse<>(200, "Success", skillService.list(page, size, search, categoryId)));
 	}
 
 	@PostMapping

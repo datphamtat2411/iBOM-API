@@ -37,7 +37,7 @@ public class SkillService {
 	}
 
 	@Transactional(readOnly = true)
-	public PageResponse<SkillResponse> list(int page, int size, String search) {
+	public PageResponse<SkillResponse> list(int page, int size, String search, Long categoryId) {
 		if (page < 0 || size <= 0) {
 			throw new ApiException(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_ERROR,
 					"Invalid pagination parameters");
@@ -46,9 +46,19 @@ public class SkillService {
 		Pageable pageable = PageRequest.of(page, size,
 				Sort.by(Sort.Order.asc("name").ignoreCase(), Sort.Order.asc("id")));
 		String normalizedSearch = search == null ? null : search.trim();
-		Page<Skill> skills = normalizedSearch == null || normalizedSearch.isEmpty()
-				? skillRepository.findAll(pageable)
-				: skillRepository.findByNameContainingIgnoreCase(normalizedSearch, pageable);
+		if (categoryId != null) {
+			findCategory(categoryId);
+		}
+		Page<Skill> skills;
+		if (categoryId == null) {
+			skills = normalizedSearch == null || normalizedSearch.isEmpty()
+					? skillRepository.findAll(pageable)
+					: skillRepository.findByNameContainingIgnoreCase(normalizedSearch, pageable);
+		} else {
+			skills = normalizedSearch == null || normalizedSearch.isEmpty()
+					? skillRepository.findByCategoryId(categoryId, pageable)
+					: skillRepository.findByCategoryIdAndNameContainingIgnoreCase(categoryId, normalizedSearch, pageable);
+		}
 
 		return new PageResponse<>(skills.getContent().stream().map(SkillResponse::from).toList(),
 				skills.getNumber(), skills.getSize(), skills.getTotalElements(), skills.getTotalPages());

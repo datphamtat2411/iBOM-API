@@ -17,6 +17,12 @@ public interface SkillRepository extends JpaRepository<Skill, Long> {
 	@EntityGraph(attributePaths = "category")
 	Page<Skill> findByNameContainingIgnoreCase(String name, Pageable pageable);
 
+	@EntityGraph(attributePaths = "category")
+	Page<Skill> findByCategoryId(Long categoryId, Pageable pageable);
+
+	@EntityGraph(attributePaths = "category")
+	Page<Skill> findByCategoryIdAndNameContainingIgnoreCase(Long categoryId, String name, Pageable pageable);
+
 	boolean existsByNameIgnoreCase(String name);
 
 	boolean existsByNameIgnoreCaseAndIdNot(String name, Long id);

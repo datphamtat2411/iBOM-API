@@ -192,6 +192,51 @@ class SkillIntegrationTest extends MySqlIntegrationTest {
 	}
 
 	@Test
+	void skillReadRouteFiltersByCategoryAndSearchBeforePagination() throws Exception {
+		SkillCategory selectedCategory = skillCategoryRepository.findByCode("API_MESSAGING_TESTING").orElseThrow();
+		SkillCategory otherCategory = skillCategoryRepository.findByCode("BACKEND").orElseThrow();
+		String marker = "category-filter-" + UUID.randomUUID();
+		skillRepository.saveAndFlush(new Skill(marker + "-Zulu", selectedCategory));
+		skillRepository.saveAndFlush(new Skill(marker + "-Alpha", selectedCategory));
+		skillRepository.saveAndFlush(new Skill(marker + "-Other", otherCategory));
+		UserAccount user = saveUser();
+
+		mockMvc.perform(get("/api/master/skills").param("page", "0").param("size", "1")
+				.param("categoryId", selectedCategory.getId().toString()).with(authentication(userPrincipal(user))))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.page").value(0))
+				.andExpect(jsonPath("$.data.size").value(1))
+				.andExpect(jsonPath("$.data.totalElements").value(2))
+				.andExpect(jsonPath("$.data.totalPages").value(2))
+				.andExpect(jsonPath("$.data.content[0].name").value(marker + "-Alpha"))
+				.andExpect(jsonPath("$.data.content[0].categoryId").value(selectedCategory.getId()))
+				.andExpect(jsonPath("$.data.content[0].categoryCode").value("API_MESSAGING_TESTING"));
+
+		mockMvc.perform(get("/api/master/skills").param("size", "10")
+				.param("search", marker.toUpperCase(Locale.ROOT))
+				.param("categoryId", selectedCategory.getId().toString()).with(authentication(userPrincipal(user))))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.totalElements").value(2))
+				.andExpect(jsonPath("$.data.content.length()").value(2))
+				.andExpect(jsonPath("$.data.content[0].name").value(marker + "-Alpha"))
+				.andExpect(jsonPath("$.data.content[1].name").value(marker + "-Zulu"))
+				.andExpect(jsonPath("$.data.content[0].categoryId").value(selectedCategory.getId()))
+				.andExpect(jsonPath("$.data.content[1].categoryId").value(selectedCategory.getId()));
+
+		mockMvc.perform(get("/api/master/skills").param("search", "Other")
+				.param("categoryId", selectedCategory.getId().toString()).with(authentication(userPrincipal(user))))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.content").isEmpty())
+				.andExpect(jsonPath("$.data.totalElements").value(0))
+				.andExpect(jsonPath("$.data.totalPages").value(0));
+
+		mockMvc.perform(get("/api/master/skills").param("categoryId", "999999999")
+				.with(authentication(userPrincipal(user))))
+				.andExpect(status().isNotFound())
+				.andExpect(jsonPath("$.errorCode").value("SKILL_CATEGORY_NOT_FOUND"));
+	}
+
+	@Test
 	void managerCanCreateUpdateAndDeleteSkillThroughMigratedDatabase() throws Exception {
 		SkillCategory backend = skillCategoryRepository.findByCode("BACKEND").orElseThrow();
 		SkillCategory database = skillCategoryRepository.findByCode("DATABASE_DATA").orElseThrow();

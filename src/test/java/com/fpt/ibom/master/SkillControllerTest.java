@@ -57,7 +57,7 @@ class SkillControllerTest {
 	@ParameterizedTest
 	@EnumSource(UserRole.class)
 	void allowsEveryExistingAuthenticatedRoleToReadSkills(UserRole role) throws Exception {
-		when(skillService.list(0, 10, null)).thenReturn(page());
+		when(skillService.list(0, 10, null, null)).thenReturn(page());
 
 		mockMvc.perform(get("/api/master/skills").with(principal(role)))
 				.andExpect(status().isOk())
@@ -77,16 +77,16 @@ class SkillControllerTest {
 
 	@Test
 	void appliesDefaultPaginationAndForwardsExplicitQueryParameters() throws Exception {
-		when(skillService.list(0, 10, null)).thenReturn(new PageResponse<>(List.of(), 0, 10, 0, 0));
+		when(skillService.list(0, 10, null, null)).thenReturn(new PageResponse<>(List.of(), 0, 10, 0, 0));
 		mockMvc.perform(get("/api/master/skills").with(principal(UserRole.MEMBER)))
 				.andExpect(status().isOk()).andExpect(jsonPath("$.data.content").isEmpty());
-		verify(skillService).list(0, 10, null);
+		verify(skillService).list(0, 10, null, null);
 
-		when(skillService.list(2, 1, "  jav  ")).thenReturn(page());
+		when(skillService.list(2, 1, "  jav  ", 4L)).thenReturn(page());
 		mockMvc.perform(get("/api/master/skills").param("page", "2").param("size", "1")
-				.param("search", "  jav  ").with(principal(UserRole.MEMBER)))
+				.param("search", "  jav  ").param("categoryId", "4").with(principal(UserRole.MEMBER)))
 				.andExpect(status().isOk()).andExpect(jsonPath("$.data.content[0].name").value("Java"));
-		verify(skillService).list(2, 1, "  jav  ");
+		verify(skillService).list(2, 1, "  jav  ", 4L);
 	}
 
 	@Test

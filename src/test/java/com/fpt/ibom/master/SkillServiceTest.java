@@ -49,7 +49,7 @@ class SkillServiceTest {
 		Page<Skill> skills = new PageImpl<>(List.of(skill), org.springframework.data.domain.PageRequest.of(1, 2), 5);
 		when(skillRepository.findAll(any(Pageable.class))).thenReturn(skills);
 
-		PageResponse<com.fpt.ibom.master.dto.SkillResponse> result = skillService.list(1, 2, null);
+		PageResponse<com.fpt.ibom.master.dto.SkillResponse> result = skillService.list(1, 2, null, null);
 
 		assertEquals(1, result.page());
 		assertEquals(2, result.size());
@@ -77,7 +77,7 @@ class SkillServiceTest {
 		when(skillRepository.findByNameContainingIgnoreCase(eq("spring"), any(Pageable.class)))
 				.thenReturn(Page.empty());
 
-		skillService.list(0, 10, "  spring  ");
+		skillService.list(0, 10, "  spring  ", null);
 
 		verify(skillRepository).findByNameContainingIgnoreCase(eq("spring"), any(Pageable.class));
 		verify(skillRepository, never()).findAll(any(Pageable.class));
@@ -87,16 +87,61 @@ class SkillServiceTest {
 	void treatsBlankSearchAsNoFilter() {
 		when(skillRepository.findAll(any(Pageable.class))).thenReturn(Page.empty());
 
-		skillService.list(0, 10, " \t ");
+		skillService.list(0, 10, " \t ", null);
 
 		verify(skillRepository).findAll(any(Pageable.class));
 		verify(skillRepository, never()).findByNameContainingIgnoreCase(any(), any(Pageable.class));
 	}
 
 	@Test
+	void filtersByCategoryAndPreservesPageableOrdering() {
+		SkillCategory category = category(4L, "BACKEND", "Backend");
+		when(categoryRepository.findById(4L)).thenReturn(Optional.of(category));
+		when(skillRepository.findByCategoryId(eq(4L), any(Pageable.class))).thenReturn(Page.empty());
+
+		skillService.list(1, 2, " \t ", 4L);
+
+		ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+		verify(skillRepository).findByCategoryId(eq(4L), pageable.capture());
+		assertEquals(1, pageable.getValue().getPageNumber());
+		assertEquals(2, pageable.getValue().getPageSize());
+		assertTrue(pageable.getValue().getSort().getOrderFor("name").isIgnoreCase());
+		assertEquals("ASC", pageable.getValue().getSort().getOrderFor("name").getDirection().name());
+		assertEquals("ASC", pageable.getValue().getSort().getOrderFor("id").getDirection().name());
+		verify(skillRepository, never()).findAll(any(Pageable.class));
+		verify(skillRepository, never()).findByNameContainingIgnoreCase(any(), any(Pageable.class));
+	}
+
+	@Test
+	void composesCategoryAndTrimmedSearchWithAndSemantics() {
+		SkillCategory category = category(4L, "BACKEND", "Backend");
+		when(categoryRepository.findById(4L)).thenReturn(Optional.of(category));
+		when(skillRepository.findByCategoryIdAndNameContainingIgnoreCase(eq(4L), eq("spring"), any(Pageable.class)))
+				.thenReturn(Page.empty());
+
+		skillService.list(0, 10, "  spring  ", 4L);
+
+		verify(skillRepository).findByCategoryIdAndNameContainingIgnoreCase(eq(4L), eq("spring"), any(Pageable.class));
+		verify(skillRepository, never()).findAll(any(Pageable.class));
+		verify(skillRepository, never()).findByNameContainingIgnoreCase(any(), any(Pageable.class));
+		verify(skillRepository, never()).findByCategoryId(eq(4L), any(Pageable.class));
+	}
+
+	@Test
+	void rejectsUnknownCategoryBeforeRepositoryAccess() {
+		when(categoryRepository.findById(99L)).thenReturn(Optional.empty());
+
+		ApiException exception = assertThrows(ApiException.class, () -> skillService.list(0, 10, null, 99L));
+
+		assertEquals(HttpStatus.NOT_FOUND, exception.getStatus());
+		assertEquals(ErrorCode.SKILL_CATEGORY_NOT_FOUND, exception.getErrorCode());
+		verifyNoInteractions(skillRepository);
+	}
+
+	@Test
 	void rejectsInvalidPaginationBeforeRepositoryAccess() {
-		assertThrows(ApiException.class, () -> skillService.list(-1, 10, null));
-		assertThrows(ApiException.class, () -> skillService.list(0, 0, null));
+		assertThrows(ApiException.class, () -> skillService.list(-1, 10, null, null));
+		assertThrows(ApiException.class, () -> skillService.list(0, 0, null, null));
 		verifyNoInteractions(skillRepository);
 	}
 
