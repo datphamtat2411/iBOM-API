@@ -50,9 +50,9 @@ public class DashboardService {
 
 	@Transactional(readOnly = true)
 	public MemberDashboardStatsResponse getStats(UserPrincipal principal, Long profileId) {
-		Profile selectedProfile = profileAccessService.resolveOwned(principal, profileId);
+		Profile selectedProfile = profileAccessService.resolve(principal, profileId);
 		return new MemberDashboardStatsResponse(ProfileSummaryResponse.from(selectedProfile),
-				profileCompletenessService.calculate(selectedProfile), profileService.latestExportedAt(principal.userId()));
+				profileCompletenessService.calculate(selectedProfile), profileService.latestExportedAt(selectedProfile.getUser().getId()));
 	}
 
 	@Transactional(readOnly = true)

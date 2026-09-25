@@ -54,12 +54,12 @@ class DashboardServiceTest {
 			profileService, profileEligibilityService, profileSkillRepository, clock);
 
 	@Test
-	void resolvesTheSuppliedProfileThroughOwnerScopedAccessAndReusesCanonicalCompleteness() {
+	void resolvesTheSuppliedProfileThroughAccessibleProfileScopeAndReusesCanonicalCompleteness() {
 		UserPrincipal principal = principal(7L, UserRole.MANAGER);
 		Profile selected = profile(8L, 7L);
 		ProfileCompletenessResponse canonical = new ProfileCompletenessResponse(new BigDecimal("67.00"), false, List.of());
 		Instant latest = Instant.parse("2026-02-03T04:05:06Z");
-		when(profileAccessService.resolveOwned(principal, 8L)).thenReturn(selected);
+		when(profileAccessService.resolve(principal, 8L)).thenReturn(selected);
 		when(profileCompletenessService.calculate(selected)).thenReturn(canonical);
 		when(profileService.latestExportedAt(7L)).thenReturn(latest);
 
@@ -68,7 +68,7 @@ class DashboardServiceTest {
 		assertEquals(8L, result.selectedProfile().id());
 		assertSame(canonical, result.completeness());
 		assertEquals(latest, result.latestExportedAt());
-		verify(profileAccessService).resolveOwned(principal, 8L);
+		verify(profileAccessService).resolve(principal, 8L);
 		verify(profileCompletenessService).calculate(selected);
 		verify(profileService).latestExportedAt(7L);
 		verifyNoMoreInteractions(profileAccessService, profileCompletenessService, profileService);
@@ -78,7 +78,7 @@ class DashboardServiceTest {
 	void returnsNullWhenTheOwnerHasNoExport() {
 		UserPrincipal principal = principal(7L, UserRole.MEMBER);
 		Profile selected = profile(8L, 7L);
-		when(profileAccessService.resolveOwned(principal, 8L)).thenReturn(selected);
+		when(profileAccessService.resolve(principal, 8L)).thenReturn(selected);
 		when(profileCompletenessService.calculate(selected)).thenReturn(new ProfileCompletenessResponse(new BigDecimal("0.00"), false, List.of()));
 		when(profileService.latestExportedAt(7L)).thenReturn(null);
 
@@ -89,10 +89,10 @@ class DashboardServiceTest {
 	void doesNotCalculateOrQueryStatsWhenForeignOrDeletedProfileIsRejected() {
 		UserPrincipal principal = principal(7L, UserRole.MEMBER);
 		ApiException notFound = new ApiException(HttpStatus.NOT_FOUND, ErrorCode.PROFILE_NOT_FOUND, "Profile not found");
-		when(profileAccessService.resolveOwned(principal, 8L)).thenThrow(notFound);
+		when(profileAccessService.resolve(principal, 8L)).thenThrow(notFound);
 
 		assertThrows(ApiException.class, () -> service.getStats(principal, 8L));
-		verify(profileAccessService).resolveOwned(principal, 8L);
+		verify(profileAccessService).resolve(principal, 8L);
 		verifyNoMoreInteractions(profileAccessService, profileCompletenessService, profileService);
 	}
 

@@ -146,6 +146,19 @@ class DashboardIntegrationTest extends MySqlIntegrationTest {
 	}
 
 	@Test
+	void allowsManagerToReadCompletenessForAManagedMemberProfile() throws Exception {
+		UserAccount member = saveUser(UserRole.MEMBER);
+		Profile selected = saveProfile(member, "Managed Profile");
+		UserAccount manager = saveUser(UserRole.MANAGER);
+
+		mockMvc.perform(get("/api/dashboard/my-stats").param("profileId", selected.getId().toString())
+				.with(authentication(principal(manager))))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.selectedProfile.id").value(selected.getId()))
+				.andExpect(jsonPath("$.data.completeness.percentage").value(20.0));
+	}
+
+	@Test
 	void countsOnlyActiveMemberProfilesAndOnlyCanonicallyCompletedProfiles() throws Exception {
 		UserAccount member = saveUser(UserRole.MEMBER, UserStatus.ACTIVE);
 		Profile completed = saveProfile(member, "Completed");
