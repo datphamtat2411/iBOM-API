@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import com.fpt.ibom.auth.entity.UserRole;
@@ -218,7 +219,7 @@ class ProfileControllerTest {
 		when(profileCompletenessService.get(7L, 8L)).thenReturn(completenessResponse());
 
 		mockMvc.perform(get("/api/profiles/8/completeness").with(principal())).andExpect(status().isOk())
-				.andExpect(jsonPath("$.code").value(200)).andExpect(jsonPath("$.data.percentage").value(100))
+				.andExpect(jsonPath("$.code").value(200)).andExpect(jsonPath("$.data.percentage").value(100.0))
 				.andExpect(jsonPath("$.data.completed").value(true))
 				.andExpect(jsonPath("$.data.sections[0].key").value("aboutMe"))
 				.andExpect(jsonPath("$.data.sections[0].weight").value(20))
@@ -438,7 +439,7 @@ class ProfileControllerTest {
 	}
 
 	private ProfileCompletenessResponse completenessResponse() {
-		return new ProfileCompletenessResponse(100, true, List.of(
+		return new ProfileCompletenessResponse(new BigDecimal("100.00"), true, List.of(
 				new ProfileCompletenessSectionResponse("aboutMe", 20, true, 6, 6, null),
 				new ProfileCompletenessSectionResponse("education", 20, true, null, null, true),
 				new ProfileCompletenessSectionResponse("language", 15, true, null, null, true),

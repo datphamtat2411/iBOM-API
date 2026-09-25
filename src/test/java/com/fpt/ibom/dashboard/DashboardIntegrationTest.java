@@ -117,7 +117,7 @@ class DashboardIntegrationTest extends MySqlIntegrationTest {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.data.selectedProfile.id").value(selected.getId()))
 				.andExpect(jsonPath("$.data.selectedProfile.profileName").value("Selected"))
-				.andExpect(jsonPath("$.data.completeness.percentage").value(20))
+				.andExpect(jsonPath("$.data.completeness.percentage").value(20.0))
 				.andExpect(jsonPath("$.data.completeness.sections[0].validFieldCount").value(6))
 				.andExpect(jsonPath("$.data.completeness.sections[0].fieldCount").value(6))
 				.andExpect(jsonPath("$.data.latestExportedAt").value("2026-02-03T04:05:06Z"));

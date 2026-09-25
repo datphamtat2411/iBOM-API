@@ -1,9 +1,9 @@
 package com.fpt.ibom.profile.service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.LocalDate;
-import java.math.RoundingMode;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -90,8 +90,8 @@ public class ProfileCompletenessService {
 				+ (hasCertificate ? CERTIFICATE_WEIGHT : 0) + (hasProject ? PROJECT_WEIGHT : 0)
 				+ (hasSkill ? SKILLS_WEIGHT : 0);
 		long rawTotalNumerator = (long) ABOUT_ME_WEIGHT * validAboutMeFields + 6L * collectionPoints;
-		int percentage = BigDecimal.valueOf(rawTotalNumerator)
-				.divide(BigDecimal.valueOf(ABOUT_ME_FIELD_COUNT), 0, RoundingMode.HALF_UP).intValueExact();
+		BigDecimal percentage = BigDecimal.valueOf(rawTotalNumerator)
+				.divide(BigDecimal.valueOf(ABOUT_ME_FIELD_COUNT), 2, RoundingMode.HALF_UP);
 		boolean completed = isCompleted(validAboutMeFields, hasEducation, hasLanguage, hasCertificate, hasProject,
 				hasSkill);
 

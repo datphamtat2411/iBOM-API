@@ -57,7 +57,7 @@ class DashboardServiceTest {
 	void resolvesTheSuppliedProfileThroughOwnerScopedAccessAndReusesCanonicalCompleteness() {
 		UserPrincipal principal = principal(7L, UserRole.MANAGER);
 		Profile selected = profile(8L, 7L);
-		ProfileCompletenessResponse canonical = new ProfileCompletenessResponse(67, false, List.of());
+		ProfileCompletenessResponse canonical = new ProfileCompletenessResponse(new BigDecimal("67.00"), false, List.of());
 		Instant latest = Instant.parse("2026-02-03T04:05:06Z");
 		when(profileAccessService.resolveOwned(principal, 8L)).thenReturn(selected);
 		when(profileCompletenessService.calculate(selected)).thenReturn(canonical);
@@ -79,7 +79,7 @@ class DashboardServiceTest {
 		UserPrincipal principal = principal(7L, UserRole.MEMBER);
 		Profile selected = profile(8L, 7L);
 		when(profileAccessService.resolveOwned(principal, 8L)).thenReturn(selected);
-		when(profileCompletenessService.calculate(selected)).thenReturn(new ProfileCompletenessResponse(0, false, List.of()));
+		when(profileCompletenessService.calculate(selected)).thenReturn(new ProfileCompletenessResponse(new BigDecimal("0.00"), false, List.of()));
 		when(profileService.latestExportedAt(7L)).thenReturn(null);
 
 		assertNull(service.getStats(principal, 8L).latestExportedAt());

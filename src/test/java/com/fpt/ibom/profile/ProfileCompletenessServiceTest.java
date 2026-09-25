@@ -69,20 +69,20 @@ class ProfileCompletenessServiceTest {
 
 		ProfileCompletenessResponse result = service.get(7L, 8L);
 
-		assertEquals(13, result.percentage());
+		assertEquals(new BigDecimal("13.33"), result.percentage());
 		assertFalse(result.completed());
 		assertEquals(4, aboutMe(result).validFieldCount());
 		assertEquals(6, aboutMe(result).fieldCount());
 	}
 
 	@Test
-	void computesFiveValidAboutMeFieldsAndRoundsOnlyFinalPercentage() {
+	void computesFiveValidAboutMeFieldsWithTwoDecimalPlaces() {
 		Profile profile = profile("Profile name", "First", "Last", "Engineer", BigDecimal.ONE, "Personality", null);
 		stubProfile(profile);
 
 		ProfileCompletenessResponse result = service.get(7L, 8L);
 
-		assertEquals(17, result.percentage());
+		assertEquals(new BigDecimal("16.67"), result.percentage());
 		assertEquals(5, aboutMe(result).validFieldCount());
 		assertFalse(result.completed());
 	}
@@ -95,7 +95,7 @@ class ProfileCompletenessServiceTest {
 
 		ProfileCompletenessResponse result = service.get(7L, 8L);
 
-		assertEquals(20, result.percentage());
+		assertEquals(new BigDecimal("20.00"), result.percentage());
 		assertFalse(result.completed());
 		assertTrue(result.sections().stream().skip(1).noneMatch(ProfileCompletenessSectionResponse::completed));
 	}
@@ -114,7 +114,7 @@ class ProfileCompletenessServiceTest {
 
 		ProfileCompletenessResponse result = service.get(7L, 8L);
 
-		assertEquals(100, result.percentage());
+		assertEquals(new BigDecimal("100.00"), result.percentage());
 		assertTrue(result.completed());
 		assertEquals(List.of("aboutMe", "education", "language", "certificate", "project", "skills"),
 				result.sections().stream().map(ProfileCompletenessSectionResponse::key).toList());
@@ -136,7 +136,7 @@ class ProfileCompletenessServiceTest {
 
 		ProfileCompletenessResponse result = service.get(7L, 8L);
 
-		assertEquals(20, result.percentage());
+		assertEquals(new BigDecimal("20.00"), result.percentage());
 		assertFalse(result.completed());
 		assertTrue(result.sections().stream().skip(1).noneMatch(ProfileCompletenessSectionResponse::completed));
 	}

@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 
@@ -66,7 +67,7 @@ class DashboardControllerTest {
 					.andExpect(jsonPath("$.code").value(200))
 					.andExpect(jsonPath("$.data.selectedProfile.id").value(8))
 					.andExpect(jsonPath("$.data.selectedProfile.profileName").value("Selected"))
-					.andExpect(jsonPath("$.data.completeness.percentage").value(67))
+					.andExpect(jsonPath("$.data.completeness.percentage").value(67.0))
 					.andExpect(jsonPath("$.data.completeness.sections[0].key").value("aboutMe"))
 					.andExpect(jsonPath("$.data.completeness.sections[0].validFieldCount").value(4))
 					.andExpect(jsonPath("$.data.latestExportedAt").value("2026-02-03T04:05:06Z"));
@@ -145,7 +146,7 @@ class DashboardControllerTest {
 	private MemberDashboardStatsResponse response(Instant latest) {
 		return new MemberDashboardStatsResponse(
 				new ProfileSummaryResponse(8L, "Selected", "First", "Last", "Engineer", null),
-				new ProfileCompletenessResponse(67, false, List.of(
+				new ProfileCompletenessResponse(new BigDecimal("67.00"), false, List.of(
 						new ProfileCompletenessSectionResponse("aboutMe", 20, false, 4, 6, null))), latest);
 	}
 
