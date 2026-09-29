@@ -15,24 +15,35 @@
     document.documentElement.dataset.cvProjectIndex = String(index);
   };
 
-  // The reference page reserves this region for identity/summary. Never print over it.
+  // The sidebar is independent; the summary, skills and projects flow down the right column.
+  const sidebar = firstPage.querySelector('.support-column');
   const summary = firstPage.querySelector('.technical-summary-block');
-  const grid = firstPage.querySelector('.content-grid');
-  if ((summary && summary.getBoundingClientRect().bottom > grid.getBoundingClientRect().top - 8)
-      || Array.from(grid.children).some(column => column.getBoundingClientRect().bottom > bottom(firstPage) + 2)) {
+  if ((summary && summary.getBoundingClientRect().bottom > bottom(firstPage))
+      || sidebar.getBoundingClientRect().bottom > bottom(firstPage)) {
     fail('FIRST_PAGE_OVERFLOW', -1);
     return;
   }
 
+  const expertise = firstPage.querySelector('.main-section:not(.first-project-section)');
+  if (expertise) {
+    const chips = Array.from(expertise.querySelectorAll('.skill-chip'));
+    const firstOverflow = chips.findIndex(chip => chip.getBoundingClientRect().bottom > bottom(firstPage) - 2);
+    if (firstOverflow !== -1) chips.slice(firstOverflow).forEach(chip => chip.remove());
+    expertise.querySelectorAll('.skills-group').forEach(group => {
+      if (!group.querySelector('.skill-chip')) group.remove();
+    });
+    if (!expertise.querySelector('.skill-chip')) expertise.remove();
+  }
+
   let next = 0;
-  if (projects.length) {
+  for (let index = 0; index < Math.min(projects.length, 2); index++) {
     firstSection.style.display = 'block';
-    firstSlot.append(projects[0]);
-    if (fits(projects[0], firstPage)) {
-      next = 1;
-    } else {
-      projects[0].remove();
-      firstSection.style.display = 'none';
+    firstSlot.append(projects[index]);
+    if (fits(projects[index], firstPage)) next = index + 1;
+    else {
+      projects[index].remove();
+      if (!next) firstSection.style.display = 'none';
+      break;
     }
   }
 

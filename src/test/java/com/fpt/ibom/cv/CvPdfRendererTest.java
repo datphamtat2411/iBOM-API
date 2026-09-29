@@ -110,8 +110,11 @@ class CvPdfRendererTest {
 	}
 
 	@Test
-	void firstPageContainsOnlyFirstProjectAndSummaryBelowPersonalityPanel() throws IOException {
-		try (PDDocument pdf = Loader.loadPDF(renderer.render(completeDocument()))) {
+	void firstPageFitsAtMostTwoProjectsAndSummaryBelowPersonalityPanel() throws IOException {
+		CvDocument base = completeDocument();
+		CvDocument cv = new CvDocument(base.personalDetails(), base.education(), base.languages(), base.certificates(),
+				List.of(base.projects().get(0), base.projects().get(1), project("Third project", "Brief.")), base.skills());
+		try (PDDocument pdf = Loader.loadPDF(renderer.render(cv))) {
 			assertEquals(2, pdf.getNumberOfPages());
 			PDFTextStripper stripper = new PDFTextStripper();
 			stripper.setStartPage(1);
@@ -121,14 +124,97 @@ class CvPdfRendererTest {
 			assertTrue(first.contains("TECHNICAL SUMMARY"));
 			assertTrue(first.contains("TECHNICAL EXPERTISE"));
 			assertTrue(first.contains("Cloud Migration"));
-			assertFalse(first.contains("Payments Platform"));
+			assertTrue(first.contains("Payments Platform"));
+			assertFalse(first.contains("Third project"));
 			assertTrue(first.contains("Page 1 / 2"));
 			stripper.setStartPage(2);
 			stripper.setEndPage(2);
 			String second = stripper.getText(pdf);
-			assertTrue(second.contains("Payments Platform"));
+			assertTrue(second.contains("Third project"));
 			assertFalse(second.contains("Cloud Migration"));
+			assertFalse(second.contains("Payments Platform"));
 			assertTrue(second.contains("Page 2 / 2"));
+		}
+	}
+
+	@Test
+	void longSummaryFlowsBeforeExpertiseWithoutOverlappingTheSidebar() throws IOException {
+		String summary = ("Backend-focused software engineer with strong experience designing maintainable Java services, "
+				+ "REST APIs and data-intensive business applications. Comfortable working across implementation, "
+				+ "testing and production hardening, with a consistent focus on clear domain boundaries and reliable delivery. ").repeat(2);
+		CvDocument cv = new CvDocument(new CvPersonalDetails("Linh", "Trần", "Engineer", null, null, summary),
+				List.of(new CvEducation("Sidebar school", "Bachelor", "Computing", LocalDate.of(2020, 1, 1), null,
+						CvEducationStatus.ONGOING)), List.of(), List.of(), List.of(),
+				List.of(new CvSkill("Summary skill", "BACKEND", "Backend", BigDecimal.ONE, null)));
+		try (PDDocument pdf = Loader.loadPDF(renderer.render(cv))) {
+			String text = new PDFTextStripper().getText(pdf);
+			assertTrue(text.contains("reliable delivery"));
+			assertTrue(text.contains("Summary skill"));
+			assertTrue(text.contains("Sidebar school"));
+			assertTrue(text.indexOf("TECHNICAL SUMMARY") < text.indexOf("TECHNICAL EXPERTISE"));
+		}
+	}
+
+	@Test
+	void expertiseStartsAtSummaryPositionWhenSummaryIsMissing() throws IOException {
+		CvDocument cv = new CvDocument(new CvPersonalDetails("Linh", "Trần", "Engineer", null, null, null),
+				List.of(), List.of(), List.of(), List.of(),
+				List.of(new CvSkill("Visible skill", "BACKEND", "Backend", BigDecimal.ONE, null)));
+		try (PDDocument pdf = Loader.loadPDF(renderer.render(cv))) {
+			final float[] expertiseY = {-1};
+			PDFTextStripper positions = new PDFTextStripper() {
+				@Override
+				protected void writeString(String text, List<TextPosition> characters) throws IOException {
+					if (text.contains("TECHNICAL EXPERTISE")) expertiseY[0] = characters.get(0).getYDirAdj();
+					super.writeString(text, characters);
+				}
+			};
+			positions.getText(pdf);
+			assertTrue(expertiseY[0] > 234 * PDRectangle.A4.getHeight() / 1123);
+			assertTrue(expertiseY[0] < 300 * PDRectangle.A4.getHeight() / 1123);
+		}
+	}
+
+	@Test
+	void limitsOnlyThePrintedSidebarToFirstThreeEducationsAndFiveLanguagesAndCertificates() throws IOException {
+		CvDocument cv = new CvDocument(new CvPersonalDetails("Linh", "Trần", "Engineer", null, null, null),
+				IntStream.rangeClosed(1, 4).mapToObj(i -> new CvEducation("School " + i, null, null,
+						LocalDate.of(2020, 1, 1), null, CvEducationStatus.ONGOING)).toList(),
+					IntStream.rangeClosed(1, 6).mapToObj(i -> new CvLanguage("Language " + i, CvLanguageLevel.ADVANCED)).toList(),
+					IntStream.rangeClosed(1, 6).mapToObj(i -> new CvCertificate("Certificate " + i, LocalDate.of(2020, 1, 1))).toList(),
+					List.of(), List.of());
+		try (PDDocument pdf = Loader.loadPDF(renderer.render(cv))) {
+			String text = new PDFTextStripper().getText(pdf);
+			assertTrue(text.contains("School 3"));
+			assertFalse(text.contains("School 4"));
+			assertTrue(text.contains("Language 5"));
+			assertFalse(text.contains("Language 6"));
+			assertTrue(text.contains("Certificate 5"));
+			assertFalse(text.contains("Certificate 6"));
+		}
+	}
+
+	@Test
+	void displaysOnlySkillsThatFitPageOneAndMovesProjectsToPageTwo() throws IOException {
+		CvDocument cv = new CvDocument(new CvPersonalDetails("Linh", "Trần", "Engineer", null, null,
+				"Summary before skills"), List.of(), List.of(), List.of(),
+				List.of(project("Next page project", "Brief.")),
+				IntStream.rangeClosed(1, 120).mapToObj(i -> new CvSkill("UniqueSkill" + i, "BACKEND", "Backend",
+						BigDecimal.ONE, null)).toList());
+		try (PDDocument pdf = Loader.loadPDF(renderer.render(cv))) {
+			assertEquals(2, pdf.getNumberOfPages());
+			PDFTextStripper stripper = new PDFTextStripper();
+			stripper.setStartPage(1);
+			stripper.setEndPage(1);
+			String first = stripper.getText(pdf);
+			assertTrue(first.contains("UniqueSkill1"));
+			assertFalse(first.contains("UniqueSkill120"));
+			assertFalse(first.contains("Next page project"));
+			stripper.setStartPage(2);
+			stripper.setEndPage(2);
+			String second = stripper.getText(pdf);
+			assertTrue(second.contains("Next page project"));
+			assertFalse(second.contains("UniqueSkill120"));
 		}
 	}
 
@@ -165,7 +251,7 @@ class CvPdfRendererTest {
 			stripper.setStartPage(2);
 			stripper.setEndPage(2);
 			String pageTwo = stripper.getText(pdf);
-			assertTrue(pageTwo.contains("Project 2"));
+			assertTrue(pageTwo.contains("Project 3"));
 			assertTrue(pageTwo.contains("Project 3"));
 			assertTrue(pageTwo.contains("Project 4"));
 			for (int page = 2; page <= pdf.getNumberOfPages(); page++) {
@@ -188,7 +274,7 @@ class CvPdfRendererTest {
 			stripper.setStartPage(2);
 			stripper.setEndPage(2);
 			String second = stripper.getText(pdf);
-			assertTrue(second.contains("Project 2"));
+			assertTrue(second.contains("Project 3"));
 			assertTrue(second.contains("Project 3"));
 			assertFalse(second.contains("Project 8"));
 			stripper.setStartPage(3);
@@ -213,7 +299,7 @@ class CvPdfRendererTest {
 	void movesFirstProjectWholeToPageTwoWhenItCannotFitOnPageOne() throws IOException {
 		CvDocument cv = new CvDocument(new CvPersonalDetails("Linh", "Trần", "Senior Engineer",
 				new BigDecimal("5.50"), "Collaborative", "Builds reliable software"),
-				List.of(), List.of(), List.of(), List.of(project("First project", "Detailed description. ".repeat(78))),
+				List.of(), List.of(), List.of(), List.of(project("First project", "Detailed description. ".repeat(125))),
 				IntStream.range(0, 12).mapToObj(index -> new CvSkill("Skill " + index,
 						"BACKEND", "Backend Engineering", new BigDecimal("3.00"), LocalDate.of(2026, 1, 1))).toList());
 		try (PDDocument pdf = Loader.loadPDF(renderer.render(cv))) {
