@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<body>
+<article class="project-card" th:fragment="card(project)" th:attr="data-project-name=${project.name}">
+  <div class="project-head">
+    <h3 class="project-name" th:text="${project.name}">Project</h3>
+    <span class="project-date"><span th:text="${display.month(project.startDate)}">Jan 2024</span> — <span th:text="${display.month(project.endDate)}">Present</span></span>
+  </div>
+  <p class="project-meta"><span th:if="${project.position != null}" th:text="${project.position}">Position</span><span th:if="${project.teamSize != null}"> · Team of <span th:text="${project.teamSize}">8</span></span><span th:if="${project.status != null}"> · <span th:text="${display.label(project.status)}">Ongoing</span></span></p>
+  <p class="project-description" th:if="${project.description != null and !#strings.isEmpty(#strings.trim(project.description))}" th:text="${project.description}">Description</p>
+  <section class="project-subsection" th:if="${project.responsibilities != null and !#strings.isEmpty(#strings.trim(project.responsibilities))}">
+    <h4>Responsibilities</h4>
+    <ul class="responsibility-list"><li th:each="responsibility : ${display.responsibilities(project.responsibilities)}" th:text="${responsibility}">Responsibility</li></ul>
+  </section>
+  <section class="project-subsection" th:if="${project.programmingLanguages != null and !#strings.isEmpty(#strings.trim(project.programmingLanguages))}">
+    <h4>Programming Languages</h4>
+    <p th:text="${display.separated(project.programmingLanguages)}">Java · SQL</p>
+  </section>
+  <section class="project-subsection" th:if="${project.tools != null and !#strings.isEmpty(#strings.trim(project.tools))}">
+    <h4>Tools &amp; Technologies</h4>
+    <p th:text="${display.separated(project.tools)}">Spring Boot · Docker</p>
+  </section>
+</article>
+</body>
+</html>

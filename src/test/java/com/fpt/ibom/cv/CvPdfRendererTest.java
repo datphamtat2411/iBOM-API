@@ -1,12 +1,15 @@
 package com.fpt.ibom.cv;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.stream.IntStream;
 
 import com.fpt.ibom.cv.model.CvCertificate;
 import com.fpt.ibom.cv.model.CvDocument;
@@ -19,9 +22,14 @@ import com.fpt.ibom.cv.model.CvProject;
 import com.fpt.ibom.cv.model.CvProjectStatus;
 import com.fpt.ibom.cv.model.CvSkill;
 import com.fpt.ibom.cv.service.CvPdfRenderer;
+import com.fpt.ibom.cv.service.PdfRenderingException;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.text.PDFTextStripper;
+import org.apache.pdfbox.text.TextPosition;
+import org.apache.pdfbox.rendering.PDFRenderer;
 import org.junit.jupiter.api.Test;
 
 class CvPdfRendererTest {
@@ -38,14 +46,16 @@ class CvPdfRendererTest {
 			String text = new PDFTextStripper().getText(document);
 			assertTrue(text.contains("Nguyễn Ánh"));
 			assertTrue(text.contains("Senior Backend Engineer"));
-			assertTrue(text.contains("Education"));
-			assertTrue(text.contains("Languages"));
-			assertTrue(text.contains("Certificates"));
-			assertTrue(text.contains("Projects"));
-			assertTrue(text.contains("Skills"));
+			assertTrue(text.contains("EDUCATION"));
+			assertTrue(text.contains("LANGUAGES"));
+			assertTrue(text.contains("CERTIFICATES"));
+			assertTrue(text.contains("PROJECT EXPERIENCE"));
+			assertTrue(text.contains("TECHNICAL EXPERTISE"));
 			assertTrue(text.contains("FPT University"));
-			assertTrue(text.contains("ONGOING"));
-			assertTrue(text.contains("COMPLETED"));
+			assertTrue(text.contains("Ongoing"));
+			assertTrue(text.contains("Completed"));
+			assertFalse(text.contains("(BACKEND)"));
+			assertTrue(text.contains("Backend"));
 			assertTrue(text.contains("Vietnamese"));
 			assertTrue(text.contains("Cloud Migration"));
 			assertTrue(text.contains("AWS Solutions Architect"));
@@ -66,12 +76,161 @@ class CvPdfRendererTest {
 			String text = new PDFTextStripper().getText(document);
 			assertTrue(text.contains("Linh Trần"));
 			assertTrue(text.contains("Builds reliable software"));
-			assertFalse(text.contains("Education"));
-			assertFalse(text.contains("Languages"));
-			assertFalse(text.contains("Certificates"));
-			assertFalse(text.contains("Projects"));
-			assertFalse(text.contains("Skills"));
+			assertFalse(text.contains("EDUCATION"));
+			assertFalse(text.contains("LANGUAGES"));
+			assertFalse(text.contains("CERTIFICATES"));
+			assertFalse(text.contains("PROJECT EXPERIENCE"));
+			assertFalse(text.contains("TECHNICAL EXPERTISE"));
 		}
+	}
+
+	@Test
+	void paginatesLongDocumentsAcrossFixedA4Pages() throws IOException {
+		List<CvProject> projects = IntStream.rangeClosed(1, 30)
+				.mapToObj(index -> new CvProject("Project " + index,
+						"Designed and delivered reliable enterprise software for distributed teams. ".repeat(3),
+						LocalDate.of(2020, 1, 1), null, CvProjectStatus.ONGOING, "Senior Engineer", 5,
+						"Led implementation, testing, and production support across the project lifecycle. ".repeat(3),
+						"Java, Kotlin, TypeScript", "Spring Boot, Angular, MySQL"))
+				.toList();
+		CvDocument longDocument = new CvDocument(
+				new CvPersonalDetails("Linh", "Trần", "Senior Engineer", new BigDecimal("8.00"), "Collaborative",
+						"Builds reliable software"),
+				List.of(), List.of(), List.of(), projects, List.of());
+
+		byte[] pdf = renderer.render(longDocument);
+
+		try (PDDocument document = Loader.loadPDF(pdf)) {
+			assertTrue(document.getNumberOfPages() > 1);
+			for (PDPage page : document.getPages()) {
+				assertEquals(PDRectangle.A4.getWidth(), page.getMediaBox().getWidth(), 0.5f);
+				assertEquals(PDRectangle.A4.getHeight(), page.getMediaBox().getHeight(), 0.5f);
+			}
+		}
+	}
+
+	@Test
+	void firstPageContainsOnlyFirstProjectAndSummaryBelowPersonalityPanel() throws IOException {
+		try (PDDocument pdf = Loader.loadPDF(renderer.render(completeDocument()))) {
+			assertEquals(2, pdf.getNumberOfPages());
+			PDFTextStripper stripper = new PDFTextStripper();
+			stripper.setStartPage(1);
+			stripper.setEndPage(1);
+			String first = stripper.getText(pdf);
+			assertTrue(first.replaceAll("\\s+", " ").contains("PERSONALITY / CHARACTERISTICS"));
+			assertTrue(first.contains("TECHNICAL SUMMARY"));
+			assertTrue(first.contains("TECHNICAL EXPERTISE"));
+			assertTrue(first.contains("Cloud Migration"));
+			assertFalse(first.contains("Payments Platform"));
+			assertTrue(first.contains("Page 1 / 2"));
+			stripper.setStartPage(2);
+			stripper.setEndPage(2);
+			String second = stripper.getText(pdf);
+			assertTrue(second.contains("Payments Platform"));
+			assertFalse(second.contains("Cloud Migration"));
+			assertTrue(second.contains("Page 2 / 2"));
+		}
+	}
+
+	@Test
+	void brandedFrameIsVisibleAndSummaryStaysBelowPanelEvenWithoutPersonality() throws IOException {
+		CvDocument cv = new CvDocument(new CvPersonalDetails("Linh", "Trần", "Engineer", null,
+				null, "Builds reliable software"), List.of(), List.of(), List.of(), List.of(), List.of());
+		try (PDDocument pdf = Loader.loadPDF(renderer.render(cv))) {
+			var page = new PDFRenderer(pdf).renderImage(0);
+			var navy = new java.awt.Color(page.getRGB(60, 100));
+			assertTrue(navy.getBlue() > navy.getRed() + 40, "First-page SVG frame should be visible");
+			final float[] summaryY = {-1};
+			PDFTextStripper positions = new PDFTextStripper() {
+				@Override
+				protected void writeString(String text, List<TextPosition> characters) throws IOException {
+					if (text.contains("TECHNICAL SUMMARY")) summaryY[0] = characters.get(0).getYDirAdj();
+					super.writeString(text, characters);
+				}
+			};
+			positions.getText(pdf);
+			assertTrue(summaryY[0] > 234 * PDRectangle.A4.getHeight() / 1123,
+					"Technical Summary must start below the entire gray panel");
+		}
+	}
+
+	@Test
+	void continuationHeaderRepeatsAndShortProjectsSharePage() throws IOException {
+		CvDocument cv = new CvDocument(new CvPersonalDetails("Linh", "Trần", "Engineer", null,
+				"Collaborative", "Builds reliable software"), List.of(), List.of(), List.of(),
+				IntStream.rangeClosed(1, 18).mapToObj(index -> project("Project " + index, "Brief.")).toList(), List.of());
+		try (PDDocument pdf = Loader.loadPDF(renderer.render(cv))) {
+			assertTrue(pdf.getNumberOfPages() >= 3);
+			PDFTextStripper stripper = new PDFTextStripper();
+			stripper.setStartPage(2);
+			stripper.setEndPage(2);
+			String pageTwo = stripper.getText(pdf);
+			assertTrue(pageTwo.contains("Project 2"));
+			assertTrue(pageTwo.contains("Project 3"));
+			assertTrue(pageTwo.contains("Project 4"));
+			for (int page = 2; page <= pdf.getNumberOfPages(); page++) {
+				stripper.setStartPage(page);
+				stripper.setEndPage(page);
+				assertTrue(stripper.getText(pdf).contains("Linh Trần"), "Missing continuation header on page " + page);
+			}
+		}
+	}
+
+	@Test
+	void continuationGreedilyFitsShortProjectsAndMovesWholeLongProject() throws IOException {
+		List<CvProject> projects = IntStream.rangeClosed(1, 9).mapToObj(index -> project("Project " + index,
+				index == 8 ? "Long description. ".repeat(120) : "Brief description.")).toList();
+		CvDocument cv = new CvDocument(new CvPersonalDetails("Linh", "Trần", "Engineer", null,
+				"Collaborative", "Builds reliable software"), List.of(), List.of(), List.of(), projects, List.of());
+		try (PDDocument pdf = Loader.loadPDF(renderer.render(cv))) {
+			assertTrue(pdf.getNumberOfPages() >= 3);
+			PDFTextStripper stripper = new PDFTextStripper();
+			stripper.setStartPage(2);
+			stripper.setEndPage(2);
+			String second = stripper.getText(pdf);
+			assertTrue(second.contains("Project 2"));
+			assertTrue(second.contains("Project 3"));
+			assertFalse(second.contains("Project 8"));
+			stripper.setStartPage(3);
+			stripper.setEndPage(pdf.getNumberOfPages());
+			assertTrue(stripper.getText(pdf).contains("Project 8"));
+			assertTrue(stripper.getText(pdf).contains("Project 9"));
+		}
+	}
+
+	@Test
+	void rejectsAProjectThatCannotFitOnAnEntireContinuationPage() {
+		String ending = "Unmistakable ending of the oversized project";
+		CvProject oversized = project("Oversized project", "Repeated project detail. ".repeat(650) + ending);
+		CvDocument cv = new CvDocument(new CvPersonalDetails("Linh", "Trần", "Engineer", null,
+				"Collaborative", "Builds reliable software"), List.of(), List.of(), List.of(),
+				List.of(project("First project", "Brief."), oversized), List.of());
+		assertTrue(assertThrows(PdfRenderingException.class, () -> renderer.render(cv))
+				.getMessage().contains("Oversized project"));
+	}
+
+	@Test
+	void movesFirstProjectWholeToPageTwoWhenItCannotFitOnPageOne() throws IOException {
+		CvDocument cv = new CvDocument(new CvPersonalDetails("Linh", "Trần", "Senior Engineer",
+				new BigDecimal("5.50"), "Collaborative", "Builds reliable software"),
+				List.of(), List.of(), List.of(), List.of(project("First project", "Detailed description. ".repeat(78))),
+				IntStream.range(0, 12).mapToObj(index -> new CvSkill("Skill " + index,
+						"BACKEND", "Backend Engineering", new BigDecimal("3.00"), LocalDate.of(2026, 1, 1))).toList());
+		try (PDDocument pdf = Loader.loadPDF(renderer.render(cv))) {
+			assertEquals(2, pdf.getNumberOfPages());
+			PDFTextStripper text = new PDFTextStripper();
+			text.setStartPage(1);
+			text.setEndPage(1);
+			assertFalse(text.getText(pdf).contains("First project"));
+			text.setStartPage(2);
+			text.setEndPage(2);
+			assertTrue(text.getText(pdf).contains("First project"));
+		}
+	}
+
+	private CvProject project(String name, String description) {
+		return new CvProject(name, description, LocalDate.of(2020, 1, 1), null, CvProjectStatus.ONGOING,
+				"Engineer", 5, "Delivered the implementation", "Java", "Spring Boot");
 	}
 
 	private void assertValidPdf(byte[] pdf) {

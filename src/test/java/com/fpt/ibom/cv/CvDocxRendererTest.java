@@ -62,7 +62,15 @@ class CvDocxRendererTest {
 					"Thiết kế dịch vụ", "Java, SQL", "Spring Boot", "Java", "Backend", "3.50", "01 Aug 2025", "SQL",
 					"Database", "2.25");
 			assertTrue(content.indexOf("Nền tảng hiện tại") < content.indexOf("Nền tảng cũ"));
-			assertTrue(paragraphs.indexOf("Java") < paragraphs.indexOf("SQL"));
+			assertTrue(content.indexOf("Technical Expertise") < content.indexOf("Project Experience"));
+			int secondHeading = paragraphs.lastIndexOf("Project Experience");
+			assertTrue(secondHeading > paragraphs.indexOf("Nền tảng hiện tại"));
+			assertTrue(reopened.getParagraphs().get(secondHeading).getCTP().getPPr().isSetPageBreakBefore());
+			int firstProject = paragraphs.indexOf("Nền tảng hiện tại");
+			for (int index = firstProject; index < secondHeading - 1; index++) {
+				assertTrue(reopened.getParagraphs().get(index).getCTP().getPPr().isSetKeepNext(),
+						"Project paragraphs should stay together when the complete project fits a page");
+			}
 		}
 	}
 
@@ -83,8 +91,8 @@ class CvDocxRendererTest {
 			assertFalse(content.contains("Education"));
 			assertFalse(content.contains("Languages"));
 			assertFalse(content.contains("Certificates"));
-			assertFalse(content.contains("Projects"));
-			assertFalse(content.contains("Skills"));
+			assertFalse(content.contains("Project Experience"));
+			assertFalse(content.contains("Technical Expertise"));
 		}
 	}
 

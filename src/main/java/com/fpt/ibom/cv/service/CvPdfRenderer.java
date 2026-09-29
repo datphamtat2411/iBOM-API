@@ -1,31 +1,37 @@
 package com.fpt.ibom.cv.service;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import com.fpt.ibom.cv.model.CvDocument;
-import com.lowagie.text.pdf.BaseFont;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
 import org.thymeleaf.templateresolver.ClassLoaderTemplateResolver;
-import org.xhtmlrenderer.pdf.ITextRenderer;
 
 @Service
 public class CvPdfRenderer {
 
-	private static final String TEMPLATE = "cv/cv";
-	private static final String TEMPLATE_BASE = "templates/cv/";
-	private static final String REGULAR_FONT = "fonts/NotoSans-Regular.ttf";
-	private static final String BOLD_FONT = "fonts/NotoSans-Bold.ttf";
-
+	private static final Duration BROWSER_TIMEOUT = Duration.ofSeconds(30);
+	private static final Pattern ERROR = Pattern.compile("data-cv-error=\"([^\"]*)\"");
+	private static final Pattern PROJECT_INDEX = Pattern.compile("data-cv-project-index=\"(\\d+)\"");
 	private final TemplateEngine templateEngine;
-	private final String templateBaseUrl;
+	private final CvPrintFormat display = new CvPrintFormat();
+	private final String styles;
+	private final String paginationScript;
 
 	public CvPdfRenderer() {
 		ClassLoaderTemplateResolver resolver = new ClassLoaderTemplateResolver();
@@ -36,31 +42,38 @@ public class CvPdfRenderer {
 		resolver.setCacheable(false);
 		templateEngine = new TemplateEngine();
 		templateEngine.setTemplateResolver(resolver);
-		templateBaseUrl = resourceUrl(TEMPLATE_BASE);
+		try {
+			styles = readResource("templates/cv/cv.css");
+			paginationScript = readResource("templates/cv/paginate.js");
+		} catch (IOException exception) {
+			throw new PdfRenderingException("Missing CV print template resource", exception);
+		}
 	}
 
 	public byte[] render(CvDocument document) {
 		Objects.requireNonNull(document, "document must not be null");
-		Path regularFont = null;
-		Path boldFont = null;
+		Context context = new Context();
+		context.setVariable("document", document);
+		context.setVariable("display", display);
+		context.setVariable("styles", styles);
+		context.setVariable("paginationScript", paginationScript);
+		String html = templateEngine.process("cv/cv", context);
+
+		Path temporary = null;
 		try {
-			Context context = new Context();
-			context.setVariable("document", document);
-			String xhtml = templateEngine.process(TEMPLATE, context);
-
-			regularFont = materializeResource(REGULAR_FONT);
-			boldFont = materializeResource(BOLD_FONT);
-			ITextRenderer pdfRenderer = new ITextRenderer();
-			pdfRenderer.getFontResolver().addFont(regularFont.toString(), BaseFont.IDENTITY_H, BaseFont.EMBEDDED);
-			pdfRenderer.getFontResolver().addFont(boldFont.toString(), BaseFont.IDENTITY_H, BaseFont.EMBEDDED);
-			pdfRenderer.setDocumentFromString(xhtml, templateBaseUrl);
-			pdfRenderer.layout();
-
-			ByteArrayOutputStream output = new ByteArrayOutputStream();
-			pdfRenderer.createPDF(output);
-			byte[] bytes = output.toByteArray();
-			if (bytes.length == 0) {
-				throw new PdfRenderingException("PDF rendering produced empty output");
+			temporary = Files.createTempDirectory("cv-print-");
+			Path input = temporary.resolve("cv.html");
+			Path output = temporary.resolve("cv.pdf");
+			Files.writeString(input, html, StandardCharsets.UTF_8);
+			String url = input.toUri().toString();
+			String layout = browser(temporary, url, "--dump-dom");
+			Matcher error = ERROR.matcher(layout);
+			if (!error.find()) throw new PdfRenderingException("CV pagination did not complete");
+			if (!error.group(1).isEmpty()) throw layoutError(document, layout, error.group(1));
+			browser(temporary, url, "--no-pdf-header-footer", "--print-to-pdf=" + output);
+			byte[] bytes = Files.readAllBytes(output);
+			if (bytes.length < 5 || !new String(bytes, 0, 5, StandardCharsets.US_ASCII).equals("%PDF-")) {
+				throw new PdfRenderingException("PDF rendering produced invalid output");
 			}
 			return bytes;
 		} catch (PdfRenderingException exception) {
@@ -68,39 +81,70 @@ public class CvPdfRenderer {
 		} catch (Exception exception) {
 			throw new PdfRenderingException("Unable to render CV document as PDF", exception);
 		} finally {
-			deleteQuietly(regularFont);
-			deleteQuietly(boldFont);
+			deleteQuietly(temporary);
 		}
 	}
 
-	private String resourceUrl(String resourcePath) {
-		try {
-			return Objects.requireNonNull(getClass().getClassLoader().getResource(resourcePath), resourcePath)
-					.toExternalForm();
-		} catch (RuntimeException exception) {
-			throw new PdfRenderingException("Missing CV rendering resource: " + resourcePath, exception);
-		}
-	}
-
-	private Path materializeResource(String resourcePath) throws IOException {
-		String suffix = resourcePath.substring(resourcePath.lastIndexOf('.'));
-		Path temporaryFile = Files.createTempFile("cv-renderer-", suffix);
-		try (InputStream input = new ClassPathResource(resourcePath).getInputStream()) {
-			Files.copy(input, temporaryFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-			return temporaryFile;
-		} catch (Exception exception) {
-			deleteQuietly(temporaryFile);
-			throw exception;
-		}
-	}
-
-	private void deleteQuietly(Path file) {
-		if (file != null) {
-			try {
-				Files.deleteIfExists(file);
-			} catch (IOException ignored) {
-				// Do not replace a successful PDF with a cleanup failure.
+	private PdfRenderingException layoutError(CvDocument document, String layout, String error) {
+		if (error.equals("PROJECT_TOO_LARGE")) {
+			Matcher index = PROJECT_INDEX.matcher(layout);
+			if (index.find()) {
+				int position = Integer.parseInt(index.group(1));
+				if (position < document.projects().size()) {
+					return new PdfRenderingException("Project cannot fit on one CV page: " + document.projects().get(position).name());
+				}
 			}
+		}
+		return new PdfRenderingException("CV content does not fit the print layout: " + error);
+	}
+
+	private String browser(Path temporary, String url, String... mode) throws Exception {
+		String binary = System.getProperty("cv.pdf.chrome",
+				System.getenv().getOrDefault("CV_PDF_CHROME", "google-chrome"));
+		List<String> command = new ArrayList<>(List.of(binary, "--headless", "--no-sandbox", "--disable-gpu",
+				"--disable-dev-shm-usage", "--disable-extensions", "--no-first-run", "--no-default-browser-check",
+				"--virtual-time-budget=10000", "--user-data-dir=" + temporary.resolve("browser-profile")));
+		command.addAll(List.of(mode));
+		command.add(url);
+		Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
+		CompletableFuture<String> output = CompletableFuture.supplyAsync(() -> {
+			try {
+				return new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+			} catch (IOException exception) {
+				throw new PdfRenderingException("Unable to read Chromium output", exception);
+			}
+		});
+		try {
+			if (!process.waitFor(BROWSER_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)) {
+				process.destroyForcibly();
+				throw new PdfRenderingException("Chromium timed out while rendering CV");
+			}
+			String text = output.get(BROWSER_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+			if (process.exitValue() != 0) throw new PdfRenderingException("Chromium failed to render CV: " + text);
+			return text;
+		} finally {
+			if (process.isAlive()) process.destroyForcibly();
+		}
+	}
+
+	private String readResource(String resource) throws IOException {
+		try (var stream = new ClassPathResource(resource).getInputStream()) {
+			return new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+		}
+	}
+
+	private void deleteQuietly(Path directory) {
+		if (directory == null) return;
+		try (Stream<Path> paths = Files.walk(directory)) {
+			paths.sorted(Comparator.reverseOrder()).forEach(path -> {
+				try {
+					Files.deleteIfExists(path);
+				} catch (IOException ignored) {
+					// A temporary browser file may still be closing; never hide the render result.
+				}
+			});
+		} catch (IOException ignored) {
+			// Temporary cleanup must not replace the rendering exception.
 		}
 	}
 }

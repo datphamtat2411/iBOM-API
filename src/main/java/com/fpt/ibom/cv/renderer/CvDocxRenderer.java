@@ -7,6 +7,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -36,8 +37,8 @@ public class CvDocxRenderer {
 			renderEducation(docx, document);
 			renderLanguages(docx, document);
 			renderCertificates(docx, document);
-			renderProjects(docx, document);
 			renderSkills(docx, document);
+			renderProjects(docx, document);
 			docx.write(output);
 			return output.toByteArray();
 		} catch (IOException exception) {
@@ -46,17 +47,24 @@ public class CvDocxRenderer {
 	}
 
 	private void renderPersonalDetails(XWPFDocument document, CvPersonalDetails details) {
-		addParagraph(document, "Curriculum Vitae", true, 20, null, ParagraphAlignment.CENTER);
+		XWPFParagraph brand = addParagraph(document, "PROFESSIONAL PROFILE", true, 10, null, ParagraphAlignment.LEFT);
+		brand.getRuns().get(0).setColor("D85A18");
 		if (details == null) {
 			return;
 		}
 
-		addParagraph(document, joinNonBlank(details.firstName(), details.lastName()), true, 16, null,
-				ParagraphAlignment.CENTER);
-		addField(document, "Job title", details.jobTitle());
+		addParagraph(document, joinNonBlank(details.firstName(), details.lastName()), true, 24, null,
+				ParagraphAlignment.LEFT);
+		addParagraph(document, details.jobTitle(), false, 13, null, ParagraphAlignment.LEFT);
 		addField(document, "Years of experience", details.yearsOfExperience());
-		addField(document, "Personality", details.personality());
-		addField(document, "Technical summary", details.technicalSummary());
+		if (!isBlank(details.personality())) {
+			addHeading(document, "Personality / Characteristics");
+			addParagraph(document, details.personality(), false, 10, null, ParagraphAlignment.LEFT);
+		}
+		if (!isBlank(details.technicalSummary())) {
+			addHeading(document, "Technical Summary");
+			addParagraph(document, details.technicalSummary(), false, 10, null, ParagraphAlignment.LEFT);
+		}
 	}
 
 	private void renderEducation(XWPFDocument document, CvDocument cvDocument) {
@@ -103,18 +111,35 @@ public class CvDocxRenderer {
 			return;
 		}
 
-		addHeading(document, "Projects");
-		for (CvProject project : cvDocument.projects()) {
+		addHeading(document, "Project Experience");
+		renderProject(document, cvDocument.projects().get(0));
+		if (cvDocument.projects().size() > 1) {
+			XWPFParagraph continuation = addHeading(document, "Project Experience");
+			continuation.getCTP().getPPr().addNewPageBreakBefore();
+			for (CvProject project : cvDocument.projects().subList(1, cvDocument.projects().size())) {
+				renderProject(document, project);
+			}
+		}
+	}
+
+	private void renderProject(XWPFDocument document, CvProject project) {
+		int start = document.getParagraphs().size();
 			addItemHeading(document, project.name());
-			addField(document, "Description", project.description());
-			addField(document, "Start date", project.startDate());
-			addField(document, "End date", project.endDate());
+			addField(document, "Dates", format(project.startDate()) + " — "
+					+ (project.endDate() == null ? "Present" : format(project.endDate())));
 			addField(document, "Status", humanize(project.status()));
 			addField(document, "Position", project.position());
 			addField(document, "Team size", project.teamSize());
+			addField(document, "Description", project.description());
 			addField(document, "Responsibilities", project.responsibilities());
 			addField(document, "Programming languages", project.programmingLanguages());
-			addField(document, "Tools", project.tools());
+			addField(document, "Tools & Technologies", project.tools());
+		List<XWPFParagraph> paragraphs = document.getParagraphs();
+		for (int index = start; index < paragraphs.size(); index++) {
+			var properties = paragraphs.get(index).getCTP().isSetPPr()
+					? paragraphs.get(index).getCTP().getPPr() : paragraphs.get(index).getCTP().addNewPPr();
+			properties.addNewKeepLines();
+			if (index < paragraphs.size() - 1) properties.addNewKeepNext();
 		}
 	}
 
@@ -123,7 +148,7 @@ public class CvDocxRenderer {
 			return;
 		}
 
-		addHeading(document, "Skills");
+		addHeading(document, "Technical Expertise");
 		for (CvSkill skill : cvDocument.skills()) {
 			addItemHeading(document, skill.skillName());
 			addField(document, "Category", joinNonBlank(skill.categoryCode(), skill.categoryName()));
@@ -132,8 +157,10 @@ public class CvDocxRenderer {
 		}
 	}
 
-	private void addHeading(XWPFDocument document, String text) {
-		addParagraph(document, text, true, 14, "Heading1", ParagraphAlignment.LEFT);
+	private XWPFParagraph addHeading(XWPFDocument document, String text) {
+		XWPFParagraph paragraph = addParagraph(document, text, true, 14, "Heading1", ParagraphAlignment.LEFT);
+		paragraph.getCTP().addNewPPr().addNewKeepNext();
+		return paragraph;
 	}
 
 	private void addItemHeading(XWPFDocument document, String text) {
@@ -154,6 +181,7 @@ public class CvDocxRenderer {
 		labelRun.setBold(true);
 		labelRun.setFontFamily("Arial");
 		labelRun.setFontSize(10);
+		labelRun.setColor("012A4A");
 		labelRun.setText(label + ": ");
 		XWPFRun valueRun = paragraph.createRun();
 		valueRun.setFontFamily("Arial");
@@ -181,6 +209,7 @@ public class CvDocxRenderer {
 			run.setBold(bold);
 			run.setFontFamily("Arial");
 			run.setFontSize(fontSize);
+			if (bold) run.setColor("012A4A");
 			run.setText(text);
 		}
 		return paragraph;
