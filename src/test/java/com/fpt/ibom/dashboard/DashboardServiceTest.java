@@ -133,7 +133,7 @@ class DashboardServiceTest {
 	}
 
 	@Test
-	void selectsOnePrimarySkillPerProfileAndUsesOnlyThoseSkillsForAnalytics() {
+	void includesEveryValidSkillFromEligibleProfilesInAnalytics() {
 		Profile first = profile(8L, 7L);
 		Profile second = profile(9L, 7L);
 		Profile third = profile(10L, 7L);
@@ -165,16 +165,16 @@ class DashboardServiceTest {
 
 		assertEquals(5, result.totalProfiles());
 		assertEquals(3, result.completedProfiles());
-		assertEquals(List.of("Java", "Go", "Kotlin"), result.primarySkillDistribution().items().stream()
+		assertEquals(List.of("Java", "Go", "go", "java", "Kotlin", "Python"), result.primarySkillDistribution().items().stream()
 				.map(ManagerDashboardStatsResponse.PrimarySkillItem::skillName).toList());
-		assertEquals(List.of(2L, 1L, 1L), result.primarySkillDistribution().items().stream()
+		assertEquals(List.of(3L, 1L, 1L, 1L, 1L, 1L), result.primarySkillDistribution().items().stream()
 				.map(ManagerDashboardStatsResponse.PrimarySkillItem::profileCount).toList());
 		assertEquals(0, result.primarySkillDistribution().otherProfileCount());
 		assertEquals(List.of("Backend", "Frontend", "Uncategorized"), result.skillCategoryDistribution().items().stream()
 				.map(ManagerDashboardStatsResponse.SkillCategoryItem::categoryName).toList());
-		assertEquals(List.of(2L, 1L, 1L), result.skillCategoryDistribution().items().stream()
+		assertEquals(List.of(4L, 2L, 1L), result.skillCategoryDistribution().items().stream()
 				.map(ManagerDashboardStatsResponse.SkillCategoryItem::profileCount).toList());
-		assertEquals(List.of(50, 25, 25), result.skillCategoryDistribution().items().stream()
+		assertEquals(List.of(80, 40, 20), result.skillCategoryDistribution().items().stream()
 				.map(ManagerDashboardStatsResponse.SkillCategoryItem::percentage).toList());
 		assertEquals(0, result.skillCategoryDistribution().otherProfileCount());
 		verify(profileSkillRepository).findByProfileIdIn(List.of(8L, 9L, 10L, 11L, 12L));
@@ -217,13 +217,13 @@ class DashboardServiceTest {
 				.map(ManagerDashboardStatsResponse.SkillCategoryItem::categoryName).toList());
 		assertEquals(List.of(1L, 1L, 1L), result.skillCategoryDistribution().items().stream()
 				.map(ManagerDashboardStatsResponse.SkillCategoryItem::profileCount).toList());
-		assertEquals(List.of(33, 33, 33), result.skillCategoryDistribution().items().stream()
+		assertEquals(List.of(25, 25, 25), result.skillCategoryDistribution().items().stream()
 				.map(ManagerDashboardStatsResponse.SkillCategoryItem::percentage).toList());
 		assertEquals(0, result.skillCategoryDistribution().otherProfileCount());
 	}
 
 	@Test
-	void ignoresFutureLastUsedWhenSelectingPrimarySkill() {
+	void ignoresFutureLastUsedWhenBuildingAnalytics() {
 		Profile profile = profile(24L, 7L);
 		Skill future = skill(24L, "Future", category(54L, "FUTURE", "Future"));
 		Skill valid = skill(25L, "Valid", category(55L, "VALID", "Valid"));
@@ -261,7 +261,7 @@ class DashboardServiceTest {
 	}
 
 	@Test
-	void preservesPrimarySkillOrderingForValidProfileSkills() {
+	void preservesSkillOrderingForValidProfileSkills() {
 		Profile byExperience = profile(26L, 7L);
 		Profile byLastUsed = profile(27L, 7L);
 		Profile byName = profile(28L, 7L);
@@ -290,9 +290,9 @@ class DashboardServiceTest {
 
 		ManagerDashboardStatsResponse result = service.getManagerStats();
 
-		assertEquals(List.of("Alpha", "High experience", "Recent", "SAME"), result.primarySkillDistribution().items()
+		assertEquals(List.of("Alpha", "High experience", "Low experience", "Old", "Recent", "SAME", "same"), result.primarySkillDistribution().items()
 				.stream().map(ManagerDashboardStatsResponse.PrimarySkillItem::skillName).toList());
-		assertEquals(List.of(32L, 28L, 30L, 33L), result.primarySkillDistribution().items().stream()
+		assertEquals(List.of(32L, 28L, 27L, 29L, 30L, 33L, 34L), result.primarySkillDistribution().items().stream()
 				.map(ManagerDashboardStatsResponse.PrimarySkillItem::skillId).toList());
 	}
 

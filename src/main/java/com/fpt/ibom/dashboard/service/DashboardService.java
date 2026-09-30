@@ -7,8 +7,10 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import com.fpt.ibom.auth.security.UserPrincipal;
 import com.fpt.ibom.dashboard.dto.ManagerDashboardStatsResponse;
@@ -66,25 +68,17 @@ public class DashboardService {
 
 		List<Long> profileIds = eligibleProfiles.stream().map(Profile::getId).toList();
 		List<ProfileSkill> profileSkills = profileSkillRepository.findByProfileIdIn(profileIds);
-		Map<Long, List<ProfileSkill>> skillsByProfile = new HashMap<>();
+		List<ProfileSkill> validProfileSkills = new ArrayList<>();
 		LocalDate businessDate = LocalDate.now(clock);
 		for (ProfileSkill profileSkill : profileSkills) {
-			if (!isValidSkillContribution(profileSkill, businessDate)) {
-				continue;
-			}
-			skillsByProfile.computeIfAbsent(profileSkill.getProfile().getId(), ignored -> new ArrayList<>()).add(profileSkill);
-		}
-
-		List<ProfileSkill> primarySkills = new ArrayList<>();
-		for (Profile profile : eligibleProfiles) {
-			ProfileSkill primarySkill = selectPrimarySkill(skillsByProfile.get(profile.getId()));
-			if (primarySkill != null) {
-				primarySkills.add(primarySkill);
+			if (isValidSkillContribution(profileSkill, businessDate)) {
+				validProfileSkills.add(profileSkill);
 			}
 		}
 
 		return new ManagerDashboardStatsResponse(eligibleProfiles.size(), completedProfiles,
-				buildPrimaryDistribution(primarySkills), buildCategoryDistribution(primarySkills));
+				buildPrimaryDistribution(validProfileSkills),
+				buildCategoryDistribution(validProfileSkills, eligibleProfiles.size()));
 	}
 
 	private boolean isValidSkillContribution(ProfileSkill profileSkill, LocalDate businessDate) {
@@ -98,25 +92,10 @@ public class DashboardService {
 				&& (profileSkill.getLastUsed() == null || !profileSkill.getLastUsed().isAfter(businessDate));
 	}
 
-	private ProfileSkill selectPrimarySkill(List<ProfileSkill> profileSkills) {
-		if (profileSkills == null || profileSkills.isEmpty()) {
-			return null;
-		}
-		Comparator<ProfileSkill> comparator = Comparator
-				.comparing(ProfileSkill::getExperienceYears,
-						Comparator.nullsLast(Comparator.reverseOrder()))
-				.thenComparing(ProfileSkill::getLastUsed, Comparator.nullsLast(Comparator.reverseOrder()))
-				.thenComparing(profileSkill -> profileSkill.getSkill().getName(),
-						Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER))
-				.thenComparing(profileSkill -> profileSkill.getSkill().getId(),
-						Comparator.nullsLast(Comparator.naturalOrder()));
-		return profileSkills.stream().min(comparator).orElse(null);
-	}
-
 	private ManagerDashboardStatsResponse.PrimarySkillDistribution buildPrimaryDistribution(
-			List<ProfileSkill> primarySkills) {
+			List<ProfileSkill> profileSkills) {
 		Map<Long, List<ProfileSkill>> skillsById = new HashMap<>();
-		for (ProfileSkill profileSkill : primarySkills) {
+		for (ProfileSkill profileSkill : profileSkills) {
 			skillsById.computeIfAbsent(profileSkill.getSkill().getId(), ignored -> new ArrayList<>()).add(profileSkill);
 		}
 		List<ManagerDashboardStatsResponse.PrimarySkillItem> sortedItems = skillsById.values().stream()
@@ -134,19 +113,20 @@ public class DashboardService {
 	}
 
 	private ManagerDashboardStatsResponse.SkillCategoryDistribution buildCategoryDistribution(
-			List<ProfileSkill> primarySkills) {
-		if (primarySkills.isEmpty()) {
+			List<ProfileSkill> profileSkills, int eligibleProfileCount) {
+		if (profileSkills.isEmpty()) {
 			return emptyCategoryDistribution();
 		}
-		Map<CategoryKey, Long> categoryCounts = new HashMap<>();
-		for (ProfileSkill profileSkill : primarySkills) {
+		Map<CategoryKey, Set<Long>> profilesByCategory = new HashMap<>();
+		for (ProfileSkill profileSkill : profileSkills) {
 			CategoryKey category = categoryKey(profileSkill);
-			categoryCounts.merge(category, 1L, Long::sum);
+			profilesByCategory.computeIfAbsent(category, ignored -> new HashSet<>())
+					.add(profileSkill.getProfile().getId());
 		}
-		List<ManagerDashboardStatsResponse.SkillCategoryItem> sortedItems = categoryCounts.entrySet().stream()
+		List<ManagerDashboardStatsResponse.SkillCategoryItem> sortedItems = profilesByCategory.entrySet().stream()
 				.map(entry -> new ManagerDashboardStatsResponse.SkillCategoryItem(entry.getKey().id(),
-						entry.getKey().code(), entry.getKey().name(), entry.getValue(),
-						percentage(entry.getValue(), primarySkills.size())))
+						entry.getKey().code(), entry.getKey().name(), entry.getValue().size(),
+						percentage(entry.getValue().size(), eligibleProfileCount)))
 				.sorted(Comparator.comparing(ManagerDashboardStatsResponse.SkillCategoryItem::profileCount,
 						Comparator.reverseOrder())
 						.thenComparing(ManagerDashboardStatsResponse.SkillCategoryItem::categoryName,

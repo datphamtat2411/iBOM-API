@@ -181,7 +181,7 @@ class DashboardIntegrationTest extends MySqlIntegrationTest {
 	}
 
 	@Test
-	void managerAnalyticsUsesOnlyPrimarySkillsFromEligibleProfiles() throws Exception {
+	void managerAnalyticsUsesEverySkillFromEligibleProfiles() throws Exception {
 		UserAccount member = saveUser(UserRole.MEMBER);
 		Profile first = saveProfile(member, "First");
 		Profile second = saveProfile(member, "Second");
@@ -214,15 +214,17 @@ class DashboardIntegrationTest extends MySqlIntegrationTest {
 				.andExpect(jsonPath("$.data.totalProfiles").value(2))
 				.andExpect(jsonPath("$.data.completedProfiles").value(0))
 				.andExpect(jsonPath("$.data.primarySkillDistribution.items.length()").value(2))
-				.andExpect(jsonPath("$.data.primarySkillDistribution.items[0].skillName").value(java.getName()))
-				.andExpect(jsonPath("$.data.primarySkillDistribution.items[0].profileCount").value(1))
-				.andExpect(jsonPath("$.data.primarySkillDistribution.items[1].skillName").value(python.getName()))
+				.andExpect(jsonPath("$.data.primarySkillDistribution.items[0].skillName").value(python.getName()))
+				.andExpect(jsonPath("$.data.primarySkillDistribution.items[0].profileCount").value(2))
+				.andExpect(jsonPath("$.data.primarySkillDistribution.items[1].skillName").value(java.getName()))
 				.andExpect(jsonPath("$.data.primarySkillDistribution.items[1].profileCount").value(1))
 				.andExpect(jsonPath("$.data.primarySkillDistribution.otherProfileCount").value(0))
 				.andExpect(jsonPath("$.data.skillCategoryDistribution.items.length()").value(2))
-				.andExpect(jsonPath("$.data.skillCategoryDistribution.items[0].categoryName").value(backendName))
-				.andExpect(jsonPath("$.data.skillCategoryDistribution.items[0].percentage").value(50))
-				.andExpect(jsonPath("$.data.skillCategoryDistribution.items[1].categoryName").value(frontendName))
+				.andExpect(jsonPath("$.data.skillCategoryDistribution.items[0].categoryName").value(frontendName))
+				.andExpect(jsonPath("$.data.skillCategoryDistribution.items[0].profileCount").value(2))
+				.andExpect(jsonPath("$.data.skillCategoryDistribution.items[0].percentage").value(100))
+				.andExpect(jsonPath("$.data.skillCategoryDistribution.items[1].categoryName").value(backendName))
+				.andExpect(jsonPath("$.data.skillCategoryDistribution.items[1].profileCount").value(1))
 				.andExpect(jsonPath("$.data.skillCategoryDistribution.items[1].percentage").value(50))
 				.andExpect(jsonPath("$.data.skillCategoryDistribution.otherProfileCount").value(0));
 	}
