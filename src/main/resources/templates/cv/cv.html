@@ -40,7 +40,7 @@
         </section>
         <section class="support-section" th:if="${!#lists.isEmpty(document.languages)}">
           <h2>Languages</h2>
-          <div class="language-item" th:each="language, position : ${document.languages}" th:if="${position.index < 5}">
+          <div class="language-item" th:each="language, position : ${document.languages}" th:if="${position.index < 4}">
             <strong th:text="${language.languageName}">English</strong>
             <span th:text="${display.label(language.level)}">Advanced</span>
           </div>

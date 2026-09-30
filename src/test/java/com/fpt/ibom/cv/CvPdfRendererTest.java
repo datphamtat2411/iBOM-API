@@ -176,7 +176,7 @@ class CvPdfRendererTest {
 	}
 
 	@Test
-	void limitsOnlyThePrintedSidebarToFirstThreeEducationsAndFiveLanguagesAndCertificates() throws IOException {
+	void limitsOnlyThePrintedSidebarToFirstThreeEducationsAndFourLanguagesAndFiveCertificates() throws IOException {
 		CvDocument cv = new CvDocument(new CvPersonalDetails("Linh", "Trần", "Engineer", null, null, null),
 				IntStream.rangeClosed(1, 4).mapToObj(i -> new CvEducation("School " + i, null, null,
 						LocalDate.of(2020, 1, 1), null, CvEducationStatus.ONGOING)).toList(),
@@ -187,8 +187,8 @@ class CvPdfRendererTest {
 			String text = new PDFTextStripper().getText(pdf);
 			assertTrue(text.contains("School 3"));
 			assertFalse(text.contains("School 4"));
-			assertTrue(text.contains("Language 5"));
-			assertFalse(text.contains("Language 6"));
+			assertTrue(text.contains("Language 4"));
+			assertFalse(text.contains("Language 5"));
 			assertTrue(text.contains("Certificate 5"));
 			assertFalse(text.contains("Certificate 6"));
 		}
