@@ -24,7 +24,6 @@ import com.fpt.ibom.profile.repository.ProfileSkillRepository;
 import com.fpt.ibom.profile.service.ProfileAccessService;
 import com.fpt.ibom.profile.service.ProfileCompletenessService;
 import com.fpt.ibom.profile.service.ProfileEligibilityService;
-import com.fpt.ibom.profile.service.ProfileService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,18 +32,16 @@ public class DashboardService {
 
 	private final ProfileAccessService profileAccessService;
 	private final ProfileCompletenessService profileCompletenessService;
-	private final ProfileService profileService;
 	private final ProfileEligibilityService profileEligibilityService;
 	private final ProfileSkillRepository profileSkillRepository;
 	private final Clock clock;
 
 	public DashboardService(ProfileAccessService profileAccessService,
-			ProfileCompletenessService profileCompletenessService, ProfileService profileService,
+			ProfileCompletenessService profileCompletenessService,
 			ProfileEligibilityService profileEligibilityService, ProfileSkillRepository profileSkillRepository,
 			Clock clock) {
 		this.profileAccessService = profileAccessService;
 		this.profileCompletenessService = profileCompletenessService;
-		this.profileService = profileService;
 		this.profileEligibilityService = profileEligibilityService;
 		this.profileSkillRepository = profileSkillRepository;
 		this.clock = clock;
@@ -54,7 +51,7 @@ public class DashboardService {
 	public MemberDashboardStatsResponse getStats(UserPrincipal principal, Long profileId) {
 		Profile selectedProfile = profileAccessService.resolve(principal, profileId);
 		return new MemberDashboardStatsResponse(ProfileSummaryResponse.from(selectedProfile),
-				profileCompletenessService.calculate(selectedProfile), profileService.latestExportedAt(selectedProfile.getUser().getId()));
+				profileCompletenessService.calculate(selectedProfile), selectedProfile.getLastExportedAt());
 	}
 
 	@Transactional(readOnly = true)

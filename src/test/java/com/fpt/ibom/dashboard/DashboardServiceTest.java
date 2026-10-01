@@ -37,7 +37,6 @@ import com.fpt.ibom.profile.repository.ProfileSkillRepository;
 import com.fpt.ibom.profile.service.ProfileAccessService;
 import com.fpt.ibom.profile.service.ProfileCompletenessService;
 import com.fpt.ibom.profile.service.ProfileEligibilityService;
-import com.fpt.ibom.profile.service.ProfileService;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -46,22 +45,21 @@ class DashboardServiceTest {
 
 	private final ProfileAccessService profileAccessService = mock(ProfileAccessService.class);
 	private final ProfileCompletenessService profileCompletenessService = mock(ProfileCompletenessService.class);
-	private final ProfileService profileService = mock(ProfileService.class);
 	private final ProfileEligibilityService profileEligibilityService = mock(ProfileEligibilityService.class);
 	private final ProfileSkillRepository profileSkillRepository = mock(ProfileSkillRepository.class);
 	private final Clock clock = Clock.fixed(Instant.parse("2026-02-01T00:00:00Z"), ZoneId.of("Asia/Ho_Chi_Minh"));
 	private final DashboardService service = new DashboardService(profileAccessService, profileCompletenessService,
-			profileService, profileEligibilityService, profileSkillRepository, clock);
+			profileEligibilityService, profileSkillRepository, clock);
 
 	@Test
-	void resolvesTheSuppliedProfileThroughAccessibleProfileScopeAndReusesCanonicalCompleteness() {
+	void resolvesTheSuppliedProfileAndReturnsItsLatestExportAlongsideCanonicalCompleteness() {
 		UserPrincipal principal = principal(7L, UserRole.MANAGER);
 		Profile selected = profile(8L, 7L);
 		ProfileCompletenessResponse canonical = new ProfileCompletenessResponse(new BigDecimal("67.00"), false, List.of());
 		Instant latest = Instant.parse("2026-02-03T04:05:06Z");
+		selected.markExportedAt(latest);
 		when(profileAccessService.resolve(principal, 8L)).thenReturn(selected);
 		when(profileCompletenessService.calculate(selected)).thenReturn(canonical);
-		when(profileService.latestExportedAt(7L)).thenReturn(latest);
 
 		MemberDashboardStatsResponse result = service.getStats(principal, 8L);
 
@@ -70,17 +68,15 @@ class DashboardServiceTest {
 		assertEquals(latest, result.latestExportedAt());
 		verify(profileAccessService).resolve(principal, 8L);
 		verify(profileCompletenessService).calculate(selected);
-		verify(profileService).latestExportedAt(7L);
-		verifyNoMoreInteractions(profileAccessService, profileCompletenessService, profileService);
+		verifyNoMoreInteractions(profileAccessService, profileCompletenessService);
 	}
 
 	@Test
-	void returnsNullWhenTheOwnerHasNoExport() {
+	void returnsNullWhenTheSelectedProfileHasNoExport() {
 		UserPrincipal principal = principal(7L, UserRole.MEMBER);
 		Profile selected = profile(8L, 7L);
 		when(profileAccessService.resolve(principal, 8L)).thenReturn(selected);
 		when(profileCompletenessService.calculate(selected)).thenReturn(new ProfileCompletenessResponse(new BigDecimal("0.00"), false, List.of()));
-		when(profileService.latestExportedAt(7L)).thenReturn(null);
 
 		assertNull(service.getStats(principal, 8L).latestExportedAt());
 	}
@@ -93,7 +89,7 @@ class DashboardServiceTest {
 
 		assertThrows(ApiException.class, () -> service.getStats(principal, 8L));
 		verify(profileAccessService).resolve(principal, 8L);
-		verifyNoMoreInteractions(profileAccessService, profileCompletenessService, profileService);
+		verifyNoMoreInteractions(profileAccessService, profileCompletenessService);
 	}
 
 	@Test

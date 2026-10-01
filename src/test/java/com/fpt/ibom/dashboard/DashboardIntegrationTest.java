@@ -96,14 +96,16 @@ class DashboardIntegrationTest extends MySqlIntegrationTest {
 	}
 
 	@Test
-	void returnsSelectedProfileCompletenessAndLatestExportAcrossActiveOwnedProfiles() throws Exception {
+	void returnsSelectedProfileCompletenessAndItsLatestExport() throws Exception {
 		UserAccount owner = saveUser(UserRole.MEMBER);
 		Profile selected = saveProfile(owner, "Selected");
 		Profile other = saveProfile(owner, "Other");
 		Profile deleted = saveProfile(owner, "Deleted");
-		other.markExportedAt(Instant.parse("2026-02-03T04:05:06Z"));
+		selected.markExportedAt(Instant.parse("2026-02-03T04:05:06Z"));
+		other.markExportedAt(Instant.parse("2026-04-03T04:05:06Z"));
 		deleted.markExportedAt(Instant.parse("2026-03-03T04:05:06Z"));
 		deleted.softDelete(Instant.parse("2026-01-01T00:00:00Z"));
+		profiles.saveAndFlush(selected);
 		profiles.saveAndFlush(other);
 		profiles.saveAndFlush(deleted);
 
@@ -124,12 +126,15 @@ class DashboardIntegrationTest extends MySqlIntegrationTest {
 	}
 
 	@Test
-	void excludesDeletedExportsAndHidesForeignAndDeletedSelectedProfiles() throws Exception {
+	void returnsNullWhenSelectedProfileHasNoExportEvenIfAnotherActiveProfileWasExported() throws Exception {
 		UserAccount owner = saveUser(UserRole.MEMBER);
 		Profile active = saveProfile(owner, "Active");
+		Profile other = saveProfile(owner, "Other");
+		other.markExportedAt(Instant.parse("2026-04-02T04:05:06Z"));
 		Profile deleted = saveProfile(owner, "Deleted");
 		deleted.markExportedAt(Instant.parse("2026-04-03T04:05:06Z"));
 		deleted.softDelete(Instant.parse("2026-01-01T00:00:00Z"));
+		profiles.saveAndFlush(other);
 		profiles.saveAndFlush(deleted);
 		UserAccount foreignOwner = saveUser(UserRole.MEMBER);
 		Profile foreign = saveProfile(foreignOwner, "Foreign");
